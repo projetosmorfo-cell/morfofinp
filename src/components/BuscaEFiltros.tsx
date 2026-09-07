@@ -1,0 +1,402 @@
+import { useState } from 'react'
+import type { Categoria, Conta, Lancamento } from '../db'
+import { statusDoLancamento, ROTULO_STATUS, type StatusPagamento } from '../statusPagamento'
+import { aplicarMascaraValor, paraNumero } from '../formatoMoeda'
+
+// Busca + filtros avançados (31/08/2026, rodada seguinte, ponto 10) — usado
+// em toda tela de listagem COMPLETA (Lançamentos, drill-in de Carteira);
+// nunca nas listagens simples expansíveis de categoria, que são um recorte
+// já filtrado por natureza da tela de origem.
+export type TipoFiltro = 'saida' | 'entrada' | 'transferencia'
+export type RecorrenciaFiltro = 'unico' | 'fixo' | 'parcelado'
+
+export interface FiltrosAvancados {
+  categoriaIds: number[]
+  contaIds: number[]
+  tipos: TipoFiltro[]
+  status: StatusPagamento[]
+  recorrencias: RecorrenciaFiltro[]
+  valorMin: string
+  valorMax: string
+  dataDe: string
+  dataAte: string
+}
+
+export const FILTROS_VAZIOS: FiltrosAvancados = {
+  categoriaIds: [],
+  contaIds: [],
+  tipos: [],
+  status: [],
+  recorrencias: [],
+  valorMin: '',
+  valorMax: '',
+  dataDe: '',
+  dataAte: '',
+}
+
+export function contarFiltrosAtivos(f: FiltrosAvancados): number {
+  let n = 0
+  if (f.categoriaIds.length) n++
+  if (f.contaIds.length) n++
+  if (f.tipos.length) n++
+  if (f.status.length) n++
+  if (f.recorrencias.length) n++
+  if (f.valorMin) n++
+  if (f.valorMax) n++
+  if (f.dataDe) n++
+  if (f.dataAte) n++
+  return n
+}
+
+function tipoDoLancamento(l: Lancamento): TipoFiltro {
+  if (l.transferenciaId) return 'transferencia'
+  return l.valor < 0 ? 'saida' : 'entrada'
+}
+
+// Filtra por texto livre (descrição, categoria, conta) + todos os campos do
+// filtro avançado — pura, sem estado, reaproveitável em qualquer tela.
+export function aplicarFiltros(
+  lancamentos: Lancamento[],
+  busca: string,
+  filtros: FiltrosAvancados,
+  categoriaPorId: Map<number, Categoria>,
+  contaPorId: Map<number, Conta>,
+): Lancamento[] {
+  const buscaNorm = busca.trim().toLowerCase()
+  return lancamentos.filter((l) => {
+    if (buscaNorm) {
+      const catNome = categoriaPorId.get(l.categoriaId)?.nome ?? ''
+      const contaNome = contaPorId.get(l.contaId)?.nome ?? ''
+      const alvo = `${l.descricao} ${catNome} ${contaNome}`.toLowerCase()
+      if (!alvo.includes(buscaNorm)) return false
+    }
+    if (filtros.categoriaIds.length && !filtros.categoriaIds.includes(l.categoriaId)) return false
+    if (filtros.contaIds.length && !filtros.contaIds.includes(l.contaId)) return false
+    if (filtros.tipos.length && !filtros.tipos.includes(tipoDoLancamento(l))) return false
+    if (filtros.status.length && !filtros.status.includes(statusDoLancamento(l))) return false
+    if (filtros.recorrencias.length) {
+      const r: RecorrenciaFiltro = l.recorrencia ?? 'unico'
+      if (!filtros.recorrencias.includes(r)) return false
+    }
+    const valorAbs = Math.abs(l.valor)
+    if (filtros.valorMin && valorAbs < paraNumero(filtros.valorMin)) return false
+    if (filtros.valorMax && valorAbs > paraNumero(filtros.valorMax)) return false
+    if (filtros.dataDe && l.dataCompetencia < filtros.dataDe) return false
+    if (filtros.dataAte && l.dataCompetencia > filtros.dataAte) return false
+    return true
+  })
+}
+
+function alternarNoArray<T>(arr: T[], valor: T): T[] {
+  return arr.includes(valor) ? arr.filter((v) => v !== valor) : [...arr, valor]
+}
+
+const ROTULO_TIPO: Record<TipoFiltro, string> = {
+  saida: 'Saída',
+  entrada: 'Entrada',
+  transferencia: 'Transferência',
+}
+const ROTULO_RECORRENCIA: Record<RecorrenciaFiltro, string> = {
+  unico: 'Único',
+  fixo: 'Fixo',
+  parcelado: 'Parcelado',
+}
+const TODOS_STATUS: StatusPagamento[] = ['pago', 'recebido', 'atrasado', 'a_pagar', 'a_receber']
+
+function ModalFiltros({
+  filtros,
+  categorias,
+  contas,
+  onFechar,
+  onAplicar,
+}: {
+  filtros: FiltrosAvancados
+  categorias: Categoria[]
+  contas: Conta[]
+  onFechar: () => void
+  onAplicar: (f: FiltrosAvancados) => void
+}) {
+  const [rascunho, setRascunho] = useState<FiltrosAvancados>(filtros)
+
+  function ChipMulti({
+    valor,
+    ativo,
+    onClick,
+  }: {
+    valor: string
+    ativo: boolean
+    onClick: () => void
+  }) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        style={{
+          background: ativo ? 'var(--azul)' : 'none',
+          border: '1px solid var(--borda)',
+          color: ativo ? '#fff' : 'var(--texto)',
+          borderRadius: 999,
+          padding: '5px 12px',
+          fontSize: 12,
+          cursor: 'pointer',
+        }}
+      >
+        {valor}
+      </button>
+    )
+  }
+
+  return (
+    <div className="modal-fundo" onClick={onFechar}>
+      <div className="modal-conteudo" onClick={(e) => e.stopPropagation()}>
+        <div className="linha" style={{ border: 'none', padding: 0, marginBottom: 8 }}>
+          <h2 style={{ margin: 0 }}>Filtros avançados</h2>
+          <button
+            type="button"
+            onClick={onFechar}
+            aria-label="Fechar"
+            style={{ background: 'none', border: 'none', fontSize: 20, color: 'var(--texto-fraco)', cursor: 'pointer' }}
+          >
+            ✕
+          </button>
+        </div>
+
+        <label>Tipo</label>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          {(['saida', 'entrada', 'transferencia'] as TipoFiltro[]).map((t) => (
+            <ChipMulti
+              key={t}
+              valor={ROTULO_TIPO[t]}
+              ativo={rascunho.tipos.includes(t)}
+              onClick={() => setRascunho((r) => ({ ...r, tipos: alternarNoArray(r.tipos, t) }))}
+            />
+          ))}
+        </div>
+
+        <label>Status de pagamento</label>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          {TODOS_STATUS.map((s) => (
+            <ChipMulti
+              key={s}
+              valor={ROTULO_STATUS[s]}
+              ativo={rascunho.status.includes(s)}
+              onClick={() => setRascunho((r) => ({ ...r, status: alternarNoArray(r.status, s) }))}
+            />
+          ))}
+        </div>
+
+        <label>Recorrência</label>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          {(['unico', 'fixo', 'parcelado'] as RecorrenciaFiltro[]).map((r2) => (
+            <ChipMulti
+              key={r2}
+              valor={ROTULO_RECORRENCIA[r2]}
+              ativo={rascunho.recorrencias.includes(r2)}
+              onClick={() => setRascunho((r) => ({ ...r, recorrencias: alternarNoArray(r.recorrencias, r2) }))}
+            />
+          ))}
+        </div>
+
+        <label>Categoria (múltipla seleção)</label>
+        <select
+          multiple
+          value={rascunho.categoriaIds.map(String)}
+          onChange={(e) =>
+            setRascunho((r) => ({
+              ...r,
+              categoriaIds: Array.from(e.target.selectedOptions).map((o) => Number(o.value)),
+            }))
+          }
+          style={{ height: 96 }}
+        >
+          {categorias.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.nome}
+            </option>
+          ))}
+        </select>
+
+        <label>Conta (múltipla seleção)</label>
+        <select
+          multiple
+          value={rascunho.contaIds.map(String)}
+          onChange={(e) =>
+            setRascunho((r) => ({
+              ...r,
+              contaIds: Array.from(e.target.selectedOptions).map((o) => Number(o.value)),
+            }))
+          }
+          style={{ height: 72 }}
+        >
+          {contas.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.nome}
+            </option>
+          ))}
+        </select>
+
+        <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ flex: 1 }}>
+            <label>Valor mínimo (R$)</label>
+            <input
+              type="text"
+              inputMode="decimal"
+              value={rascunho.valorMin}
+              onChange={(e) => setRascunho((r) => ({ ...r, valorMin: aplicarMascaraValor(e.target.value) }))}
+            />
+          </div>
+          <div style={{ flex: 1 }}>
+            <label>Valor máximo (R$)</label>
+            <input
+              type="text"
+              inputMode="decimal"
+              value={rascunho.valorMax}
+              onChange={(e) => setRascunho((r) => ({ ...r, valorMax: aplicarMascaraValor(e.target.value) }))}
+            />
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ flex: 1 }}>
+            <label>Data de</label>
+            <input
+              type="date"
+              value={rascunho.dataDe}
+              onChange={(e) => setRascunho((r) => ({ ...r, dataDe: e.target.value }))}
+            />
+          </div>
+          <div style={{ flex: 1 }}>
+            <label>Data até</label>
+            <input
+              type="date"
+              value={rascunho.dataAte}
+              onChange={(e) => setRascunho((r) => ({ ...r, dataAte: e.target.value }))}
+            />
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
+          <button type="button" className="primario" style={{ marginTop: 0 }} onClick={() => onAplicar(rascunho)}>
+            Aplicar filtros
+          </button>
+          <button
+            type="button"
+            style={{
+              marginTop: 0,
+              background: 'none',
+              border: '1px solid var(--borda)',
+              borderRadius: 10,
+              padding: '12px',
+              cursor: 'pointer',
+            }}
+            onClick={() => setRascunho(FILTROS_VAZIOS)}
+          >
+            Limpar
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export default function BarraBuscaFiltros({
+  busca,
+  onBuscaChange,
+  filtros,
+  onFiltrosChange,
+  categorias,
+  contas,
+}: {
+  busca: string
+  onBuscaChange: (v: string) => void
+  filtros: FiltrosAvancados
+  onFiltrosChange: (f: FiltrosAvancados) => void
+  categorias: Categoria[]
+  contas: Conta[]
+}) {
+  const [modalAberto, setModalAberto] = useState(false)
+  const qtdAtiva = contarFiltrosAtivos(filtros)
+
+  return (
+    <div style={{ marginBottom: 10 }}>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ position: 'relative', flex: 1 }}>
+          <input
+            type="text"
+            placeholder="Buscar por descrição, categoria ou conta…"
+            value={busca}
+            onChange={(e) => onBuscaChange(e.target.value)}
+            style={{ paddingRight: busca ? 32 : undefined }}
+          />
+          {busca && (
+            <button
+              type="button"
+              aria-label="Limpar busca"
+              onClick={() => onBuscaChange('')}
+              style={{
+                position: 'absolute',
+                right: 8,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                background: 'none',
+                border: 'none',
+                color: 'var(--texto-fraco)',
+                fontSize: 18,
+                lineHeight: 1,
+                cursor: 'pointer',
+                padding: 0,
+              }}
+            >
+              ×
+            </button>
+          )}
+        </div>
+        <button type="button" className="botao-ordem" onClick={() => setModalAberto(true)}>
+          Filtros{qtdAtiva > 0 ? ` (${qtdAtiva})` : ''}
+        </button>
+      </div>
+
+      {qtdAtiva > 0 && (
+        <div
+          onClick={() => setModalAberto(true)}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginTop: 6,
+            padding: '5px 10px',
+            background: 'rgba(59,130,246,0.14)',
+            borderRadius: 999,
+            fontSize: 12,
+            cursor: 'pointer',
+          }}
+        >
+          <span>{qtdAtiva} filtro(s) ativo(s)</span>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              onFiltrosChange(FILTROS_VAZIOS)
+            }}
+            style={{ background: 'none', border: 'none', color: 'var(--texto)', cursor: 'pointer', fontSize: 14, padding: 0 }}
+          >
+            ×
+          </button>
+        </div>
+      )}
+
+      {modalAberto && (
+        <ModalFiltros
+          filtros={filtros}
+          categorias={categorias}
+          contas={contas}
+          onFechar={() => setModalAberto(false)}
+          onAplicar={(f) => {
+            onFiltrosChange(f)
+            setModalAberto(false)
+          }}
+        />
+      )}
+    </div>
+  )
+}

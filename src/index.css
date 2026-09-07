@@ -1,0 +1,1241 @@
+:root {
+  --bg: #0f1115;
+  --bg-elevado: #171a21;
+  --borda: #262b36;
+  --texto: #e7e9ee;
+  --texto-fraco: #9aa1b1;
+  --azul: #3b82f6;
+  --verde: #22c55e;
+  --vermelho: #ef4444;
+  --amarelo: #eab308;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--texto);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+#root {
+  display: flex;
+  flex-direction: column;
+  max-width: 480px;
+  margin: 0 auto;
+  min-height: 100%;
+}
+
+main {
+  flex: 1;
+  /* Padding de topo removido (01/09/2026, rodada seguinte — cabeçalho fixo,
+     ponto 5) — quem cria o respiro no topo agora é `.cabecalho-fixo`
+     (padding próprio), não o `<main>`, porque o cabeçalho precisa ficar
+     "grudado" no topo de verdade (`top: 0`) enquanto o resto do conteúdo
+     rola por baixo dele — `<main>` é o único contêiner com rolagem do app
+     (`overflow-y: auto`), então é nele que o `position: sticky` do
+     cabeçalho se ancora. */
+  padding: 0 16px 88px;
+  overflow-y: auto;
+}
+
+/* Cabeçalho fixo de tela (01/09/2026, rodada seguinte, ponto 5 do feedback):
+   "em todas telas que possuem rolagem, o topo deve ficar fixo com botão
+   voltar, título da tela e se tiver navegação de meses ela tbm, senão só
+   isso". Envolve botão voltar (quando existe) + `<h1>` + `SeletorMes`
+   (quando existe) de cada tela — o resto do conteúdo da tela fica FORA
+   deste bloco, como filho comum de `<main>`, e rola por baixo normalmente.
+   `margin: 0 -16px` cancela o padding horizontal de 16px de `<main>` e o
+   `padding: 16px` próprio reaplica a mesma medida — assim o cabeçalho fica
+   `position: sticky` colado nas duas bordas (esquerda/direita) do `<main>`
+   sem sobrar nenhuma faixa sem fundo nas laterais, com fundo SÓLIDO opaco
+   (nunca translúcido — senão o conteúdo que rola por baixo aparece
+   manchando o cabeçalho, mesma classe de bug já documentado com `rgba`
+   neste arquivo). */
+.cabecalho-fixo {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--bg);
+  margin: 0 -16px;
+  padding: 16px 16px 10px;
+}
+
+/* 01/09/2026, mesmo dia (pedido do Rafael): a barra de mês (SeletorMes)
+   dentro do cabeçalho fixo tinha espaço vertical sobrando demais acima e
+   abaixo do texto — vinha do `margin-bottom` do <h1> (12px) somado ao
+   `margin-bottom` do próprio `.seletor-mes` (16px, ver abaixo) mais o
+   `padding-bottom` deste cabeçalho (10px), quase 30px só de respiro embaixo
+   da barra. Reduzido o `margin-bottom` do h1 pra 8px e zerado o do
+   `.seletor-mes` — o padding do próprio `.cabecalho-fixo` já basta. */
+.cabecalho-fixo h1 {
+  margin: 4px 0 8px;
+}
+
+h1 {
+  font-size: 20px;
+  margin: 4px 0 16px;
+}
+
+h2 {
+  font-size: 14px;
+  color: var(--texto-fraco);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 24px 0 8px;
+}
+
+.cartao {
+  background: var(--bg-elevado);
+  border: 1px solid var(--borda);
+  border-radius: 12px;
+  padding: 14px 16px;
+}
+
+.linha {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--borda);
+}
+
+.linha:last-child {
+  border-bottom: none;
+}
+
+.valor-pos {
+  color: var(--verde);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.valor-neg {
+  color: var(--vermelho);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.texto-fraco {
+  color: var(--texto-fraco);
+  font-size: 13px;
+}
+
+input, select, button {
+  font: inherit;
+  color: inherit;
+}
+
+input, select {
+  background: var(--bg);
+  border: 1px solid var(--borda);
+  border-radius: 8px;
+  padding: 10px 12px;
+  width: 100%;
+}
+
+label {
+  display: block;
+  font-size: 13px;
+  color: var(--texto-fraco);
+  margin: 12px 0 4px;
+}
+
+button.primario {
+  background: var(--azul);
+  border: none;
+  border-radius: 10px;
+  padding: 12px;
+  width: 100%;
+  margin-top: 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+button.primario:active {
+  opacity: 0.85;
+}
+
+nav.rodape {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  background: var(--bg-elevado);
+  border-top: 1px solid var(--borda);
+}
+
+nav.rodape button {
+  flex: 1;
+  text-align: center;
+  /* 04/09/2026, rodada seguinte (F-11 da revisão de UI): medido em 390px
+     (mobile), a altura tocável do botão dava 42px — abaixo da referência de
+     ~44px pra alvo de toque confortável (item 17/31 da régua de revisão).
+     `min-height` garante o piso sem mudar a aparência em telas largas (onde
+     o mouse não precisa do mesmo respiro). */
+  min-height: 44px;
+  padding: 14px 0 calc(14px + env(safe-area-inset-bottom));
+  background: none;
+  border: none;
+  color: var(--texto-fraco);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+nav.rodape button.ativo {
+  color: var(--azul);
+}
+
+/* 04/09/2026, mesmo dia (pedido do Rafael): "Lançamentos" fica no meio das 5
+   abas por ordem de fluxo (Resumo → Situação → Lançamentos → Carteira →
+   Planejamento), mas é a tela principal — ganha uma linha verde permanente
+   abaixo do rótulo (independente de estar ativa ou não) pra marcar isso sem
+   mudar sua posição na ordem. */
+.rodape-destaque-principal {
+  display: block;
+  width: 20px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--verde);
+  margin: 4px auto 0;
+}
+
+.barra {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--borda);
+  overflow: hidden;
+  margin-top: 6px;
+}
+
+.barra > div {
+  height: 100%;
+  background: var(--azul);
+}
+
+.barra.estourou > div {
+  background: var(--vermelho);
+}
+
+/* Barra dupla: preenchido = gasto real, marcador = previsto/aceitável.
+   Cor muda conforme estourou ou não; o valor de diferença fica em destaque
+   logo abaixo, nunca só implícito na barra. */
+.barra-meta {
+  position: relative;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--borda);
+  overflow: hidden;
+  margin-top: 6px;
+}
+
+.barra-meta > .fill {
+  height: 100%;
+  background: var(--azul);
+  transition: width 0.2s;
+}
+
+.barra-meta.estourou > .fill {
+  background: var(--vermelho);
+}
+
+.barra-meta > .marcador {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--texto);
+  opacity: 0.85;
+}
+
+.linha-destaque {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 4px;
+  font-size: 13px;
+}
+
+.linha-destaque strong {
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.seletor-mes {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin: 0;
+}
+
+.seletor-mes strong {
+  min-width: 150px;
+  text-align: center;
+}
+
+.seletor-mes button {
+  background: var(--bg-elevado);
+  border: 1px solid var(--borda);
+  color: var(--texto);
+  /* 04/09/2026, rodada seguinte (F-11): 32×32px medido — o caso mais claro
+     de alvo de toque abaixo do recomendado (~44px) da revisão de UI. */
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.seletor-mes button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+/* Modal de detalhe/edição de lançamento — abre por cima da tela atual, sem
+   trocar de tela, pra quem abriu (Lançamentos, ou uma categoria expandida no
+   Resumo/Situação) nunca perder o estado ao fechar.
+   Padrão trocado de "bottom sheet" (colado na base da janela) pra centralizado
+   com margem visível nos 4 lados — o encostado na base parecia tela cortada
+   (relatado pelo Rafael na tela de Planos, mesmo padrão usado em todo modal
+   do app). `max-height` mais folgado (78vh) garante margem mesmo em janela
+   baixa; `overflow-y: auto` continua de salvaguarda pro caso raro de
+   conteúdo mais alto que isso, nunca corta sem rolar. */
+.modal-fundo {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  z-index: 50;
+}
+
+.modal-conteudo {
+  background: var(--bg-elevado);
+  border: 1px solid var(--borda);
+  border-radius: 16px;
+  padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
+  width: 100%;
+  max-width: 480px;
+  max-height: 78vh;
+  overflow-y: auto;
+}
+
+/* Linha de categoria recolhível (Resumo do Mês, Situação) */
+.linha-expansivel {
+  cursor: pointer;
+  user-select: none;
+}
+
+/* Quando usada sozinha (Situação — o conteúdo pode ser um bloco tipo
+   BarraMeta, não uma linha inline), vira flex row com a seta fixa à
+   esquerda e o conteúdo ocupando o resto — a seta nunca fica sozinha numa
+   linha com o conteúdo empurrado pra baixo. Quando combinada com `.linha`
+   (Resumo do Mês, onde os dois filhos diretos já são label+valor lado a
+   lado), não mexe no layout — já funciona por conta do `.linha` sozinho. */
+.linha-expansivel:not(.linha) {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.linha-expansivel:not(.linha) > *:last-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.linha-expansivel .seta-expandir {
+  display: inline-block;
+  margin-top: 2px;
+  color: var(--texto-fraco);
+  font-size: 11px;
+  transition: transform 0.15s;
+}
+
+.linha-expansivel.expandida .seta-expandir {
+  transform: rotate(90deg);
+}
+
+/* Botão flutuante de incluir lançamento */
+.botao-flutuante {
+  position: fixed;
+  right: max(16px, calc((100vw - 480px) / 2 + 16px));
+  bottom: 84px;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--azul);
+  border: none;
+  color: var(--texto);
+  font-size: 26px;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  z-index: 40;
+}
+
+.item-lancamento {
+  position: relative;
+  overflow: hidden;
+}
+
+/* Wrapper simples (sem estilo próprio) usado na Carteira, que não tem o
+   wrapper de arrastar-pra-excluir de `.item-lancamento` — existia só pra
+   carregar a borda entre lançamentos; a borda foi removida por pedido do
+   Rafael (01/09/2026, rodada seguinte: "retira todas as bordas das
+   linhas"), a separação visual agora vem só do espaçamento vertical de
+   `.linha-lancamento-completa`. Classe mantida no JSX só por segurança
+   (não tem custo), sem regra CSS associada. */
+
+.item-lancamento-conteudo {
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  background: var(--bg-elevado);
+  position: relative;
+  width: 100%;
+  z-index: 1;
+  transition: transform 0.15s;
+}
+
+.item-lancamento-acao {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 80px;
+  background: var(--vermelho);
+  color: var(--texto);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+}
+
+/* Listagem COMPLETA (duas linhas) — 31/08/2026, rodada seguinte: usada em
+   Lançamentos e no drill-in de Carteira. Sem coluna de data (o item já vive
+   dentro de uma sessão agrupada por data, repetir seria redundante — ponto
+   1 do feedback). Flexbox simples por linha (não grid compartilhado —
+   diferente da listagem simples abaixo): o alinhamento cross-row de coluna
+   não foi pedido aqui, e o wrapper precisa continuar transformável (arrastar
+   pra excluir, só em Lançamentos) — `display:contents` impediria isso.
+   Ordem: ícone | bloco de texto (2 linhas) | bloco valor+tarja (agrupados,
+   alinhados à direita — ponto 8/9 do feedback). */
+.linha-lancamento-completa {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  cursor: pointer;
+  /* 01/09/2026, rodada seguinte (3ª correção, mesmo dia): a rodada anterior
+     tinha zerado TODO o espaço vertical (ver histórico abaixo), mas com as
+     bordas entre linhas removidas nesta rodada (pedido do Rafael: "retira
+     todas as bordas das linhas") as linhas ficaram grudadas umas nas
+     outras sem nenhuma separação visual — daí o novo pedido explícito: 5px
+     de respiro acima e abaixo do conteúdo (a linha com a data, `.sessao-data`
+     abaixo, continua com 0px de sobra, essa regra é só pro corpo do
+     lançamento). `min-height` continua fora por completo — motivo abaixo
+     ainda vale, a altura vem do conteúdo + este padding, nunca de um piso
+     artificial:
+     Isso NÃO quebra a matemática do tamanho do ícone: `tamanhoIconePx`
+     (`configuracaoIcones.ts`) já calculava em cima de uma CONSTANTE fixa em
+     JS (`ALTURA_REF_ICONE.completa = 64`), nunca da altura real renderizada
+     — o `min-height` que existia aqui antes era só um espelho visual dessa
+     constante, não a fonte da verdade. */
+  padding: 5px 12px;
+  border-radius: 8px;
+  box-sizing: border-box;
+}
+
+/* Dentro do wrapper arrastável de Lançamentos (`.item-lancamento-conteudo`
+   já tem seu próprio padding horizontal/fundo) a linha não repete o
+   horizontal de novo — evita dobrar o espaçamento lateral. O vertical de
+   5px (acima) continua valendo aqui também, por isso não é zerado. */
+.item-lancamento-conteudo .linha-lancamento-completa {
+  padding: 5px 0;
+}
+
+.llc-icone {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+
+.llc-texto {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+}
+
+.llc-texto .llc-titulo {
+  overflow-wrap: break-word;
+  color: var(--texto);
+  font-weight: 600;
+}
+
+.llc-texto .llc-origem {
+  color: var(--texto-fraco);
+  font-size: 12px;
+}
+
+/* Valor + tarja como um grupo compacto à direita, tarja ABAIXO do valor
+   (31/08/2026, mesmo dia — ajuste final: não mais lado a lado, que é a
+   forma anterior — "só precisa que o status esteja abaixo do valor e não
+   à direita dele"). Bloco próprio, centralizado verticalmente contra a
+   altura inteira da linha — não pareado linha a linha com título/origem. */
+.llc-valores {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 4px;
+}
+
+.llc-valores .lci-valor {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+/* Bloco que envolve a listagem SIMPLES inteira (01/09/2026) — pedido do
+   Rafael: "toda sua área com fundo em outra cor... com efeito de 3d se
+   estivessem afundados nível pra dentro da categoria" + "leve indentação em
+   relação à Categoria". Fundo `--bg` (mais escuro que o `--bg-elevado` do
+   `.cartao` por trás) + sombra interna no topo simula o "afundado" (inset,
+   não elevado); indentação à esquerda deixa visualmente claro que essa
+   lista pertence à categoria acima, como um nível a mais numa árvore. */
+.bloco-lista-simples {
+  background: var(--bg);
+  border-radius: 10px;
+  margin: 2px 0 6px 14px;
+  box-shadow:
+    inset 0 2px 5px rgba(0, 0, 0, 0.35),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.03);
+  overflow: hidden;
+}
+
+/* Listagem SIMPLES (linha única condensada) — categoria expandida em
+   Resumo/Situação/Planejamento. TABELA HTML de verdade (31/08/2026, mesmo
+   dia — trocado de um grid com `display:contents` por linha, que causou um
+   bug real reportado pelo Rafael: linhas de lançamentos diferentes
+   aparecendo coladas numa única linha visual, porque o `<div>` de cada
+   linha "desaparece" como caixa e depende só da ordem dos filhos do grid
+   pra não se misturar). `<tr>` é sempre uma linha de verdade, nunca se
+   mistura com a vizinha — e a tabela ainda alinha as colunas (valor/tarja)
+   automaticamente entre todas as linhas, mesmo objetivo do grid, com uma
+   estrutura mais robusta. Espaçamento no mínimo (pedido explícito do
+   Rafael: "pra não estender demais"). Linha de borda entre lançamentos
+   (01/09/2026) igual ao mesmo padrão já usado na listagem Completa —
+   aplicada no `td` (não no `tr`) porque só assim `border-collapse: collapse`
+   garante o traço em todo navegador. */
+.tabela-lancamentos-simples {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.tabela-lancamentos-simples tr {
+  cursor: pointer;
+  color: var(--texto-fraco);
+}
+
+.tabela-lancamentos-simples tr:hover td {
+  color: var(--texto);
+}
+
+.tabela-lancamentos-simples td {
+  /* 01/09/2026, rodada seguinte (3ª correção, mesmo dia): a rodada anterior
+     tinha zerado TODO o espaço vertical, mas com a borda entre linhas
+     removida nesta rodada (pedido do Rafael: "retira todas as bordas das
+     linhas") ficou sem separação visual nenhuma entre lançamentos — daí o
+     novo pedido explícito: 5px de respiro acima e abaixo, mesmo padrão da
+     listagem Completa (a linha com a data, `.sessao-data-simples` abaixo,
+     continua com 0px de sobra). */
+  padding: 5px 6px 5px 0;
+  font-size: 13px;
+  vertical-align: middle;
+  box-sizing: border-box;
+}
+
+/* 01/09/2026, rodada seguinte (mesmo dia): a célula de ícone foi removida
+   desta tabela (ícone de categoria saiu das listagens Simples, ver
+   `ListaLancamentosCategoria.tsx`) — o título passou a ser o first-child,
+   por isso não leva mais `width: 1%` (isso encolheria a coluna flexível).
+   `padding-left` maior que o da linha de data (`.sessao-data-simples`,
+   8px) de propósito — pedido do Rafael (mesma rodada): a descrição do item
+   fica visivelmente indentada em relação à data que a agrupa. */
+.tabela-lancamentos-simples td:first-child {
+  padding-left: 16px;
+}
+
+.tabela-lancamentos-simples td:last-child {
+  padding-right: 8px;
+  text-align: right;
+}
+
+/* Altura de referência FIXA de 32px pra qualquer linha que mostre o ícone de
+   um GRUPO (Categorias e Grupos, Situação "Por grupo", Resumo "Metas por
+   grupo", Planejamento "Nível Grupo") — mesmo motivo/mecanismo dos dois
+   comentários acima, base de `tamanhoIconePx('grupo', pct)`. Classe própria
+   (não a genérica `.linha`) pra não mudar a altura de linhas sem ícone de
+   grupo no resto do app. */
+.linha-cabecalho-grupo {
+  min-height: 32px;
+  box-sizing: border-box;
+}
+
+/* Altura de referência FIXA de 40px pra linha de CATEGORIA cadastrada, na
+   tela Categorias e Grupos (01/09/2026, rodada seguinte, mesmo dia) — base
+   de `tamanhoIconePx('categoria', pct)`. Esse é o único lugar do app que
+   ainda mostra ícone de categoria: a listagem Simples (categoria expandida
+   em Resumo/Situação/Planejamento) deixou de mostrar ícone nesta mesma
+   rodada, por pedido do Rafael — ícone de categoria agora só aparece aqui
+   e na listagem Completa (Lançamentos/Carteira, via ícone da CATEGORIA do
+   lançamento). */
+.linha-categoria-icone {
+  min-height: 40px;
+  box-sizing: border-box;
+}
+
+/* Descrição ("o que foi") na mesma formatação da listagem Completa — cor
+   mais clara (var(--texto), não a var(--texto-fraco) herdada da linha) e
+   negrito, mantendo o tamanho de fonte que já era o da listagem Simples
+   (pedido do Rafael, 31/08/2026, mesmo dia: "copie a formatação, só
+   mantenha o tamanho atual"). */
+.lls-titulo {
+  max-width: 0;
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--texto);
+  font-weight: 600;
+}
+
+.lci-valor {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+/* Cabeçalho de sessão por data na listagem SIMPLES — 0px de sobra vertical
+   além do próprio texto (mesmo padrão da listagem Completa, pedido do
+   Rafael, 01/09/2026, rodada seguinte); só o corpo do lançamento
+   (`.tabela-lancamentos-simples td`, acima) tem os 5px de respiro. */
+.sessao-data-simples {
+  padding: 0 8px;
+  font-size: 11px;
+  color: var(--texto-fraco);
+  letter-spacing: 0.02em;
+}
+
+/* Fundo diferenciado pra lançamento não pago/atrasado — pago/recebido fica
+   com o fundo normal (maioria dos casos, não precisa se destacar). Cor
+   SÓLIDA (não rgba translúcido) — mesmo resultado visual sobre o fundo do
+   `.cartao` (--bg-elevado), mas sem o bug encontrado em 30/08/2026: um
+   fundo translúcido deixa o painel vermelho de "Excluir" (arrastar pra
+   esquerda em Lançamentos) manchar por baixo mesmo sem arrastar nada,
+   porque zIndex só garante ORDEM de pintura, não opacidade — uma cor sólida
+   resolve de vez, em qualquer lista que use essa classe. */
+.status-fundo-atrasado {
+  background: #352026;
+}
+
+.status-fundo-pendente {
+  background: #352f1e;
+}
+
+/* Pill de status — clicável, alterna pago/não-pago na hora. Largura do
+   TAMANHO DA PALAVRA (31/08/2026, rodada seguinte — reverte a largura fixa
+   de 76px da rodada anterior, por pedido explícito do Rafael: "as tarjas de
+   status no extremo direito devem ter estritamente o tamanho da palavra").
+   O alinhamento entre linhas vem do próprio flexbox (listagem Completa) ou
+   da tabela (listagem Simples), não mais de uma largura fixa da pill. */
+.status-pill {
+  display: inline-block;
+  align-self: center;
+  width: fit-content;
+  font-size: 11px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  cursor: pointer;
+  line-height: 1.6;
+  white-space: nowrap;
+  text-align: center;
+}
+
+.status-pill-pago {
+  background: rgba(34, 197, 94, 0.16);
+  color: var(--verde);
+}
+
+.status-pill-atrasado {
+  background: rgba(239, 68, 68, 0.22);
+  color: var(--vermelho);
+}
+
+.status-pill-pendente {
+  background: rgba(234, 179, 8, 0.22);
+  color: var(--amarelo);
+}
+
+/* Cabeçalho de sessão por data, na tela Lançamentos. 0px de sobra vertical
+   além do próprio texto (pedido do Rafael, 01/09/2026, rodada seguinte) —
+   só o corpo do lançamento (`.linha-lancamento-completa`, acima) tem os 5px
+   de respiro; a data é só um separador de seção, não um item de lista. */
+.sessao-data {
+  padding: 0 4px;
+  font-size: 12px;
+  color: var(--texto-fraco);
+  letter-spacing: 0.02em;
+}
+
+.botao-ordem {
+  background: none;
+  border: 1px solid var(--borda);
+  color: var(--texto-fraco);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+/* Cards da tela Carteira */
+.card-conta {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: var(--bg-elevado);
+  border: 1px solid var(--borda);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 10px;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+}
+
+.card-conta:active {
+  opacity: 0.85;
+}
+
+/* Totalizador geral — padrão visual único (30/08/2026) pra QUALQUER linha
+   de fechamento/total em qualquer card do app (com ou sem barra de
+   progresso dentro): fundo destacado, ocupa a linha inteira, nunca se
+   mistura com um item comum da lista. Mesma tonalidade em toda tela —
+   Situação, Resumo, Planejamento. */
+.total-geral {
+  background: rgba(59, 130, 246, 0.12);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-top: 10px;
+}
+
+.total-geral + .total-geral {
+  margin-top: 8px;
+}
+
+/* Botão de engrenagem — fixo no topo de toda tela principal (30/08/2026),
+   abre o menu de configurações (Categorias / Contas e carteiras). Mesma
+   lógica de posicionamento do `.botao-flutuante` (centralizado dentro do
+   max-width de 480px em telas largas), só que no topo em vez do rodapé. */
+.botao-engrenagem {
+  position: fixed;
+  top: 12px;
+  right: max(16px, calc((100vw - 480px) / 2 + 16px));
+  /* 04/09/2026, rodada seguinte (F-11): 40×40px medido no mobile, um pouco
+     abaixo da referência de toque (~44px). */
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--bg-elevado);
+  border: 1px solid var(--borda);
+  color: var(--texto);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  z-index: 41;
+}
+
+.botao-engrenagem:active {
+  opacity: 0.85;
+}
+
+.menu-engrenagem {
+  position: fixed;
+  /* 4px de respiro abaixo do botão de engrenagem, que cresceu de 40 pra
+     44px nesta mesma rodada (F-11) — 12px (top do botão) + 44px + 4px. */
+  top: 60px;
+  right: max(16px, calc((100vw - 480px) / 2 + 16px));
+  background: var(--bg-elevado);
+  border: 1px solid var(--borda);
+  border-radius: 12px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+  z-index: 41;
+  min-width: 200px;
+}
+
+.menu-engrenagem button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  color: var(--texto);
+  font: inherit;
+  padding: 14px 16px;
+  cursor: pointer;
+}
+
+.menu-engrenagem button + button {
+  border-top: 1px solid var(--borda);
+}
+
+.menu-engrenagem button:active {
+  background: var(--bg);
+}
+
+/* Botão "voltar" — antes era só texto sem fundo/borda (var(--texto) puro),
+   quase imperceptível no topo da tela (feedback do Rafael, 31/08/2026,
+   mesmo dia). Ganhou fundo, borda e formato de pílula, pro mesmo peso
+   visual de um botão de verdade, não de um link discreto. */
+.botao-voltar-config {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-elevado);
+  border: 1px solid var(--borda);
+  color: var(--texto);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 8px 16px 8px 12px;
+  border-radius: 999px;
+  margin-bottom: 12px;
+}
+
+/* Versão circular (só ícone, sem rótulo) — usada no cabeçalho do drill-in
+   de uma conta em Carteira.tsx, onde não há espaço/necessidade de texto
+   "Voltar". Mesmo peso visual da versão com rótulo. */
+.botao-voltar-circular {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--bg-elevado);
+  border: 1px solid var(--borda);
+  color: var(--texto);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+/* Linha recolhida do seletor de ícone (01/09/2026, mesmo dia — pedido do
+   Rafael: com busca+sub-abas+grade de 325 ícones, o bloco inteiro sempre
+   aberto dentro do formulário de Categoria/Grupo empurrava o resto pra
+   baixo). É só isso que aparece por padrão; clicar abre o popup completo
+   (`.modal-fundo`/`.modal-conteudo`, ver SeletorIcone.tsx). */
+.linha-selecionar-icone {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  margin-top: 8px;
+  border: 1px solid var(--borda);
+  border-radius: 10px;
+  background: var(--bg-elevado);
+  color: var(--texto);
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.linha-selecionar-icone-texto {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  line-height: 1.3;
+}
+.linha-selecionar-icone-acao {
+  color: var(--azul);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Seletor de ícone (01/09/2026) — grade visual em vez de <select> de texto,
+   com abas pros 3 estilos e uma paleta limitada de cores. Ver
+   SeletorIcone.tsx. Desde a mesma data, fica dentro de um popup (ver
+   `.linha-selecionar-icone` acima) — as regras abaixo estilizam o CONTEÚDO
+   do popup, não mudaram de comportamento. */
+.abas-estilo-icone {
+  display: flex;
+  gap: 4px;
+  background: var(--bg-elevado);
+  border-radius: 10px;
+  padding: 4px;
+  margin-bottom: 10px;
+}
+.aba-estilo-icone-item {
+  flex: 1;
+  padding: 8px 4px;
+  border-radius: 8px;
+  border: none;
+  background: none;
+  color: var(--texto-fraco);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 400;
+  cursor: pointer;
+}
+.aba-estilo-icone-item.ativa {
+  background: var(--azul);
+  color: #fff;
+  font-weight: 600;
+}
+
+/* Campo de busca e sub-abas de categoria (01/09/2026, mesmo dia — pedido do
+   Rafael: com a grade chegando em ~324 ícones, busca por nome/sinônimo e
+   sub-abas por categoria pra não depender só de rolar). Ver
+   `buscaIcone`/`CATEGORIAS_ICONE` em SeletorIcone.tsx/icones.tsx. */
+.campo-busca-icone {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--borda);
+  background: var(--bg-elevado);
+  color: var(--texto);
+  font: inherit;
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+.abas-categoria-icone {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+.aba-categoria-icone-item {
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--borda);
+  background: var(--bg-elevado);
+  color: var(--texto-fraco);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.aba-categoria-icone-item.ativa {
+  background: var(--azul);
+  border-color: var(--azul);
+  color: #fff;
+  font-weight: 600;
+}
+
+/* Paleta limitada e tradicional — escolher uma cor atualiza a grade inteira
+   na hora (todo <Icone> da grade recebe a mesma `cor` via prop/estado). */
+.paleta-cores-icone {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.swatch-cor {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  padding: 0;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.15);
+}
+.swatch-cor.selecionada {
+  border-color: var(--texto);
+  box-shadow: 0 0 0 2px var(--bg), 0 0 0 3px var(--texto);
+}
+
+/* Grade de ícones — cada célula mostra o ícone de verdade (não um nome de
+   texto); o nome fica oculto e só aparece ao passar o mouse ou selecionar
+   (pedido do Rafael) — posicionado de forma absoluta, sem empurrar o layout
+   da grade quando aparece. */
+.grade-icones {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(46px, 1fr));
+  gap: 6px;
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 4px;
+  background: var(--bg-elevado);
+  border-radius: 10px;
+}
+.grade-icone-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1 / 1;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: none;
+  cursor: pointer;
+  padding: 4px;
+}
+.grade-icone-item:hover {
+  background: var(--bg);
+}
+.grade-icone-item.selecionado {
+  border-color: var(--azul);
+  background: var(--bg);
+}
+/* 01/09/2026, rodada seguinte (mesmo dia): o nome vinha acima do ícone
+   (`bottom: calc(100% + 4px)`) — pra qualquer ícone da PRIMEIRA linha da
+   grade, isso posiciona o balão FORA da área visível/rolável da grade
+   (`.grade-icones` tem `overflow: auto` e não existe espaço acima da
+   primeira linha), então o nome ficava sempre cortado/escondido bem onde
+   mais se precisa dele (bug real reportado pelo Rafael). Corrigido virando
+   o balão pra BAIXO do ícone (`top`) — sempre tem uma próxima linha (ou o
+   próprio espaço de rolagem) abaixo, então o balão nunca fica sem lugar
+   pra aparecer. */
+.grade-icone-nome {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--texto);
+  color: var(--bg);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.3;
+  padding: 3px 6px;
+  border-radius: 6px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.1s;
+  z-index: 1;
+}
+.grade-icone-item:hover .grade-icone-nome,
+.grade-icone-item.selecionado .grade-icone-nome {
+  opacity: 1;
+}
+
+/* 04/09/2026, rodada seguinte — revisão de UI completa (relatório de
+   04/09/2026): classes novas de suporte aos achados aprovados. */
+
+/* Achado central: link de "ver detalhamento completo" que Resumo e Situação
+   usam no lugar de renderizar de novo o bloco "por grupo" — leva direto pra
+   Planejamento, que passa a ser o único lugar com esse detalhamento. */
+.botao-link-secao {
+  display: block;
+  width: 100%;
+  text-align: center;
+  background: none;
+  border: 1px solid var(--borda);
+  border-radius: 8px;
+  color: var(--azul);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 10px;
+  margin-top: 10px;
+  cursor: pointer;
+}
+.botao-link-secao:active {
+  opacity: 0.8;
+}
+
+/* F-02b: atalho "+" dentro de uma listagem Simples (categoria expandida em
+   Resumo/Situação/Planejamento) — abre um lançamento novo já com aquela
+   categoria pré-selecionada, mesma ideia do "+" que a Carteira já tinha
+   pra conta. Fica dentro do próprio `.bloco-lista-simples`, por isso a
+   borda de topo (separa do último lançamento ou da mensagem "nenhum
+   lançamento") em vez de margem — mantém a "caixa afundada" única. */
+.botao-add-lista-simples {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  border-top: 1px solid var(--borda);
+  color: var(--azul);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 8px 10px;
+  cursor: pointer;
+}
+.botao-add-lista-simples:active {
+  opacity: 0.8;
+}
+
+/* F-03/F-06b: toggle "O que significa isso?" (Situação) e acordeão de texto
+   de referência (Manutenção) — mesmo botão discreto nos dois lugares,
+   fechado por padrão. */
+.botao-explicacao {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  color: var(--texto-fraco);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 4px 0;
+  margin-top: 4px;
+}
+.botao-explicacao .seta-expandir {
+  font-size: 10px;
+  transition: transform 0.15s;
+}
+.botao-explicacao.aberto .seta-expandir {
+  transform: rotate(90deg);
+}
+
+/* F-06: abas da tela Categorias e Grupos (Categorias / Grupos / Metas /
+   Aparência) — mesmo padrão visual das abas do modal de lançamento
+   (`role="tablist"`), mas como classe reutilizável (aqui não é inline). */
+.abas-tela {
+  display: flex;
+  gap: 4px;
+  background: var(--bg-elevado);
+  border-radius: 10px;
+  padding: 4px;
+  margin-bottom: 16px;
+  position: sticky;
+  top: 0;
+}
+.aba-tela-item {
+  flex: 1;
+  padding: 10px 4px;
+  min-height: 36px;
+  border-radius: 8px;
+  border: none;
+  background: none;
+  color: var(--texto-fraco);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 400;
+  cursor: pointer;
+  text-align: center;
+}
+.aba-tela-item.ativa {
+  background: var(--azul);
+  color: #fff;
+  font-weight: 600;
+}
+
+/* F-08: menu "⋮" por linha de grupo/categoria (Categorias e Grupos) — junta
+   "Restaurar ícone padrão" e "Inativar/Excluir", ações (c)/(d) da régua de
+   densidade, deixando só "Editar" sempre visível ao lado dele. Mesmo
+   componente visual do `.menu-engrenagem` (popover simples), em miniatura e
+   ancorado à própria linha em vez de fixo na tela. */
+.menu-linha-wrap {
+  position: relative;
+  display: inline-block;
+}
+.botao-menu-linha {
+  background: none;
+  border: 1px solid var(--borda);
+  color: var(--texto-fraco);
+  border-radius: 8px;
+  width: 30px;
+  height: 30px;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+.menu-linha-popover {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  background: var(--bg-elevado);
+  border: 1px solid var(--borda);
+  border-radius: 10px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+  z-index: 30;
+  min-width: 180px;
+}
+.menu-linha-popover button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  color: var(--texto);
+  font: inherit;
+  font-size: 13px;
+  padding: 10px 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.menu-linha-popover button + button {
+  border-top: 1px solid var(--borda);
+}
+.menu-linha-popover button:active {
+  background: var(--bg);
+}
+
+/* F-05: prévia de lançamentos recentes dentro de cada card da Carteira —
+   preenche o espaço vazio medido (549px/64%) sem exigir entrar no drill-in
+   da conta pra ver "o que teve aqui recentemente". */
+.card-conta-preview {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--borda);
+}
+/* 04/09/2026, mesmo dia (pedido do Rafael): a prévia sozinha não deixava
+   claro que eram só os últimos lançamentos, nem que o card inteiro é
+   clicável pra ver mais — rótulo explícito acima da lista. */
+.card-conta-preview-titulo {
+  display: block;
+  font-size: 10px;
+  color: var(--texto-fraco);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-bottom: 4px;
+}
+.card-conta-preview-linha {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 3px 0;
+  font-size: 12px;
+  color: var(--texto-fraco);
+}
+.card-conta-preview-linha span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* F-10b: realce de borda no campo específico citado pela mensagem de erro
+   do modal de lançamento (DetalheLancamento.tsx) — a mensagem já nomeia o
+   campo em texto; isto só reforça visualmente qual input/select é. */
+.campo-com-erro {
+  border-color: var(--vermelho) !important;
+}
