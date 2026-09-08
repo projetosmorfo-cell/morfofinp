@@ -150,6 +150,7 @@ export async function avancarSeriesFixasPendentes(hojeISOForcado?: string): Prom
         dataCompetencia: proxima,
         dataCaixa: proxima,
         descricao: ultima.descricao,
+        descricaoOriginal: ultima.descricao,
         valor: ultima.valor,
         contaId: ultima.contaId,
         pagoPor: ultima.pagoPor,

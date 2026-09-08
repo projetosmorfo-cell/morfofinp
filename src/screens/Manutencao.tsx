@@ -36,19 +36,20 @@ const ORDEM_ABAS_PADRAO = ['resumo', 'situacao', 'lancamentos', 'carteira', 'pla
 // Worker/Cache Storage existem de verdade) e é 100% seguro (nunca toca em
 // IndexedDB), mas o problema real do Rafael quase certamente foi outro,
 // documentado nas duas seções abaixo.
+//
+// REMOVIDO nesta tela (08/09/2026, G59 — "critério de aceite binário do
+// encaixe"): a seção "Painel N0 (Morfo)" com o botão "Abrir painel N0" —
+// G59 proíbe explicitamente qualquer entrada pro N0 dentro do N1 ("Não
+// existe entrada pro N0 dentro do N1"). O painel N0 agora só é alcançável
+// por um login próprio, separado, direto do site deslogado (ver
+// `src/kit/LoginView.tsx`/`src/kit/authN0.ts`/`src/kit/AppRoot.tsx`) — o
+// mesmo gap que gerou a Lição 16 (`Lições Aprendidas.md` do Project).
 export default function Manutencao({
   aoVoltar,
-  onAbrirPainelN0,
   onAbrirTour,
   onAbrirFerramentasTeste,
 }: {
   aoVoltar: () => void
-  // Roteiro de Parametrização Morfo, Etapa 4 (04/09/2026) — acesso ao
-  // painel N0 (Morfo/dev), ver `src/kit/AppRoot.tsx`. Continua aqui mesmo
-  // depois da Etapa 8 (Login) — é um painel de desenvolvedor/Morfo, sem
-  // relação com QUAL tenant está logado, então nunca fez sentido morar no
-  // menu de engrenagem (que é sempre sobre o tenant atual).
-  onAbrirPainelN0: () => void
   // Roteiro de Parametrização Morfo, Etapa 6 (05/09/2026) — abre o tour
   // guiado (spotlight), ver `src/kit/GuidedTour.tsx`.
   onAbrirTour: () => void
@@ -277,18 +278,6 @@ export default function Manutencao({
             </div>
           ))}
         </div>
-      </div>
-
-      <h2>Painel N0 (Morfo)</h2>
-      <div className="cartao">
-        <p className="texto-fraco" style={{ marginTop: 0 }}>
-          Acesso ao painel de administração da plataforma — esqueleto, sem dado real de tenant ainda
-          (depende de backend, ver Backlog #028). Painel de desenvolvedor/Morfo, sem relação com o
-          Login — por isso fica aqui, não no menu de engrenagem principal.
-        </p>
-        <button type="button" onClick={onAbrirPainelN0}>
-          Abrir painel N0
-        </button>
       </div>
 
       <h2>Conta</h2>

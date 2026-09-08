@@ -13,7 +13,8 @@ import SimularData, { BannerDataSimulada } from './kit/SimularData'
 import DetalheLancamento from './components/DetalheLancamento'
 import { mesInicial } from './mes'
 import { avancarSeriesFixasPendentes } from './recorrencia'
-import { useModoVisao, useOrdemAbas } from './configuracaoIcones'
+import { useModoVisao, useOrdemAbas, useMarcaSite } from './configuracaoIcones'
+import { abrirSuporteWhatsApp } from './kit/suporte'
 
 // Categorias saiu daqui em 30/08/2026 (rodada seguinte) — deixou de ser aba
 // do rodapé e virou item do menu de configurações (engrenagem, ver
@@ -102,7 +103,15 @@ interface AlvoLancamento {
 // Engrenagem fixa no topo (30/08/2026) — abre um popover com as duas telas
 // de cadastro que deixaram de ser aba do rodapé. Fica fora do fluxo normal
 // de telas/mês porque é config, não uma "aba de mês".
-function MenuEngrenagem({ onEscolher }: { onEscolher: (c: Config) => void }) {
+function MenuEngrenagem({
+  onEscolher,
+  whatsappNumero,
+  whatsappMensagem,
+}: {
+  onEscolher: (c: Config) => void
+  whatsappNumero: string | undefined
+  whatsappMensagem: string | undefined
+}) {
   const [aberto, setAberto] = useState(false)
   return (
     <>
@@ -132,6 +141,15 @@ function MenuEngrenagem({ onEscolher }: { onEscolher: (c: Config) => void }) {
                 {ROTULO_CONFIG[c]}
               </button>
             ))}
+            {/* Suporte (08/09/2026, Site institucional deslogado — Bloco 2,
+                Decisão 20): ação direta (abre WhatsApp numa aba nova), não uma
+                tela de `configAberta` — por isso fica fora de `ROTULO_CONFIG`,
+                mesmo padrão de item "fora do mapa" já usado por
+                `ferramentasTeste`. G25 pede esse botão visível em todo
+                produto, independente do modelo comercial. */}
+            <button type="button" onClick={() => { abrirSuporteWhatsApp(whatsappMensagem, whatsappNumero); setAberto(false) }}>
+              Suporte (WhatsApp)
+            </button>
           </div>
         </>
       )}
@@ -139,11 +157,13 @@ function MenuEngrenagem({ onEscolher }: { onEscolher: (c: Config) => void }) {
   )
 }
 
-// `onAbrirPainelN0` (04/09/2026, Roteiro de Parametrização Morfo, Etapa 4):
-// acesso temporário ao painel N0 (Morfo/dev), passado por `AppRoot.tsx` —
-// ver `src/kit/AppRoot.tsx` pro porquê de não ser uma tela de Login de
-// verdade ainda (Backlog #029, Etapa 8 do roteiro).
-export default function App({ onAbrirPainelN0 }: { onAbrirPainelN0: () => void }) {
+// `modoConsultaN0` (08/09/2026, G59 — rebuild N0/N1): presente só quando o
+// administrador Morfo entrou aqui via "entrar como" (impersonação, o ÚNICO
+// caminho N0→N1 permitido — ver `src/kit/AppRoot.tsx`). NUNCA existe um
+// caminho de volta N1→N0 além deste — G59 proíbe explicitamente qualquer
+// item de menu/botão dentro do N1 que leve pro painel N0 (o antigo "Abrir
+// painel N0" de `Manutencao.tsx` foi removido nesta mesma rodada).
+export default function App({ modoConsultaN0 }: { modoConsultaN0?: { onVoltar: () => void } }) {
   // Navegação por estado do React, sem router e sem depender da URL —
   // funciona igual em qualquer lugar, inclusive abrindo o arquivo direto
   // (file://), onde bibliotecas baseadas em window.location/URL quebram.
@@ -185,6 +205,8 @@ export default function App({ onAbrirPainelN0 }: { onAbrirPainelN0: () => void }
   const modoVisao = useModoVisao()
   const telasBase = modoVisao === 'light' ? TELAS_LIGHT : (Object.keys(TELAS) as Tela[])
 
+  const { whatsappNumero, whatsappMensagemPadrao } = useMarcaSite()
+
   // Ordem do rodapé personalizável (04/09/2026, Roteiro de Parametrização
   // Morfo, Etapa 4 — Kit de Estrutura Mínima, "Layout": adaptação da seção
   // "Ordem dos menus" de `LayoutTenantScreen` do Kit, ver Manutencao.tsx).
@@ -222,6 +244,37 @@ export default function App({ onAbrirPainelN0 }: { onAbrirPainelN0: () => void }
 
   return (
     <>
+      {modoConsultaN0 && (
+        // Banner de impersonação (G59) — mesmo padrão de layout de
+        // `BannerDataSimulada` (bloco normal do fluxo, irmão ANTES de
+        // `<main>`, nunca `position: fixed` — evita o bug real já
+        // documentado de cobrir o cabeçalho sticky de cada tela). Sempre
+        // visível enquanto o administrador Morfo está "vendo como" o
+        // tenant real — nunca escondível, e o único jeito de sair é
+        // "Voltar ao painel N0" (nunca "sair da conta", que apagaria a
+        // sessão N1 do próprio Rafael sem necessidade).
+        <div
+          style={{
+            flexShrink: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 10,
+            padding: '8px 14px',
+            background: '#3B1E63',
+            color: '#fff',
+          }}
+        >
+          <span style={{ fontSize: 12, fontWeight: 700 }}>Modo consulta — administrador Morfo, vendo como este tenant</span>
+          <button
+            type="button"
+            onClick={modoConsultaN0.onVoltar}
+            style={{ background: 'rgba(255,255,255,0.18)', border: 'none', borderRadius: 8, color: '#fff', padding: '6px 10px', fontSize: 12, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}
+          >
+            ‹ Voltar ao painel N0
+          </button>
+        </div>
+      )}
       <BannerDataSimulada />
       <main>
         {configAberta ? (
@@ -242,7 +295,6 @@ export default function App({ onAbrirPainelN0 }: { onAbrirPainelN0: () => void }
           ) : (
             <Manutencao
               aoVoltar={() => setConfigAberta(null)}
-              onAbrirPainelN0={onAbrirPainelN0}
               onAbrirTour={() => setTourAberto(true)}
               onAbrirFerramentasTeste={() => setConfigAberta('ferramentasTeste')}
             />
@@ -257,7 +309,7 @@ export default function App({ onAbrirPainelN0 }: { onAbrirPainelN0: () => void }
         )}
       </main>
       {!configAberta && <Rodape tela={tela} telasVisiveis={telasVisiveis} onTrocar={setTela} />}
-      <MenuEngrenagem onEscolher={setConfigAberta} />
+      <MenuEngrenagem onEscolher={setConfigAberta} whatsappNumero={whatsappNumero} whatsappMensagem={whatsappMensagemPadrao} />
       {lancamentoAberto && (
         <DetalheLancamento
           alvoId={lancamentoAberto.id}

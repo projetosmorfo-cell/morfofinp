@@ -840,8 +840,49 @@ const LANCAMENTOS_SEMENTE: LancamentoSemente[] = [
 
 export async function seedIfEmpty() {
   const jaTemCategoria = await db.categorias.count()
-  if (jaTemCategoria > 0) return
+  if (jaTemCategoria === 0) {
+    await seedCategoriasContasELancamentos()
+  }
 
+  // Semente de `planos` (08/09/2026, G59 — "Gerenciar Planos" migrou de
+  // array TS fixo pra tabela Dexie). Guard PRÓPRIO, separado do de
+  // categoria acima, de propósito: um banco que já tinha categorias
+  // semeadas antes desta rodada (ou seja, já passou pelo `if` acima em
+  // rodadas anteriores) também precisa ganhar os 2 planos placeholder ao
+  // abrir esta build pela 1ª vez — se o guard fosse só o de categoria, essa
+  // instalação nunca entraria aqui e a tabela `planos` ficaria vazia pra
+  // sempre. BUG REAL que isto substitui: a 1ª versão desta migração
+  // semeava os planos dentro do `.upgrade()` da v7 do schema Dexie
+  // (`db.ts`) — funciona só pra quem já tinha um banco na v6 subindo pra
+  // v7; um banco criado do zero nunca roda `.upgrade()` nenhum (Dexie
+  // aplica o schema final direto, sem "migrar"), então toda instalação
+  // NOVA nascia com `planos` vazia. Achado por Playwright antes de
+  // entregar (ver Decisões.md do Project).
+  const jaTemPlano = await db.planos.count()
+  if (jaTemPlano === 0) {
+    await db.planos.bulkAdd([
+      {
+        nome: 'Essencial (placeholder)',
+        valorMensal: 0,
+        ativo: true,
+        funcionalidades: ['Resumo, Situação, Lançamentos, Carteira, Planejamento', 'Categorias e contas ilimitadas'],
+      },
+      {
+        nome: 'Completo (placeholder)',
+        valorMensal: 0,
+        ativo: true,
+        destaque: true,
+        funcionalidades: [
+          'Tudo do Essencial',
+          'Layout do rodapé personalizável',
+          'Suporte prioritário (quando existir canal de suporte de verdade)',
+        ],
+      },
+    ])
+  }
+}
+
+async function seedCategoriasContasELancamentos() {
   await db.transaction('rw', db.categorias, db.grupos, db.contas, db.metas, db.lancamentos, async () => {
     // 04/09/2026: novo banco (fresh install/demo) já nasce com os ícones que
     // o Rafael definiu como padrão do sistema (ver `iconesPadrao.ts`) — sem

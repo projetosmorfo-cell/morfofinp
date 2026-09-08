@@ -432,6 +432,7 @@ function DetalheConta({
         dataCompetencia: dataPagamento,
         dataCaixa: dataPagamento,
         descricao: `Pagamento fatura ${conta.nome}`,
+        descricaoOriginal: `Pagamento fatura ${conta.nome}`,
         valor: -valorNum,
         contaId: contaOrigemPagamento,
         pagoPor: 'conta',

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { PLANOS_STUB, type Plano } from './planos'
+import { usePlanos, type Plano } from './planos'
 import { usePlanoAtual, salvarPlanoId } from './planoAtual'
 
 // Modelo de negócio Completo (05/09/2026, Roteiro de Parametrização Morfo,
@@ -59,10 +59,11 @@ function TrocarPlanoModal({
   onFechar,
   onConfirmar,
 }: {
-  planoAtualId: string
+  planoAtualId: number | undefined
   onFechar: () => void
-  onConfirmar: (planoId: string) => void
+  onConfirmar: (planoId: number) => void
 }) {
+  const planos = usePlanos()
   const [selecionadoId, setSelecionadoId] = useState(planoAtualId)
   return (
     <div className="modal-fundo" onClick={onFechar}>
@@ -79,7 +80,7 @@ function TrocarPlanoModal({
           </button>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
-          {PLANOS_STUB.map((p) => (
+          {planos.map((p) => (
             <CartaoPlano key={p.id} plano={p} selecionado={p.id === selecionadoId} onSelecionar={() => setSelecionadoId(p.id)} />
           ))}
         </div>
@@ -87,8 +88,8 @@ function TrocarPlanoModal({
           type="button"
           className="primario"
           style={{ marginTop: 0 }}
-          disabled={selecionadoId === planoAtualId}
-          onClick={() => onConfirmar(selecionadoId)}
+          disabled={selecionadoId === undefined || selecionadoId === planoAtualId}
+          onClick={() => selecionadoId !== undefined && onConfirmar(selecionadoId)}
         >
           Confirmar troca
         </button>
@@ -153,6 +154,7 @@ function EncerrarPlanoModal({ onFechar, onConfirmar }: { onFechar: () => void; o
 
 export default function MinhaAssinatura({ aoVoltar }: { aoVoltar: () => void }) {
   const planoAtual = usePlanoAtual()
+  const planos = usePlanos()
   const [trocarAberto, setTrocarAberto] = useState(false)
   const [encerrarAberto, setEncerrarAberto] = useState(false)
 
@@ -168,15 +170,22 @@ export default function MinhaAssinatura({ aoVoltar }: { aoVoltar: () => void }) 
       <p className="texto-fraco">
         Modelo de negócio Completo (Roteiro de Parametrização Morfo, Etapa 5) — front-end de validação
         do fluxo, sem plano/preço real definido ainda e sem cobrança de verdade (depende do backend,
-        Backlog #028).
+        Backlog #028). Planos gerenciados pelo painel N0 (G59).
       </p>
 
       <h2 style={{ marginTop: 0 }}>Plano atual</h2>
       <div className="cartao">
-        <CartaoPlano plano={planoAtual} selecionado />
+        {planoAtual ? (
+          <CartaoPlano plano={planoAtual} selecionado />
+        ) : (
+          <p className="texto-fraco" style={{ marginTop: 0 }}>
+            Nenhum plano cadastrado ainda pelo painel N0.
+          </p>
+        )}
         <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
           <button
             type="button"
+            disabled={planos.length === 0}
             style={{ flex: 1, marginTop: 0, background: 'none', border: '1px solid var(--borda)', borderRadius: 10, padding: '12px', cursor: 'pointer' }}
             onClick={() => setTrocarAberto(true)}
           >
@@ -184,6 +193,7 @@ export default function MinhaAssinatura({ aoVoltar }: { aoVoltar: () => void }) 
           </button>
           <button
             type="button"
+            disabled={!planoAtual}
             style={{ flex: 1, marginTop: 0, background: 'none', border: '1px solid var(--vermelho)', color: 'var(--vermelho)', borderRadius: 10, padding: '12px', cursor: 'pointer' }}
             onClick={() => setEncerrarAberto(true)}
           >
@@ -194,7 +204,7 @@ export default function MinhaAssinatura({ aoVoltar }: { aoVoltar: () => void }) 
 
       {trocarAberto && (
         <TrocarPlanoModal
-          planoAtualId={planoAtual.id}
+          planoAtualId={planoAtual?.id}
           onFechar={() => setTrocarAberto(false)}
           onConfirmar={(planoId) => {
             salvarPlanoId(planoId)
@@ -202,11 +212,11 @@ export default function MinhaAssinatura({ aoVoltar }: { aoVoltar: () => void }) 
           }}
         />
       )}
-      {encerrarAberto && (
+      {encerrarAberto && planos[0]?.id !== undefined && (
         <EncerrarPlanoModal
           onFechar={() => setEncerrarAberto(false)}
           onConfirmar={() => {
-            salvarPlanoId(PLANOS_STUB[0].id)
+            salvarPlanoId(planos[0].id as number)
             setEncerrarAberto(false)
           }}
         />

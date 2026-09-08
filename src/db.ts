@@ -115,6 +115,20 @@ export interface Lancamento {
   dataCompetencia: string // ISO yyyy-mm-dd — mês a que o gasto pertence
   dataCaixa: string // ISO yyyy-mm-dd — quando o dinheiro realmente saiu
   descricao: string
+  // Snapshot do texto de `descricao` no exato momento em que este lançamento
+  // foi CRIADO — nunca reescrito depois, mesmo que o usuário renomeie
+  // `descricao` livremente pra dar um apelido melhor (08/09/2026). Existe
+  // pra alimentar o "De/Para" da Conciliação Avançada (Fase 2, ver
+  // `Conciliação Avançada - Fase 2.md` do Project) e, no futuro, a leitura
+  // de notificação bancária: o extrato/notificação sempre traz o texto
+  // ORIGINAL, nunca o apelido que o usuário deu — sem esse campo, o
+  // casamento por texto quebraria no primeiro renome (mesmo problema já
+  // observado no Organizze, ver `Modelo de Dados.md`, item 3). Campo
+  // aditivo, opcional — lançamentos já existentes não têm; não é chave de
+  // nada (a regra dura de conciliação continua sendo data+valor+conta, ver
+  // abaixo) — é só um dado auxiliar pra facilitar/desambiguar, nunca substitui
+  // essa regra.
+  descricaoOriginal?: string
   valor: number // com sinal
   contaId: number
   pagoPor: PagoPor
@@ -219,15 +233,17 @@ export interface ConfiguracaoIcones {
   // cada aba continua sendo só o mecanismo `modoVisao` já existente — este
   // campo nunca esconde aba nenhuma, só reordena as que já estão visíveis.
   ordemAbas?: string[]
-  // Plano "contratado" (05/09/2026, Roteiro de Parametrização Morfo, Etapa 5
-  // — Modelo de negócio Completo). PLACEHOLDER: não existe cobrança real
-  // nem backend (Decisão 6/Backlog #028) — este campo só guarda qual dos
-  // `PLANOS_STUB` (ver `src/kit/planos.ts`) a tela "Minha Assinatura"
-  // (`src/kit/MinhaAssinatura.tsx`) deve mostrar como "atual", pra validar o
-  // FLUXO (ver plano, trocar, encerrar) antes de existir plano/preço de
-  // verdade. Ausente/undefined = plano em destaque (`PLANOS_STUB.find(p =>
-  // p.destaque)`). Mesmo padrão aditivo de sempre: sem bump de schema.
-  planoId?: string
+  // Plano "contratado" (05/09/2026, Etapa 5 — Modelo de negócio Completo).
+  // PLACEHOLDER: não existe cobrança real nem backend (Decisão 6/Backlog
+  // #028) — este campo só guarda qual `PlanoRegistro.id` (tabela `planos`,
+  // ver acima — migrada de array TS fixo pra Dexie em 08/09/2026, G59) a
+  // tela "Minha Assinatura" deve mostrar como "atual". Ausente/undefined =
+  // plano em destaque (`usePlanoPadrao()`, `src/kit/planos.ts`). Tipo
+  // mudou de `string` (id fixo tipo `'essencial'`) pra `number` (id
+  // autoincrementado do Dexie) na mesma rodada da migração — sem upgrade
+  // de dado porque nenhum tenant real tinha plano contratado ainda além do
+  // padrão implícito.
+  planoId?: number
   // Data "de hoje" SIMULADA (05/09/2026, Roteiro de Parametrização Morfo,
   // Etapa 7 — Ferramentas de teste), formato ISO (yyyy-mm-dd). FERRAMENTA DE
   // TESTE — pedido explícito do Rafael: "a cada mudança de data, deve
@@ -263,6 +279,70 @@ export interface ConfiguracaoIcones {
   credencialEmail?: string
   credencialSenha?: string
   sessaoAtiva?: boolean
+  // Credencial e sessão do NÍVEL N0 (08/09/2026, Roteiro de Parametrização
+  // Morfo, G59 — "critério de aceite binário do encaixe"). CAMPOS SEPARADOS
+  // dos de N1 acima, de propósito: G59 exige "login separa os níveis" —
+  // administrador (Morfo) e empresa (tenant) são credenciais INDEPENDENTES,
+  // nunca a mesma sessão fazendo os dois papéis. Mesmo raciocínio de
+  // segurança/fluxo de `credencialEmail`/`credencialSenha` (placeholder
+  // sem backend, texto puro de propósito) — ver `src/kit/authN0.ts`.
+  // `sessaoAtivaN0` controla SÓ o painel N0 (`DevApp`) — nunca é lido por
+  // nenhuma tela do ambiente N1. O único caminho N0→N1 é "entrar como"
+  // (impersonação, ver `AppRoot.tsx`), que NUNCA seta/lê `sessaoAtiva` (N1)
+  // nem `sessaoAtivaN0` — é um estado local transitório de visualização,
+  // não uma troca de sessão.
+  credencialEmailN0?: string
+  credencialSenhaN0?: string
+  sessaoAtivaN0?: boolean
+  // "Marca do site institucional" (08/09/2026, G59 — item aprovado pro N0,
+  // categorização Rafael/Claude de 08/09). Editável só pelo painel N0
+  // (`DevApp` → Parâmetros → Marca) — nunca pelo N1. Escopo deliberadamente
+  // restrito ao que dá pra editar sem redesenhar os SVGs de logo estáticos
+  // (`morfo-padrao-branco.svg`/`morfofinp-padrao-branco.svg`, que continuam
+  // fixos): o selo de vínculo ao ecossistema Morfo (G22) e o canal de
+  // suporte (WhatsApp — número e mensagem padrão). Ausente/undefined = usa
+  // os valores fixos que já existiam no código antes desta rodada (ver
+  // `src/kit/suporte.ts`/`src/kit/LoginView.tsx`) — nenhuma instalação
+  // existente quebra por este campo não existir ainda.
+  marcaSeloEcossistema?: string
+  marcaWhatsappNumero?: string
+  marcaWhatsappMensagemPadrao?: string
+}
+
+// "Gerenciar Planos" (08/09/2026, G59 — item aprovado pro N0). Antes
+// (`src/kit/planos.ts`) era um array TS fixo (`PLANOS_STUB`) — migrado pra
+// tabela Dexie de verdade porque G59 exige que Parâmetros do N0 sejam
+// telas REAIS e funcionais (editar/incluir/excluir plano), não só exibição.
+// Continua sendo PLACEHOLDER de conteúdo comercial (nome/preço inventados,
+// sem cobrança real — Backlog #028), mas agora o Rafael edita pelo painel
+// N0 em vez de precisar mexer em código. `ativo: false` = plano descontinuado,
+// não aparece mais em Planos (site)/Trocar de plano, mas não é excluído (um
+// tenant que já estava nele continua mostrando o nome certo).
+export interface PlanoRegistro {
+  id?: number
+  nome: string
+  valorMensal: number
+  destaque?: boolean
+  funcionalidades: string[]
+  ativo: boolean
+}
+
+// "Usuários Morfo (administradores)" (08/09/2026, G59 — item aprovado pro
+// N0). Registro de QUEM tem acesso ao painel N0 — separado da credencial de
+// login em si (`credencialEmailN0`/`credencialSenhaN0`, singleton único,
+// ver acima): sem backend real, só existe UMA credencial de entrada de
+// verdade (mesma limitação honesta já documentada pra N1 em
+// `src/kit/auth.ts`) — esta tabela é o registro/lista de administradores
+// (nome, e-mail, ativo/inativo), não um mecanismo de autenticação
+// multi-usuário de verdade. `criarAcessoN0()` já grava aqui o 1º
+// administrador automaticamente, pra a lista nunca nascer vazia depois de
+// alguém logar.
+export interface UsuarioN0 {
+  id?: number
+  nome: string
+  email: string
+  ativo: boolean
+  criadoEm: string // ISO
 }
 
 // Versão dos DADOS DE SEMENTE (não é versão de schema — isso é o `.version()`
@@ -298,6 +378,8 @@ class MFinpDB extends Dexie {
   saldosInformados!: EntityTable<SaldoInformado, 'id'>
   usuarios!: EntityTable<Usuario, 'id'>
   configuracoes!: EntityTable<ConfiguracaoIcones, 'id'>
+  planos!: EntityTable<PlanoRegistro, 'id'>
+  usuariosN0!: EntityTable<UsuarioN0, 'id'>
 
   constructor() {
     super(`mfinp-db-semente${VERSAO_SEMENTE_DEMO}`)
@@ -441,6 +523,48 @@ class MFinpDB extends Dexie {
       saldosInformados: '++id, contaId, dataReferencia',
       usuarios: '++id, login',
       configuracoes: 'id',
+    })
+    // v7 (08/09/2026, Roteiro de Parametrização Morfo, G59 — rebuild N0/N1):
+    // 2 tabelas NOVAS — `planos` (migra `PLANOS_STUB`, fixo em código até
+    // agora, pra um cadastro real editável pelo painel N0) e `usuariosN0`
+    // (registro de administradores Morfo, ver `UsuarioN0` acima). Tabela
+    // nova sempre exige bump (mesma regra já documentada na v6).
+    // `usuariosN0` INDEXA `email` (diferente de `planos`, que só usa
+    // `.toArray()`) — `src/kit/authN0.ts` faz
+    // `db.usuariosN0.where('email').equals(...)` pra não duplicar o mesmo
+    // administrador ao criar acesso; sem o índice, o Dexie lança
+    // `SchemaError` na hora do `.where()` (mesmo bug de classe já
+    // documentado neste arquivo pra `transferenciaId`, v5).
+    // `credencialEmailN0`/`credencialSenhaN0`/`sessaoAtivaN0`/`marcaSelo...`
+    // (em `ConfiguracaoIcones`, ver acima) são campos aditivos no singleton
+    // já existente — não precisam de bump, mesma regra de sempre.
+    //
+    // BUG REAL CORRIGIDO (08/09/2026, mesma rodada, achado por Playwright
+    // antes de entregar): a 1ª versão desta migração semeava os 2 planos
+    // placeholder aqui, dentro de `.upgrade()` — funciona pra quem já tinha
+    // um banco na v6 e está subindo pra v7, mas o Dexie NUNCA roda callback
+    // de `.upgrade()` pra um banco criado do zero (verno 0 → aplica só o
+    // schema final direto, sem "migrar" nada) — então toda instalação NOVA
+    // (o caso mais comum: qualquer pessoa abrindo esta build pela 1ª vez)
+    // nascia com `planos` vazia, e a tela "Gerenciar Planos"/Planos do site
+    // ficavam sem nenhum plano pra mostrar. Corrigido: a semente dos 2
+    // planos placeholder virou responsabilidade de `seedIfEmpty()`
+    // (`src/seed.ts`) — mesmo lugar que já semeia categorias/grupos/contas
+    // pra banco novo — mas com um guard PRÓPRIO (`db.planos.count()`),
+    // separado do guard de categorias, porque um banco que já estava na v6
+    // (categorias já semeadas) também precisa ganhar os planos ao migrar
+    // pra v7, e o guard de categoria sozinho pularia esse caso.
+    this.version(7).stores({
+      contas: '++id, nome, tipo, ativa',
+      categorias: '++id, nome, grupo, ativa',
+      grupos: '++id, nome, ativo',
+      lancamentos: '++id, dataCompetencia, contaId, categoriaId, status, chaveImportacao, serieId, transferenciaId',
+      metas: '++id, grupo, mesVigencia',
+      saldosInformados: '++id, contaId, dataReferencia',
+      usuarios: '++id, login',
+      configuracoes: 'id',
+      planos: '++id',
+      usuariosN0: '++id, email',
     })
   }
 }

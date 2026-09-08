@@ -5,49 +5,63 @@ import App from '../App'
 import DevApp from './DevApp'
 import LoginView from './LoginView'
 
-// Raiz de camadas — adaptado do Kit de Estrutura Mínima Morfo (padrão
-// N0/N1/Portal do Cliente + roteamento por `authLevel`). Roteiro de
-// Parametrização Morfo, Etapa 4 (04/09/2026), com o Login real da Etapa 8
-// (05/09/2026) trocando a entrada de verdade — ver abaixo.
+// Raiz de camadas — REESCRITA em 08/09/2026 (Roteiro de Parametrização
+// Morfo, G59 — "critério de aceite binário do encaixe"). A versão anterior
+// (Etapas 4/8) tinha um único login (N1) e um `authLevel` local que
+// alternava entre `<App/>`/`<DevApp/>` por um botão dentro de Manutenção —
+// exatamente o "painel N0 de fachada dentro do N1" que G59 proíbe (achado
+// real MorfoFinP 08/09, registrado em Lição 16 do Project).
 //
-// Adaptações registradas em Decisão 6 (`biblioteca/01-produto/decisoes.md`
-// do Project):
-// - Portal do Cliente (3ª camada do Kit) NÃO SE APLICA ao MorfoFinP — é um
-//   app de finanças pessoais, o tenant não tem "clientes próprios" no
-//   sentido que o Kit prevê (ex.: clientes de uma locadora, no MorfoLoc).
-// - N0 (painel Morfo/dev) é alcançado por um botão dentro de Manutenção
-//   (`onAbrirPainelN0`) — continua assim mesmo depois da Etapa 8, porque o
-//   painel N0 nunca teve relação com o Login (é um painel de
-//   desenvolvedor/Morfo, não do tenant).
-//
-// Etapa 8 (05/09/2026) — Login real, entrada de verdade: Rafael escolheu
-// explicitamente "Trocar a entrada de verdade" (não uma prévia isolada,
-// como Etapas 4-7) — o app agora SEMPRE passa por `LoginView` primeiro.
-// `sessaoAtiva` (ver `src/db.ts`/`src/kit/auth.ts`) é lido aqui via
-// `useLiveQuery` — reativo, então criar acesso/entrar/sair (que só gravam
-// esse campo) já trocam de tela sozinhos, sem nenhum callback de navegação.
-// Sentinela `CARREGANDO` (em vez de deixar o 3º argumento do
-// `useLiveQuery` como `undefined`) distingue "ainda carregando o Dexie" de
-// "carregou e realmente não existe sessão" — sem isso, todo carregamento do
-// app piscaria a tela de Login por um instante antes de resolver pro estado
-// real, mesmo pra quem já está logado.
-export type AuthLevel = 'n0' | 'n1'
-
+// Modelo novo, direto do texto de G59:
+// - **Login separa os níveis.** Duas credenciais INDEPENDENTES no mesmo
+//   singleton `db.configuracoes` (`credencialEmail`/`credencialSenha`/
+//   `sessaoAtiva` pra N1, `credencialEmailN0`/`credencialSenhaN0`/
+//   `sessaoAtivaN0` pra N0 — ver `src/kit/auth.ts`/`src/kit/authN0.ts`).
+//   `LoginView.tsx` expõe as duas entradas (a de N0 discreta, alcançável
+//   direto do site, nunca de dentro do N1 — ver rodapé daquele arquivo).
+// - **Não existe entrada pro N0 dentro do N1** — nenhuma tela do `App`
+//   (N1) tem prop/callback que leve pro `DevApp`. O único caminho N0→N1 é
+//   "entrar como" (impersonação), abaixo.
+// - **Sessão N0 ativa manda**, sempre — exceto durante impersonação. Isso
+//   não é o mesmo "authLevel" de antes (que só existia enquanto o app
+//   estava aberto, perdido a cada reload): `sessaoAtivaN0` persiste no
+//   Dexie, igual `sessaoAtiva` de N1 sempre persistiu.
+// - **Impersonação** (`entrarComoTenant`) é um estado LOCAL, transitório,
+//   nunca persistido — ao fechar/recarregar o app, o administrador Morfo
+//   volta a cair no painel N0 (nunca fica "preso" dentro do tenant depois
+//   de fechar e reabrir). Só existe pro tenant REAL (`t0` em
+//   `DevApp.tsx`) — os 3 tenants de exemplo continuam sem essa ação
+//   habilitada (são fictícios, não haveria "aplicativo" de verdade pra
+//   entrar). Renderiza `<App modoConsultaN0={...}/>`, que mostra o banner
+//   permanente "Modo consulta" (ver `App.tsx`) — nunca toca em
+//   `sessaoAtiva`/`sessaoAtivaN0`, só o estado local `impersonando` aqui.
 const CARREGANDO = Symbol('carregando')
 
 export default function AppRoot() {
-  const [authLevel, setAuthLevel] = useState<AuthLevel>('n1')
   const config = useLiveQuery(() => db.configuracoes.get(1), [], CARREGANDO)
+  const [impersonando, setImpersonando] = useState(false)
 
   if (config === CARREGANDO) return null
 
-  if (!config?.sessaoAtiva) {
+  const n0Ativa = Boolean(config?.sessaoAtivaN0)
+  const n1Ativa = Boolean(config?.sessaoAtiva)
+
+  if (n0Ativa && impersonando) {
+    return <App modoConsultaN0={{ onVoltar: () => setImpersonando(false) }} />
+  }
+
+  if (n0Ativa) {
+    // Sessão N0 ativa manda: painel N0 do Kit, inteiro, nada do aplicativo
+    // de negócio — mesmo com uma sessão N1 antiga ainda marcada como ativa
+    // no mesmo banco (ex.: o próprio Rafael logado nas duas camadas em
+    // momentos diferentes). "Sair" aqui (ver DevApp.tsx) só zera
+    // `sessaoAtivaN0` — nunca mexe em `sessaoAtiva` (N1).
+    return <DevApp onEntrarComoTenant={() => setImpersonando(true)} />
+  }
+
+  if (!n1Ativa) {
     return <LoginView />
   }
 
-  if (authLevel === 'n0') {
-    return <DevApp onVoltar={() => setAuthLevel('n1')} />
-  }
-
-  return <App onAbrirPainelN0={() => setAuthLevel('n0')} />
+  return <App />
 }

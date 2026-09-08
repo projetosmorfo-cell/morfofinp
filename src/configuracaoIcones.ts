@@ -57,7 +57,22 @@ export function tamanhoIconePx(tipo: 'completa' | 'categoria' | 'grupo', pct: nu
 // por `src/kit/auth.ts`/`AppRoot.tsx` — nenhum lugar que usa este hook
 // precisa saber de credencial/sessão.
 export function useConfiguracaoIcones(): Required<
-  Omit<ConfiguracaoIcones, 'id' | 'ordemAbas' | 'planoId' | 'hojeSimuladoISO' | 'credencialEmail' | 'credencialSenha' | 'sessaoAtiva'>
+  Omit<
+    ConfiguracaoIcones,
+    | 'id'
+    | 'ordemAbas'
+    | 'planoId'
+    | 'hojeSimuladoISO'
+    | 'credencialEmail'
+    | 'credencialSenha'
+    | 'sessaoAtiva'
+    | 'credencialEmailN0'
+    | 'credencialSenhaN0'
+    | 'sessaoAtivaN0'
+    | 'marcaSeloEcossistema'
+    | 'marcaWhatsappNumero'
+    | 'marcaWhatsappMensagemPadrao'
+  >
 > {
   const config = useLiveQuery(() => db.configuracoes.get(1), [])
   const legado = config as unknown as { pctSimples?: number } | undefined
@@ -128,4 +143,31 @@ export function useOrdemAbas(): string[] | undefined {
 
 export async function salvarOrdemAbas(ordem: string[]) {
   await salvarConfiguracaoIcones({ ordemAbas: ordem })
+}
+
+// "Marca do site institucional" (08/09/2026, G59 — item aprovado pro N0,
+// editável em `DevApp` → Parâmetros → Marca). Hook fino de leitura, mesmo
+// padrão de `useModoVisao`/`useOrdemAbas` acima — os 3 campos são
+// opcionais de propósito: quem consome (`LoginView.tsx`/`suporte.ts`) já
+// tem o próprio valor padrão/fallback, então este hook nunca inventa um
+// aqui, só repassa o que está gravado (ou `undefined`).
+export function useMarcaSite(): {
+  seloEcossistema: string | undefined
+  whatsappNumero: string | undefined
+  whatsappMensagemPadrao: string | undefined
+} {
+  const config = useLiveQuery(() => db.configuracoes.get(1), [])
+  return {
+    seloEcossistema: config?.marcaSeloEcossistema,
+    whatsappNumero: config?.marcaWhatsappNumero,
+    whatsappMensagemPadrao: config?.marcaWhatsappMensagemPadrao,
+  }
+}
+
+export async function salvarMarcaSite(patch: {
+  marcaSeloEcossistema?: string
+  marcaWhatsappNumero?: string
+  marcaWhatsappMensagemPadrao?: string
+}) {
+  await salvarConfiguracaoIcones(patch)
 }
