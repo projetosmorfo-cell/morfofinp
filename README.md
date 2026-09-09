@@ -11,6 +11,7 @@ Só o que o app precisa pra ser construído e rodar:
 - `plugins/notificacao-bancaria/` — plugin nativo Android que lê notificações do banco/cartão
 - `capacitor.config.ts`, `vite.config*.ts`, `tsconfig*.json`, `package.json`/`package-lock.json`, `.oxlintrc.json`, `index.html` — configuração de build
 - `.github/workflows/android.yml` — gera o `.apk` automaticamente no GitHub Actions
+- `android-signing/debug.keystore` — chave de assinatura de TESTE fixa (senha padrão "android"), pra um build novo instalar por cima do anterior sem desinstalar
 
 Documentação de produto (decisões, backlog, regras de negócio) fica fora daqui, na biblioteca do produto (Project/Drive).
 
@@ -28,4 +29,4 @@ npx oxlint                                      # lint
 
 A cada publicação na branch `main`, o GitHub Actions compila o `.apk` de teste e publica na aba **Releases** (`build-NNN`). O número vem de `src/buildInfo.ts`.
 
-Ao instalar o `.apk` no celular, o Google Play Protect pode bloquear ("O app foi bloqueado para proteger seu dispositivo"): no Brasil ele bloqueia automaticamente app instalado fora da loja que pede acesso às notificações — que é exatamente o que o MorfoFinP precisa pra ler a notificação do banco. Não é erro do build. Pra instalar mesmo assim: Play Store → foto do perfil → **Play Protect** → engrenagem → desligar **"Verificar apps com o Play Protect"** → instalar o `.apk` → ligar de novo. Alternativa: instalar pelo PC com `adb install` (a proteção só vale pra instalação vinda de navegador/WhatsApp/gerenciador de arquivos).
+Ao instalar o `.apk` no celular, o Google Play Protect pode bloquear ("O app foi bloqueado para proteger seu dispositivo"): no Brasil ele bloqueia automaticamente app instalado fora da loja que pede acesso às notificações — que é exatamente o que o MorfoFinP precisa pra ler a notificação do banco. Não é erro do build. Pra instalar mesmo assim: Play Store → foto do perfil → **Play Protect** → engrenagem → desligar **"Verificar apps com o Play Protect"** → instalar o `.apk` → ligar de novo. Um build novo instala por cima do anterior (dados preservados) desde que os dois tenham sido assinados com a mesma chave (`android-signing/debug.keystore`, usada pelo workflow) — o app NÃO se atualiza sozinho: baixe o `.apk` novo na aba Releases e instale. Alternativa: instalar pelo PC com `adb install` (a proteção só vale pra instalação vinda de navegador/WhatsApp/gerenciador de arquivos).
