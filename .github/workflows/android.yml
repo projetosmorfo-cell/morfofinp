@@ -69,6 +69,16 @@ jobs:
       - name: Build web (dist/)
         run: npx vite build
 
+      - name: Chave de assinatura fixa (debug)
+        # Sem isto, cada execução gera um debug.keystore NOVO e o Android recusa
+        # instalar um build por cima do anterior ("assinatura diferente" —
+        # obriga a desinstalar e perder os dados). A chave em android-signing/
+        # é a chave de DEBUG padrão do Android (senha "android"), versionada
+        # de propósito: serve só pra atualizar o app de teste no celular.
+        run: |
+          mkdir -p ~/.android
+          cp android-signing/debug.keystore ~/.android/debug.keystore
+
       - name: Gerar projeto Android + sincronizar plugins
         run: |
           npx cap add android
