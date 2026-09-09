@@ -1,0 +1,111 @@
+# MorfoFinP — gera o app Android (.apk) na nuvem do GitHub (09/09/2026).
+#
+# Por quê aqui: o ambiente de nuvem onde o código é escrito não consegue baixar
+# o SDK do Android (rede bloqueada), e o Rafael escolheu não instalar o Android
+# Studio no PC. Cada vez que o código é publicado no GitHub (branch main), este
+# fluxo:
+#   1. instala Node + Java 21 + SDK do Android
+#   2. faz o build web (vite build → dist/)
+#   3. gera o projeto Android do zero (npx cap add android — a pasta android/
+#      nunca é versionada, ver .gitignore) e sincroniza o plugin de
+#      notificação bancária (plugins/notificacao-bancaria)
+#   4. compila o .apk de DEBUG (instalável direto no celular, sem loja)
+#   5. publica o .apk como Release "build-NNN" (aba Releases do repositório)
+#      e também como artefato do workflow
+#
+# O número NNN vem de src/buildInfo.ts (BUILD_NUMBER) — mesmo contador do
+# MorfoFinP.html / MorfoFinP-build-NNN.zip (Decisão 33, G52).
+#
+# Também pode ser disparado à mão: aba Actions → "Android (.apk)" → Run workflow.
+name: Android (.apk)
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar código
+        uses: actions/checkout@v4
+
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Java 21 (exigido pelo Capacitor 8)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: SDK do Android
+        uses: android-actions/setup-android@v3
+        with:
+          packages: platforms;android-36 build-tools;36.0.0 platform-tools
+
+      - name: Número do build (src/buildInfo.ts)
+        id: build
+        run: |
+          N=$(grep -oP "BUILD_NUMBER\s*=\s*\K\d+" src/buildInfo.ts)
+          V=$(grep -oP "VERSAO\s*=\s*'\K[^']+" src/buildInfo.ts)
+          printf -v NNN "%03d" "$N"
+          echo "numero=$N" >> "$GITHUB_OUTPUT"
+          echo "nnn=$NNN" >> "$GITHUB_OUTPUT"
+          echo "versao=$V" >> "$GITHUB_OUTPUT"
+          echo "Build $NNN (v$V)"
+
+      - name: Dependências
+        # `npm install` (não `npm ci`): funciona com ou sem package-lock.json
+        # no repositório (o zip publicado pode ou não levar o lock).
+        run: npm install --no-audit --no-fund
+
+      - name: Build web (dist/)
+        run: npx vite build
+
+      - name: Gerar projeto Android + sincronizar plugins
+        run: |
+          npx cap add android
+          npx cap sync android
+
+      - name: Carimbar versão do app (versionCode/versionName)
+        run: |
+          sed -i "s/versionCode 1$/versionCode ${{ steps.build.outputs.numero }}/" android/app/build.gradle
+          sed -i "s/versionName \"1.0\"/versionName \"${{ steps.build.outputs.versao }}.${{ steps.build.outputs.nnn }}\"/" android/app/build.gradle
+          grep -n "versionCode\|versionName" android/app/build.gradle
+
+      - name: Compilar .apk (debug)
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+
+      - name: Renomear .apk
+        run: |
+          mkdir -p saida
+          cp android/app/build/outputs/apk/debug/app-debug.apk "saida/MorfoFinP-build-${{ steps.build.outputs.nnn }}.apk"
+          ls -la saida
+
+      - name: Publicar como artefato do workflow
+        uses: actions/upload-artifact@v4
+        with:
+          name: MorfoFinP-build-${{ steps.build.outputs.nnn }}-apk
+          path: saida/*.apk
+
+      - name: Publicar como Release (build-${{ steps.build.outputs.nnn }})
+        if: github.event_name == 'push'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ steps.build.outputs.nnn }}
+          name: MorfoFinP build ${{ steps.build.outputs.nnn }} (Android)
+          body: |
+            App Android de teste (debug) do MorfoFinP — build ${{ steps.build.outputs.nnn }}, v${{ steps.build.outputs.versao }}.
+            Baixe o .apk no celular, permita "instalar de fontes desconhecidas" e abra.
+            Depois, no app: engrenagem → Notificações bancárias → ligar acesso às notificações.
+          files: saida/*.apk
