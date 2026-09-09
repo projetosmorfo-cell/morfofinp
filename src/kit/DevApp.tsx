@@ -12,6 +12,7 @@ import { db } from '../db'
 import { sairN0 } from './authN0'
 import { useTodosPlanos, criarPlano, atualizarPlano, inativarPlano, reativarPlano, type Plano } from './planos'
 import { useMarcaSite, salvarMarcaSite } from '../configuracaoIcones'
+import SiteParametrosN0 from './SiteParametrosN0'
 
 // Painel N0 ("Morfo/dev") — camada de administração da plataforma, adaptada
 // do Kit de Estrutura Mínima Morfo (`DevApp`, seção 2). Roteiro de
@@ -496,14 +497,12 @@ function SubParametrosPlanos({ onVoltarSub }: { onVoltarSub: () => void }) {
 
 function SubParametrosMarca({ onVoltarSub }: { onVoltarSub: () => void }) {
   const marca = useMarcaSite()
-  const [selo, setSelo] = useState(marca.seloEcossistema ?? '')
   const [numero, setNumero] = useState(marca.whatsappNumero ?? '')
   const [mensagem, setMensagem] = useState(marca.whatsappMensagemPadrao ?? '')
   const [salvo, setSalvo] = useState(false)
 
   async function salvar() {
     await salvarMarcaSite({
-      marcaSeloEcossistema: selo.trim() || undefined,
       marcaWhatsappNumero: numero.trim() || undefined,
       marcaWhatsappMensagemPadrao: mensagem.trim() || undefined,
     })
@@ -513,13 +512,12 @@ function SubParametrosMarca({ onVoltarSub }: { onVoltarSub: () => void }) {
 
   return (
     <div>
-      <TopoN0 titulo="Marca do site institucional" subtitulo="Consumido por LoginView (site deslogado) e o botão de Suporte" onVoltarSub={onVoltarSub} />
+      <TopoN0 titulo="Marca — canal de suporte" subtitulo="Consumido pelo botão Suporte (WhatsApp) do ambiente logado" onVoltarSub={onVoltarSub} />
       <p style={{ fontSize: 11, color: DEV_TXT3, lineHeight: 1.6, marginTop: 0, marginBottom: 14 }}>
-        Escopo restrito ao que dá pra editar sem redesenhar os logos (arquivos fixos). Deixe em branco pra usar o
-        padrão do código.
+        Deixe em branco pra usar o padrão do código. Frase de apresentação, cores, logos e páginas do site
+        deslogado ficam em "Site MorfoFinP" (Decisão 49 — o antigo "selo do ecossistema" virou a frase de
+        apresentação do Kit).
       </p>
-      <label style={labelN0Style} htmlFor="marca-selo">Selo de vínculo ao ecossistema Morfo</label>
-      <input id="marca-selo" style={campoN0Style} value={selo} onChange={(e) => setSelo(e.target.value)} placeholder="parte do ecossistema Morfo" />
       <label style={labelN0Style} htmlFor="marca-whats-numero">Número do WhatsApp de suporte</label>
       <input id="marca-whats-numero" style={campoN0Style} value={numero} onChange={(e) => setNumero(e.target.value)} placeholder="5511986897908" />
       <label style={labelN0Style} htmlFor="marca-whats-msg">Mensagem padrão do suporte</label>
@@ -527,6 +525,19 @@ function SubParametrosMarca({ onVoltarSub }: { onVoltarSub: () => void }) {
       <button type="button" onClick={salvar} style={{ width: '100%', marginTop: 16, background: DEV_ACCENT, border: 'none', borderRadius: 10, padding: 12, color: '#fff', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
         {salvo ? 'Salvo!' : 'Salvar'}
       </button>
+    </div>
+  )
+}
+
+// N0 → Parâmetros → Site MorfoFinP (09/09/2026, Decisão 49): grupo "Site
+// {PRODUTO}" do Kit (L2146-L2343), portado literalmente em
+// `SiteParametrosN0.tsx` — este wrapper é só o título/voltar no padrão desta
+// tela (o `telaGrupo` do Kit).
+function SubParametrosSite({ onVoltarSub }: { onVoltarSub: () => void }) {
+  return (
+    <div>
+      <TopoN0 titulo="Site MorfoFinP" subtitulo="Parâmetros do site deslogado — valores padrão do Kit (MorfoMod) até você alterar" onVoltarSub={onVoltarSub} />
+      <SiteParametrosN0 />
     </div>
   )
 }
@@ -585,18 +596,20 @@ function SubParametrosUsuarios({ onVoltarSub }: { onVoltarSub: () => void }) {
   )
 }
 
-type SubParametros = 'planos' | 'marca' | 'usuarios' | null
+type SubParametros = 'planos' | 'site' | 'marca' | 'usuarios' | null
 
 function AbaParametros() {
   const [sub, setSub] = useState<SubParametros>(null)
 
   if (sub === 'planos') return <SubParametrosPlanos onVoltarSub={() => setSub(null)} />
+  if (sub === 'site') return <SubParametrosSite onVoltarSub={() => setSub(null)} />
   if (sub === 'marca') return <SubParametrosMarca onVoltarSub={() => setSub(null)} />
   if (sub === 'usuarios') return <SubParametrosUsuarios onVoltarSub={() => setSub(null)} />
 
   const itens: { chave: Exclude<SubParametros, null>; titulo: string; hint: string }[] = [
     { chave: 'planos', titulo: 'Gerenciar Planos', hint: 'Nome, preço e funcionalidades dos planos (Dexie, editável)' },
-    { chave: 'marca', titulo: 'Marca do site institucional', hint: 'Selo do ecossistema Morfo e canal de suporte (WhatsApp)' },
+    { chave: 'site', titulo: 'Site MorfoFinP', hint: 'Cabeçalho, logos, frase de apresentação, cores, páginas e menu do site deslogado (padrão do Kit)' },
+    { chave: 'marca', titulo: 'Marca — canal de suporte', hint: 'Número e mensagem do WhatsApp de suporte' },
     { chave: 'usuarios', titulo: 'Usuários Morfo (administradores)', hint: 'Registro de quem tem acesso a este painel N0' },
   ]
   return (

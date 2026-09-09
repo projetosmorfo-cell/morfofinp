@@ -1,4 +1,5 @@
 import Dexie, { type EntityTable } from 'dexie'
+import type { SiteConfig, SitePage } from './kit/kitBase'
 
 // Modelo de dados — baseado em claude/mfip-modelo-de-dados.md
 // MVP inicial: modo "Lite" (input manual, sem importação/conciliação).
@@ -334,6 +335,19 @@ export interface ConfiguracaoIcones {
   // em produção (ver `BACKLOG.md`, item 030)** — mesmo racional dos botões
   // de acesso sem senha (`entrarDemo`/`entrarDemoN0`, Decisão 33).
   simulacaoResolucao?: 'mobile' | 'web'
+  // Site deslogado = código do Kit (09/09/2026, Decisões 48/49). Estes 3
+  // campos são o `platform.siteConfig`/`sitePages`/`siteMenu` do Kit,
+  // editáveis em N0 → Parâmetros → "Site MorfoFinP" (porte de L2146-L2343 do
+  // Kit). Ausente/undefined = valor padrão do Kit (dado do MorfoMod, G55),
+  // exatamente como o Kit faz com `?? padrão` — nenhuma instalação existente
+  // precisa de migração. Campos aditivos sem índice, sem bump de schema.
+  // `marcaSeloEcossistema` (acima) deixou de ter consumidor na Decisão 48 —
+  // o papel dele (linha curta sob as logos do Login) é a "Frase de
+  // apresentação" (`siteConfig.subtitulo`) do Kit; o campo antigo fica só
+  // pra compatibilidade de registro, sem UI.
+  siteConfig?: SiteConfig
+  sitePages?: SitePage[]
+  siteMenu?: { tipo?: 'fixo' | 'cortina' }
 }
 
 // "Gerenciar Planos" (08/09/2026, G59 — item aprovado pro N0). Antes

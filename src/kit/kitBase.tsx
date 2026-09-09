@@ -1,5 +1,5 @@
-import { useEffect, useRef, type ReactNode, type CSSProperties } from 'react'
-import { Check, ChevronLeft, X, type LucideIcon } from 'lucide-react'
+import { useEffect, useRef, useState, type ReactNode, type CSSProperties } from 'react'
+import { Check, ChevronLeft, ChevronRight, X, type LucideIcon } from 'lucide-react'
 import { MORFO_HORIZONTAL_URI, MORFO_SIMBOLO_URI, PRODUTO_WORDMARK_URI } from './kitLogos'
 
 // Base compartilhada do Kit de Estrutura Mínima Morfo (09/09/2026, Decisão 48).
@@ -35,6 +35,17 @@ export const GREEN = 'var(--mloc-green, #2E9E5B)'
 export const AMBER = 'var(--mloc-amber, #D9A227)'
 export const RED = 'var(--mloc-red, #D2483B)'
 export const LINE = 'var(--mloc-line, #E7E3DC)'
+export const TOGGLE_OFF = 'var(--mloc-toggle-off, #D8D3C8)'
+export const DEV_BG = 'var(--mloc-dev-bg, #141319)'
+export const DEV_CARD = 'var(--mloc-dev-card, #201E28)'
+export const DEV_ACCENT = 'var(--mloc-dev-accent, #6C3FFF)'
+
+/* ---- Kit L121: uid ---- */
+export const uid = () => Math.random().toString(36).slice(2, 9)
+/* ---- Kit L636: readImageAsDataUrl ---- */
+export function readImageAsDataUrl(file: File): Promise<string> { return new Promise((resolve, reject) => { const r = new FileReader(); r.onload = () => resolve(r.result as string); r.onerror = reject; r.readAsDataURL(file) }) }
+/* ---- Kit L3885 ---- */
+export const LOGO_MAX_KB = 3072
 
 /* ---- Kit L142: fmtBRL ---- */
 export const fmtBRL = (v: unknown) => `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
@@ -59,6 +70,8 @@ export function Field({ label, children, dark, right }: { label: ReactNode; chil
 export const inputStyle: CSSProperties = { width: '100%', boxSizing: 'border-box', padding: '12px 13px', borderRadius: 10, border: `1.5px solid ${LINE}`, fontSize: 15, background: BRANCO, color: INK, outline: 'none' }
 export function Segmented<T extends string>({ options, value, onChange }: { options: { value: T; label: ReactNode }[]; value: T; onChange: (v: T) => void }) { return <div style={{ display: 'flex', background: SOFT, borderRadius: 10, padding: 3, flexWrap: 'wrap', gap: 3 }}>{options.map(opt => <button key={opt.value} onClick={() => onChange(opt.value)} style={{ flex: '1 1 auto', padding: '9px 8px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 12.5, background: value === opt.value ? BRANCO : 'transparent', color: value === opt.value ? INK : TXT3, boxShadow: value === opt.value ? '0 1px 4px rgba(0,0,0,0.12)' : 'none', whiteSpace: 'nowrap' }}>{opt.label}</button>)}</div> }
 
+/* ---- Kit L978: Toggle ---- */
+export function Toggle({ value, onChange, label }: { value: boolean; onChange: (v: boolean) => void; label?: ReactNode }) { return <button onClick={() => onChange(!value)} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}><div style={{ width: 40, height: 23, borderRadius: 999, background: value ? GREEN : TOGGLE_OFF, position: 'relative' }}><div style={{ width: 18, height: 18, borderRadius: 999, background: BRANCO, position: 'absolute', top: 2.5, left: value ? 19 : 3, transition: 'all .15s', boxShadow: '0 1px 3px rgba(0,0,0,0.3)' }} /></div>{label && <span style={{ fontSize: 13.5, fontWeight: 600, color: INK }}>{label}</span>}</button> }
 /* ---- Kit L980: EmptyState ---- */
 export function EmptyState({ icon: Icon, title, hint, dark }: { icon: LucideIcon; title: ReactNode; hint: ReactNode; dark?: boolean }) { return <div style={{ textAlign: 'center', padding: '48px 24px', color: dark ? '#9B96A8' : TXT3 }}><Icon size={30} style={{ marginBottom: 10, opacity: 0.6 }} /><div style={{ fontWeight: 700, color: dark ? '#fff' : INK, fontSize: 15 }}>{title}</div><div style={{ fontSize: 13.5, marginTop: 4 }}>{hint}</div></div> }
 
@@ -72,10 +85,26 @@ export function Sheet({ title, onClose, children, resetScrollKey }: { title: Rea
 /* ---- Kit L1000-L1008: botões ---- */
 export const primaryBtn: CSSProperties = { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, background: PURPLE, color: '#fff', border: 'none', borderRadius: 11, padding: '13px', fontWeight: 700, fontSize: 15, cursor: 'pointer' }
 export const secondaryBtn: CSSProperties = { ...primaryBtn, background: BRANCO, color: INK, border: `1.5px solid ${LINE}` }
+export const dangerBtn: CSSProperties = { ...primaryBtn, background: BRANCO, color: RED, border: `1.5px solid ${alpha(RED, 33.3)}` }
 export const linkBtnSmall: CSSProperties = { background: 'none', border: 'none', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', minHeight: 24, padding: '0 2px' }
 
 /* ---- Kit L1011: SectionLabel ---- */
 export function SectionLabel({ children, right, dark }: { children: ReactNode; right?: ReactNode; dark?: boolean }) { return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '18px 0 10px' }}><div style={{ fontSize: 12.5, fontWeight: 800, color: dark ? '#9B96A8' : TXT3, textTransform: 'uppercase', letterSpacing: 0.4 }}>{children}</div>{right}</div> }
+
+/* ---- Kit L1015-L1027: SecaoLayout ---- */
+export function SecaoLayout({ titulo, dark, children, badge }: { titulo: ReactNode; dark?: boolean; children: ReactNode; badge?: ReactNode }) {
+  const [aberta, setAberta] = useState(false)
+  return <div style={{ marginBottom: 10, borderRadius: 12, background: dark ? DEV_CARD : BRANCO, border: dark ? `1px solid rgba(255,255,255,0.06)` : `1px solid ${LINE}` }}>
+    <button onClick={() => setAberta(v => !v)} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '13px 14px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+        <span style={{ fontSize: 12.5, fontWeight: 800, color: AMBER, textTransform: 'uppercase', letterSpacing: 0.4 }}>{titulo}</span>
+        {badge}
+      </span>
+      <ChevronRight size={15} color={AMBER} style={{ transform: aberta ? 'rotate(90deg)' : 'none', flexShrink: 0 }} />
+    </button>
+    {aberta && <div style={{ padding: '0 14px 14px' }}>{children}</div>}
+  </div>
+}
 
 /* ---- Kit L1151-L1161: PhoneComWhats ---- */
 export function PhoneComWhats({ phone, setPhone, hasWhatsapp, setHasWhatsapp, label }: { phone: string; setPhone: (v: string) => void; hasWhatsapp: boolean; setHasWhatsapp: (v: boolean) => void; label?: string }) {

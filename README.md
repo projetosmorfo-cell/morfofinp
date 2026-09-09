@@ -27,3 +27,5 @@ npx oxlint                                      # lint
 ## App Android (.apk)
 
 A cada publicação na branch `main`, o GitHub Actions compila o `.apk` de teste e publica na aba **Releases** (`build-NNN`). O número vem de `src/buildInfo.ts`.
+
+Ao instalar o `.apk` no celular, o Google Play Protect pode bloquear ("O app foi bloqueado para proteger seu dispositivo"): no Brasil ele bloqueia automaticamente app instalado fora da loja que pede acesso às notificações — que é exatamente o que o MorfoFinP precisa pra ler a notificação do banco. Não é erro do build. Pra instalar mesmo assim: Play Store → foto do perfil → **Play Protect** → engrenagem → desligar **"Verificar apps com o Play Protect"** → instalar o `.apk` → ligar de novo. Alternativa: instalar pelo PC com `adb install` (a proteção só vale pra instalação vinda de navegador/WhatsApp/gerenciador de arquivos).

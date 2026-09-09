@@ -74,6 +74,9 @@ export function useConfiguracaoIcones(): Required<
     | 'marcaWhatsappMensagemPadrao'
     | 'ordemMenuEngrenagem'
     | 'simulacaoResolucao'
+    | 'siteConfig'
+    | 'sitePages'
+    | 'siteMenu'
   >
 > {
   const config = useLiveQuery(() => db.configuracoes.get(1), [])
