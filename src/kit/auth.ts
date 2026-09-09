@@ -41,6 +41,25 @@ export async function sair(): Promise<void> {
   await salvarConfiguracaoIcones({ sessaoAtiva: false })
 }
 
+// Acesso demo/rápido, sem digitar credencial (08/09/2026, G44 regra 3 — o
+// Kit real traz, na própria tela de Login, um atalho de demo pra entrar
+// sem precisar logar antes; a ausência disso foi identificada como gap
+// real na Decisão 31/Lição 16, e reforçada pelo Rafael: "eu quero validar
+// o MVP, só isso", sem travar numa tela de senha). Pular a digitação não
+// abre risco novo nenhum — a "senha" nunca protegeu dado de verdade (ver
+// nota grande no topo deste arquivo). Se já existe uma credencial salva
+// (mesmo navegador/perfil de uma sessão anterior), só reativa a sessão; se
+// não existe nenhuma ainda, cria uma credencial demo fixa — nunca deixa
+// quem só quer validar o MVP travado numa tela de cadastro.
+export async function entrarDemo(): Promise<void> {
+  const atual = await db.configuracoes.get(1)
+  if (atual?.credencialEmail) {
+    await salvarConfiguracaoIcones({ sessaoAtiva: true })
+  } else {
+    await criarAcesso('demo@morfofinp.local', 'demo123')
+  }
+}
+
 // "Esqueci minha senha" — como não existe backend/servidor de recuperação
 // de verdade, a única saída honesta é permitir cadastrar uma credencial
 // nova (a antiga, afinal, nunca foi uma senha "de verdade" — ver comentário

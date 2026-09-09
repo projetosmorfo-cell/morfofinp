@@ -51,6 +51,20 @@ export async function sairN0(): Promise<void> {
   await salvarConfiguracaoIcones({ sessaoAtivaN0: false })
 }
 
+// Acesso demo/rápido do N0, sem digitar credencial — mesma lógica e mesmo
+// motivo de `entrarDemo()` (N1, ver `auth.ts`), G44 regra 3 / Decisão 31 /
+// Lição 16. Se já existe credencial N0 salva, só reativa a sessão; senão,
+// cria uma credencial demo fixa (e já registra o administrador demo em
+// "Usuários Morfo", via `criarAcessoN0`).
+export async function entrarDemoN0(): Promise<void> {
+  const atual = await db.configuracoes.get(1)
+  if (atual?.credencialEmailN0) {
+    await salvarConfiguracaoIcones({ sessaoAtivaN0: true })
+  } else {
+    await criarAcessoN0('admin@morfo.local', 'demo123', 'Admin Morfo (demo)')
+  }
+}
+
 // "Esqueci minha senha" do N0 — mesma lógica honesta de `redefinirAcesso()`
 // (N1): sem backend/recuperação real, a única saída é cadastrar credencial
 // nova. NUNCA toca em lançamentos/categorias/contas/grupos/ícones/planos/

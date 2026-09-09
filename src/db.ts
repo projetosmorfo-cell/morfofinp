@@ -307,6 +307,33 @@ export interface ConfiguracaoIcones {
   marcaSeloEcossistema?: string
   marcaWhatsappNumero?: string
   marcaWhatsappMensagemPadrao?: string
+  // Ordem dos itens do menu de engrenagem (08/09/2026, correção pós-G59 —
+  // Rafael pediu que o menu com "Sair" pudesse ser reposicionado mas NUNCA
+  // permitir remover um item, mesmo espírito de `ordemAbas` acima). Lista
+  // das chaves do menu ('categorias'|'contas'|'assinatura'|'manutencao'|
+  // 'suporte'|'sair') na ordem escolhida em Manutenção → "Layout do menu de
+  // configurações". Ausente/undefined = ordem padrão (a mesma de sempre).
+  // Mesma regra de `ordemAbas`: isto SÓ reordena — não existe (e nunca vai
+  // existir aqui) um jeito de esconder/remover um item; uma chave nova que
+  // o código passe a exigir e que não esteja na ordem salva sempre aparece
+  // no final, nunca desaparece por estar "faltando" numa ordem salva antiga.
+  ordemMenuEngrenagem?: string[]
+  // Simulação de resolução — ferramenta de teste do MVP, pedido do Rafael
+  // (Decisão 36), REESCRITA em 08/09/2026 pro padrão Kit-exato (Roteiro de
+  // Parametrização Morfo, G60 — a versão anterior, com botões de TEXTO
+  // embutidos no formulário de Login, foi citada pelo próprio roteiro como o
+  // exemplo real do que não fazer). Mesmo padrão fino de sempre (singleton
+  // `configuracoes`, sem bump de schema). `undefined` = sem simulação
+  // (comportamento normal — coluna única, largura real de produção ~480px,
+  // ver `#root` em `index.css`). `'web'` força `#root` pra 100% da largura
+  // do navegador (mesmo valor literal do Kit) — ver `SimulacaoResolucao.tsx`
+  // pro racional completo (por que só existe este 1 valor, não mais
+  // 'mobile') e os 2 botões flutuantes Kit-exatos (`AppRoot.tsx`) que
+  // acionam isso, nunca mais um botão de texto dentro de uma tela
+  // específica. **Ferramenta de MVP, tem que ser retirada antes de publicar
+  // em produção (ver `BACKLOG.md`, item 030)** — mesmo racional dos botões
+  // de acesso sem senha (`entrarDemo`/`entrarDemoN0`, Decisão 33).
+  simulacaoResolucao?: 'mobile' | 'web'
 }
 
 // "Gerenciar Planos" (08/09/2026, G59 — item aprovado pro N0). Antes

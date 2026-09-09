@@ -4,6 +4,8 @@ import { db } from '../db'
 import App from '../App'
 import DevApp from './DevApp'
 import LoginView from './LoginView'
+import { SimulacaoResolucaoFrame, FerramentasTesteFlutuantes } from './SimulacaoResolucao'
+import SimularData from './SimularData'
 
 // Raiz de camadas — REESCRITA em 08/09/2026 (Roteiro de Parametrização
 // Morfo, G59 — "critério de aceite binário do encaixe"). A versão anterior
@@ -40,28 +42,58 @@ const CARREGANDO = Symbol('carregando')
 export default function AppRoot() {
   const config = useLiveQuery(() => db.configuracoes.get(1), [], CARREGANDO)
   const [impersonando, setImpersonando] = useState(false)
+  // Ferramenta de teste 🕐 (G60) — modal simples por cima de tudo, aberto
+  // pelo botão flutuante (ver `FerramentasTesteFlutuantes` abaixo). Reusa o
+  // MESMO `SimularData` da Etapa 7 (com suas salvaguardas de reprocessamento
+  // já testadas) — só o PONTO DE ENTRADA muda pra ficar Kit-exato, a lógica
+  // por trás continua a mesma.
+  const [ferramentaDataAberta, setFerramentaDataAberta] = useState(false)
 
   if (config === CARREGANDO) return null
 
   const n0Ativa = Boolean(config?.sessaoAtivaN0)
   const n1Ativa = Boolean(config?.sessaoAtiva)
 
-  if (n0Ativa && impersonando) {
-    return <App modoConsultaN0={{ onVoltar: () => setImpersonando(false) }} />
-  }
+  let conteudo: React.ReactNode
 
-  if (n0Ativa) {
+  if (n0Ativa && impersonando) {
+    conteudo = <App modoConsultaN0={{ onVoltar: () => setImpersonando(false) }} />
+  } else if (n0Ativa) {
     // Sessão N0 ativa manda: painel N0 do Kit, inteiro, nada do aplicativo
     // de negócio — mesmo com uma sessão N1 antiga ainda marcada como ativa
     // no mesmo banco (ex.: o próprio Rafael logado nas duas camadas em
     // momentos diferentes). "Sair" aqui (ver DevApp.tsx) só zera
     // `sessaoAtivaN0` — nunca mexe em `sessaoAtiva` (N1).
-    return <DevApp onEntrarComoTenant={() => setImpersonando(true)} />
+    conteudo = <DevApp onEntrarComoTenant={() => setImpersonando(true)} />
+  } else if (!n1Ativa) {
+    conteudo = <LoginView />
+  } else {
+    conteudo = <App />
   }
 
-  if (!n1Ativa) {
-    return <LoginView />
-  }
-
-  return <App />
+  // `SimulacaoResolucaoFrame` (ferramenta de teste do MVP — ver comentário
+  // completo naquele arquivo) precisa envolver TUDO aqui em cima, não só o
+  // `<App/>`: a simulação de largura tem que valer também na tela de Login e
+  // no painel N0. `FerramentasTesteFlutuantes` (G60) — os 2 botões
+  // flutuantes 📱/🖥️/🕐, Kit-exatos — fica DENTRO do frame (mas fora do
+  // fluxo normal, `position: fixed`) pra aparecer em qualquer camada.
+  return (
+    <SimulacaoResolucaoFrame>
+      {conteudo}
+      <FerramentasTesteFlutuantes onAbrirFerramentaData={() => setFerramentaDataAberta(true)} />
+      {ferramentaDataAberta && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 200,
+            background: 'var(--bg, #14131a)',
+            overflowY: 'auto',
+          }}
+        >
+          <SimularData aoVoltar={() => setFerramentaDataAberta(false)} />
+        </div>
+      )}
+    </SimulacaoResolucaoFrame>
+  )
 }

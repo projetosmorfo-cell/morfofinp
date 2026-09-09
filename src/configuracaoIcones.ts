@@ -72,6 +72,8 @@ export function useConfiguracaoIcones(): Required<
     | 'marcaSeloEcossistema'
     | 'marcaWhatsappNumero'
     | 'marcaWhatsappMensagemPadrao'
+    | 'ordemMenuEngrenagem'
+    | 'simulacaoResolucao'
   >
 > {
   const config = useLiveQuery(() => db.configuracoes.get(1), [])
@@ -170,4 +172,41 @@ export async function salvarMarcaSite(patch: {
   marcaWhatsappMensagemPadrao?: string
 }) {
   await salvarConfiguracaoIcones(patch)
+}
+
+// Ordem do menu de engrenagem (08/09/2026, correção pós-G59, pedido do
+// Rafael: "o menu sair tem que ser menu sem permitir retirar ele, só
+// reposicionar") — mesmo padrão fino de `useOrdemAbas`/`salvarOrdemAbas`
+// acima, mesmo singleton por baixo, mesma regra de reposição-só (nunca
+// existe um "esconder item" aqui, só ordem). Quem consome (`MenuEngrenagem`
+// em `App.tsx`) decide o fallback (ordem padrão do código) e sempre inclui
+// TODA chave conhecida, mesmo as ausentes de uma ordem salva antiga.
+export function useOrdemMenuEngrenagem(): string[] | undefined {
+  const config = useLiveQuery(() => db.configuracoes.get(1), [])
+  return config?.ordemMenuEngrenagem
+}
+
+export async function salvarOrdemMenuEngrenagem(ordem: string[]) {
+  await salvarConfiguracaoIcones({ ordemMenuEngrenagem: ordem })
+}
+
+// Simulação de resolução (ferramenta de teste do MVP — ver comentário
+// completo em `ConfiguracaoIcones.simulacaoResolucao`, `db.ts`, e em
+// `src/kit/SimulacaoResolucao.tsx`). Mesmo padrão fino de
+// `useOrdemAbas`/`salvarOrdemAbas` acima.
+//
+// CORREÇÃO (08/09/2026, G60): só existe o estado `'web'` agora (força
+// `#root` pra 100% da largura) — o antigo `'mobile'` (390px, depois 430px)
+// foi removido: o padrão sem override JÁ é a largura real de produção
+// (~480px), então um 2º valor fixo simulando "mobile" não acrescentava nada
+// de real. Um valor `'mobile'` eventualmente ainda gravado por uma sessão
+// anterior ao vivo simplesmente deixa de ter efeito (só `=== 'web'` liga a
+// simulação) — sem quebrar, sem precisar de migração de schema.
+export function useSimulacaoResolucao(): 'web' | undefined {
+  const config = useLiveQuery(() => db.configuracoes.get(1), [])
+  return config?.simulacaoResolucao === 'web' ? 'web' : undefined
+}
+
+export async function salvarSimulacaoResolucao(modo: 'web' | undefined) {
+  await salvarConfiguracaoIcones({ simulacaoResolucao: modo })
 }

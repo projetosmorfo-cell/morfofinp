@@ -2,7 +2,14 @@ import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../db'
 import { exportarConfiguracaoIcones } from '../iconesPadrao'
-import { useModoVisao, salvarModoVisao, useOrdemAbas, salvarOrdemAbas } from '../configuracaoIcones'
+import {
+  useModoVisao,
+  salvarModoVisao,
+  useOrdemAbas,
+  salvarOrdemAbas,
+  useOrdemMenuEngrenagem,
+  salvarOrdemMenuEngrenagem,
+} from '../configuracaoIcones'
 import { sair } from '../kit/auth'
 
 // Rótulos das 5 abas do rodapé, pra tela de reordenação abaixo — mesmas
@@ -17,6 +24,20 @@ const ABAS_ROTULO: Record<string, string> = {
   planejamento: 'Planejamento',
 }
 const ORDEM_ABAS_PADRAO = ['resumo', 'situacao', 'lancamentos', 'carteira', 'planejamento']
+
+// Itens do menu de engrenagem (08/09/2026, correção pós-G59) — mesmas
+// chaves/rótulos de `ITENS_MENU_ENGRENAGEM_PADRAO`/`ROTULO_MENU_ENGRENAGEM`
+// em `App.tsx` (não importado daqui, mesmo motivo do bloco acima: rótulo
+// de texto não merece acoplar os dois arquivos).
+const ROTULO_MENU_ENGRENAGEM: Record<string, string> = {
+  categorias: 'Categorias e Grupos',
+  contas: 'Contas e carteiras',
+  assinatura: 'Minha Assinatura',
+  manutencao: 'Manutenção',
+  suporte: 'Suporte (WhatsApp)',
+  sair: 'Sair',
+}
+const ORDEM_MENU_ENGRENAGEM_PADRAO = ['categorias', 'contas', 'assinatura', 'manutencao', 'suporte', 'sair']
 
 // Tela "Manutenção" (01/09/2026, rodada seguinte) — pedido direto do Rafael
 // depois de um susto real: pra conseguir ver a versão mais nova do app, ele
@@ -74,6 +95,28 @@ export default function Manutencao({
     const nova = [...ordemAbas]
     ;[nova[i], nova[j]] = [nova[j], nova[i]]
     salvarOrdemAbas(nova)
+  }
+
+  // Layout do menu de engrenagem (08/09/2026, correção pós-G59) — mesmo
+  // padrão de "Layout do rodapé" acima: só reordena, sem esconder/remover
+  // item nenhum. `ordemMenuSalva` sem entradas novas (ex.: banco de antes
+  // desta correção, sem "sair" gravado ainda) recebe qualquer chave
+  // faltando no final, na ordem padrão — mesma lógica que garante em
+  // `App.tsx` que "Sair" nunca desaparece do menu de verdade.
+  const ordemMenuSalva = useOrdemMenuEngrenagem()
+  const ordemMenuEngrenagem = ordemMenuSalva
+    ? [
+        ...ordemMenuSalva.filter((k) => ORDEM_MENU_ENGRENAGEM_PADRAO.includes(k)),
+        ...ORDEM_MENU_ENGRENAGEM_PADRAO.filter((k) => !ordemMenuSalva.includes(k)),
+      ]
+    : ORDEM_MENU_ENGRENAGEM_PADRAO
+  function moverItemMenuEngrenagem(chave: string, direcao: -1 | 1) {
+    const i = ordemMenuEngrenagem.indexOf(chave)
+    const j = i + direcao
+    if (i < 0 || j < 0 || j >= ordemMenuEngrenagem.length) return
+    const nova = [...ordemMenuEngrenagem]
+    ;[nova[i], nova[j]] = [nova[j], nova[i]]
+    salvarOrdemMenuEngrenagem(nova)
   }
 
   // Visão Light × Premium (04/09/2026, pedido do Rafael: "quero já olhar as
@@ -272,6 +315,58 @@ export default function Manutencao({
                 disabled={i === ordemAbas.length - 1}
                 onClick={() => moverAba(chave, 1)}
                 style={{ marginTop: 0, padding: '4px 10px', opacity: i === ordemAbas.length - 1 ? 0.35 : 1 }}
+              >
+                ↓
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <h2>Layout do menu de configurações</h2>
+      <div className="cartao">
+        {/* 08/09/2026, correção pós-G59 — Rafael: "o menu sair tem que ser
+            menu sem permitir retirar ele, só reposicionar". Mesmo mecanismo
+            e mesma limitação de propósito da seção "Layout do rodapé" logo
+            acima: só ↑/↓, nunca um botão de esconder/remover. Diferente do
+            rodapé (onde a VISIBILIDADE de cada aba é controlada à parte,
+            pelo Light×Premium), o menu de engrenagem não tem — e não vai
+            ganhar — nenhum mecanismo de visibilidade separado: todo item
+            listado aqui (inclusive "Sair") está sempre presente no menu de
+            verdade, só a ordem muda. Ver `ITENS_MENU_ENGRENAGEM_PADRAO`
+            em `App.tsx`. */}
+        <p className="texto-fraco" style={{ marginTop: 0 }}>
+          Ordem dos itens do menu de configurações (ícone de engrenagem, no topo do app) — todo
+          item listado abaixo, incluindo "Sair", está sempre presente no menu; só é possível mudar
+          a posição de cada um, nunca escondê-lo ou removê-lo.
+        </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {ordemMenuEngrenagem.map((chave, i) => (
+            <div
+              key={chave}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                border: '1px solid var(--borda)',
+                borderRadius: 10,
+                padding: '7px 10px',
+              }}
+            >
+              <span style={{ flex: 1, fontWeight: 700, fontSize: 13.5 }}>{ROTULO_MENU_ENGRENAGEM[chave] ?? chave}</span>
+              <button
+                type="button"
+                disabled={i === 0}
+                onClick={() => moverItemMenuEngrenagem(chave, -1)}
+                style={{ marginTop: 0, padding: '4px 10px', opacity: i === 0 ? 0.35 : 1 }}
+              >
+                ↑
+              </button>
+              <button
+                type="button"
+                disabled={i === ordemMenuEngrenagem.length - 1}
+                onClick={() => moverItemMenuEngrenagem(chave, 1)}
+                style={{ marginTop: 0, padding: '4px 10px', opacity: i === ordemMenuEngrenagem.length - 1 ? 0.35 : 1 }}
               >
                 ↓
               </button>

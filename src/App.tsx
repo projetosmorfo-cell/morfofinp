@@ -13,8 +13,9 @@ import SimularData, { BannerDataSimulada } from './kit/SimularData'
 import DetalheLancamento from './components/DetalheLancamento'
 import { mesInicial } from './mes'
 import { avancarSeriesFixasPendentes } from './recorrencia'
-import { useModoVisao, useOrdemAbas, useMarcaSite } from './configuracaoIcones'
+import { useModoVisao, useOrdemAbas, useMarcaSite, useOrdemMenuEngrenagem } from './configuracaoIcones'
 import { abrirSuporteWhatsApp } from './kit/suporte'
+import { sair } from './kit/auth'
 
 // Categorias saiu daqui em 30/08/2026 (rodada seguinte) — deixou de ser aba
 // do rodapé e virou item do menu de configurações (engrenagem, ver
@@ -57,6 +58,27 @@ const ROTULO_CONFIG: Record<'categorias' | 'contas' | 'assinatura' | 'manutencao
   contas: 'Contas e carteiras',
   assinatura: 'Minha Assinatura',
   manutencao: 'Manutenção',
+}
+
+// Itens do menu de engrenagem, TODOS os que hoje existem nesse popover —
+// os 4 de `ROTULO_CONFIG` (telas de config) mais 'suporte' (ação direta,
+// WhatsApp) e 'sair' (08/09/2026, correção pós-G59: Rafael pediu que o
+// menu com "Sair" pudesse ser reposicionado mas NUNCA permitir remover um
+// item — ver `Manutencao.tsx` → "Layout do menu de configurações" e
+// `useOrdemMenuEngrenagem`/`salvarOrdemMenuEngrenagem` em
+// `configuracaoIcones.ts`, mesmo padrão já usado pro rodapé desde a
+// Etapa 4). Esta constante é a única fonte de verdade de QUAIS itens
+// existem — a ordem (`ordemMenuEngrenagem`) só decide a SEQUÊNCIA deles,
+// nunca se aparecem ou não: um item desta lista SEMPRE aparece no menu,
+// numa posição ou noutra, exatamente como as 5 abas do rodapé já
+// garantem (`ordemAbas`) — não existe (e não deve existir) um jeito de
+// esconder/remover nenhum dos dois.
+const ITENS_MENU_ENGRENAGEM_PADRAO = ['categorias', 'contas', 'assinatura', 'manutencao', 'suporte', 'sair'] as const
+type ItemMenuEngrenagem = (typeof ITENS_MENU_ENGRENAGEM_PADRAO)[number]
+const ROTULO_MENU_ENGRENAGEM: Record<ItemMenuEngrenagem, string> = {
+  ...ROTULO_CONFIG,
+  suporte: 'Suporte (WhatsApp)',
+  sair: 'Sair',
 }
 
 type Tela = keyof typeof TELAS
@@ -103,16 +125,30 @@ interface AlvoLancamento {
 // Engrenagem fixa no topo (30/08/2026) — abre um popover com as duas telas
 // de cadastro que deixaram de ser aba do rodapé. Fica fora do fluxo normal
 // de telas/mês porque é config, não uma "aba de mês".
+//
+// Reordenável (08/09/2026, correção pós-G59) — `ordem` vem de
+// `useOrdemMenuEngrenagem()` em `App.tsx`; qualquer chave de
+// `ITENS_MENU_ENGRENAGEM_PADRAO` ausente da ordem salva (ordem antiga, de
+// antes de "Sair" existir aqui, por exemplo) é acrescentada no final,
+// nunca omitida — mesma lógica já usada pra `telasVisiveis`/`ordemAbas`
+// alguns parágrafos abaixo. "Sair" chama `sair()` de `auth.ts` direto
+// (mesma função que a seção "Conta" de `Manutencao.tsx` já usava) — o
+// popover fecha sozinho e `AppRoot.tsx` troca pra `LoginView` assim que
+// `sessaoAtiva` vira `false` (reativo via `useLiveQuery`), mesmo padrão
+// de sempre.
 function MenuEngrenagem({
+  ordem,
   onEscolher,
   whatsappNumero,
   whatsappMensagem,
 }: {
+  ordem: ItemMenuEngrenagem[]
   onEscolher: (c: Config) => void
   whatsappNumero: string | undefined
   whatsappMensagem: string | undefined
 }) {
   const [aberto, setAberto] = useState(false)
+  const [saindo, setSaindo] = useState(false)
   return (
     <>
       <button
@@ -129,27 +165,45 @@ function MenuEngrenagem({
           {/* Camada invisível pra fechar o popover ao clicar fora dele. */}
           <div style={{ position: 'fixed', inset: 0, zIndex: 40 }} onClick={() => setAberto(false)} />
           <div className="menu-engrenagem">
-            {(Object.keys(ROTULO_CONFIG) as (keyof typeof ROTULO_CONFIG)[]).map((c) => (
-              <button
-                key={c}
-                type="button"
-                onClick={() => {
-                  onEscolher(c)
-                  setAberto(false)
-                }}
-              >
-                {ROTULO_CONFIG[c]}
-              </button>
-            ))}
-            {/* Suporte (08/09/2026, Site institucional deslogado — Bloco 2,
-                Decisão 20): ação direta (abre WhatsApp numa aba nova), não uma
-                tela de `configAberta` — por isso fica fora de `ROTULO_CONFIG`,
-                mesmo padrão de item "fora do mapa" já usado por
-                `ferramentasTeste`. G25 pede esse botão visível em todo
-                produto, independente do modelo comercial. */}
-            <button type="button" onClick={() => { abrirSuporteWhatsApp(whatsappMensagem, whatsappNumero); setAberto(false) }}>
-              Suporte (WhatsApp)
-            </button>
+            {ordem.map((item) => {
+              if (item === 'suporte') {
+                return (
+                  <button key={item} type="button" onClick={() => { abrirSuporteWhatsApp(whatsappMensagem, whatsappNumero); setAberto(false) }}>
+                    {ROTULO_MENU_ENGRENAGEM.suporte}
+                  </button>
+                )
+              }
+              if (item === 'sair') {
+                return (
+                  <button
+                    key={item}
+                    type="button"
+                    disabled={saindo}
+                    onClick={async () => {
+                      setSaindo(true)
+                      await sair()
+                      // Sem `setSaindo(false)`/`setAberto(false)` no sucesso:
+                      // `AppRoot.tsx` já desmonta este componente inteiro
+                      // assim que `sessaoAtiva` vira `false`.
+                    }}
+                  >
+                    {saindo ? 'Saindo…' : ROTULO_MENU_ENGRENAGEM.sair}
+                  </button>
+                )
+              }
+              return (
+                <button
+                  key={item}
+                  type="button"
+                  onClick={() => {
+                    onEscolher(item)
+                    setAberto(false)
+                  }}
+                >
+                  {ROTULO_MENU_ENGRENAGEM[item]}
+                </button>
+              )
+            })}
           </div>
         </>
       )}
@@ -222,6 +276,22 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: { onVoltar: (
         ...telasBase.filter((k) => !ordemSalva.includes(k)),
       ]
     : telasBase
+
+  // Ordem do menu de engrenagem personalizável (08/09/2026, correção
+  // pós-G59, "Layout do menu de configurações" em Manutencao.tsx) — mesma
+  // lógica de reposição-só de `telasVisiveis` acima: uma chave salva que
+  // não existe mais (nunca acontece hoje, mas por segurança) é ignorada;
+  // uma chave nova (ex.: "sair", inexistente numa ordem salva antes desta
+  // correção) sempre aparece, no final, nunca desaparece por estar
+  // "faltando" numa ordem salva antiga — é isso que garante que "Sair"
+  // nunca pode ser removido do menu, só reposicionado.
+  const ordemMenuSalva = useOrdemMenuEngrenagem()
+  const ordemMenuEngrenagem: ItemMenuEngrenagem[] = ordemMenuSalva
+    ? [
+        ...ordemMenuSalva.filter((k): k is ItemMenuEngrenagem => ITENS_MENU_ENGRENAGEM_PADRAO.includes(k as ItemMenuEngrenagem)),
+        ...ITENS_MENU_ENGRENAGEM_PADRAO.filter((k) => !ordemMenuSalva.includes(k)),
+      ]
+    : [...ITENS_MENU_ENGRENAGEM_PADRAO]
 
   // Se a visão virar Light enquanto a pessoa está numa aba que só existe na
   // Premium (Situação/Planejamento), volta pro Resumo sozinho — nunca deixa
@@ -309,7 +379,7 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: { onVoltar: (
         )}
       </main>
       {!configAberta && <Rodape tela={tela} telasVisiveis={telasVisiveis} onTrocar={setTela} />}
-      <MenuEngrenagem onEscolher={setConfigAberta} whatsappNumero={whatsappNumero} whatsappMensagem={whatsappMensagemPadrao} />
+      <MenuEngrenagem ordem={ordemMenuEngrenagem} onEscolher={setConfigAberta} whatsappNumero={whatsappNumero} whatsappMensagem={whatsappMensagemPadrao} />
       {lancamentoAberto && (
         <DetalheLancamento
           alvoId={lancamentoAberto.id}

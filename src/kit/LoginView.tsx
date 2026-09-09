@@ -1,11 +1,12 @@
 import { useState, type FormEvent } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../db'
-import { criarAcesso, entrar, redefinirAcesso } from './auth'
-import { criarAcessoN0, entrarN0, redefinirAcessoN0 } from './authN0'
+import { criarAcesso, entrar, entrarDemo, redefinirAcesso } from './auth'
+import { criarAcessoN0, entrarN0, entrarDemoN0, redefinirAcessoN0 } from './authN0'
 import { usePlanos } from './planos'
 import { abrirSuporteWhatsApp } from './suporte'
 import { useMarcaSite } from '../configuracaoIcones'
+import { CARIMBO_BUILD } from '../buildInfo'
 import morfoLogoUrl from '../assets/morfo-padrao-branco.svg'
 import produtoLogoUrl from '../assets/morfofinp-padrao-branco.svg'
 
@@ -87,12 +88,22 @@ const cardBrancoStyle: React.CSSProperties = {
 
 // 'entrarN0' (08/09/2026, G59 — "critério de aceite binário do encaixe"):
 // login do NÍVEL N0, separado do login de tenant acima ("Login separa os
-// níveis" — G59 regra 1). Fica FORA de `NAV_PAGINAS` de propósito — G59
-// exige que o N0 seja alcançável direto do Login (mesmo padrão do botão de
-// atalho do Kit, ver Lição 16 do Project), mas não como aba de navegação
-// pública lado a lado com Entrar/Planos/FAQ (são páginas do TENANT, esta é
-// do administrador da plataforma) — por isso vive como um link discreto no
-// rodapé (`RodapeSite`), não na barra de navegação principal.
+// níveis" — G59 regra 1).
+//
+// CORREÇÃO REAL (08/09/2026, mesma rodada do build 005→006): a versão
+// anterior deixava esta página FORA de `NAV_PAGINAS` de propósito — um link
+// discreto no rodapé, visualmente secundário, pra não competir com
+// Entrar/Planos/FAQ. Rafael pediu explicitamente pra reverter essa
+// separação: "deixe o botão de acesso do adm junto com o do n1, igual" —
+// ou seja, no MESMO grupo/linha do botão de acesso do tenant (N1, a aba
+// "Entrar"), com o MESMO estilo visual, não mais um tratamento diferente.
+// Corrigido: o botão de acesso administrador virou uma 4ª aba renderizada
+// no mesmo cabeçalho fixo (`CabecalhoSite`), lado a lado com Entrar/Planos/
+// FAQ, com o styling idêntico (mesma pílula, mesmo tamanho, mesma regra de
+// destaque quando ativa). Continua fora do array `NAV_PAGINAS` só por
+// motivo técnico (esse array é iterado por `.map()`; o botão de admin é
+// renderizado logo em seguida, à parte, dentro do mesmo `<div>` de
+// navegação) — nunca mais por intenção de parecer diferente.
 type PaginaSite = 'entrar' | 'planos' | 'faq' | 'entrarN0'
 
 const NAV_PAGINAS: { id: PaginaSite; titulo: string }[] = [
@@ -175,19 +186,20 @@ function CabecalhoSite({
             {pg.titulo}
           </button>
         ))}
+        {/* Acesso administrador Morfo: saiu daqui em 08/09/2026 (pedido do
+            Rafael, mesmo dia) — agora vive junto do botão "Entrar como
+            empresa-tenant (demo)" em `PaginaEntrar`, mesmo tamanho/cor,
+            os dois emparelhados na tela de Login (não mais uma aba de
+            navegação separada aqui no cabeçalho). */}
       </div>
     </div>
   )
 }
 
 function RodapeSite({
-  pagina,
-  onNavegar,
   whatsappNumero,
   whatsappMensagemPadrao,
 }: {
-  pagina: PaginaSite
-  onNavegar: (p: PaginaSite) => void
   whatsappNumero: string | undefined
   whatsappMensagemPadrao: string | undefined
 }) {
@@ -203,36 +215,19 @@ function RodapeSite({
       {/* Carimbo {versão}.{build} no rodapé do Login — regra G52, antes ausente
           nesta tela (achado na mesma auditoria de fidelidade de 08/09/2026). */}
       <p style={{ margin: 0, fontSize: 11, color: 'rgba(255,255,255,0.6)' }}>MorfoFinP · Desenvolvido por Morfo</p>
-      <p style={{ margin: '2px 0 0', fontSize: 10.5, color: 'rgba(255,255,255,0.45)' }}>v0.1 · build 001</p>
-      {/* Acesso N0 (08/09/2026, G59, regra 1: "login separa os níveis" — o N0
-          precisa ser alcançável DIRETO do Login, nunca de dentro do N1, ver
-          Lição 16 do Project). Deliberadamente discreto (link pequeno, não
-          um botão/aba como Entrar/Planos/FAQ) — é acesso de administrador
-          da plataforma, não uma opção do tenant comum. */}
-      <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid rgba(255,255,255,0.15)' }}>
-        {pagina === 'entrarN0' ? (
-          <button
-            type="button"
-            onClick={() => onNavegar('entrar')}
-            style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.55)', fontSize: 10.5, cursor: 'pointer', padding: 0 }}
-          >
-            ‹ Voltar ao site
-          </button>
-        ) : (
-          <button
-            type="button"
-            onClick={() => onNavegar('entrarN0')}
-            style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', fontSize: 10.5, cursor: 'pointer', padding: 0 }}
-          >
-            Acesso administrador Morfo
-          </button>
-        )}
-      </div>
+      <p style={{ margin: '2px 0 0', fontSize: 10.5, color: 'rgba(255,255,255,0.45)' }}>{CARIMBO_BUILD}</p>
+      {/* Acesso administrador Morfo (08/09/2026): morou aqui até a rodada do
+          build 005→006 (link/botão à parte, ver histórico em `PaginaSite`
+          acima) — agora é uma aba igual às do tenant, no cabeçalho
+          (`CabecalhoSite`). "Voltar ao site" também some daqui: voltar é só
+          clicar em "Entrar" no mesmo cabeçalho, mesma mecânica de trocar de
+          página que já existe pra Entrar/Planos/FAQ, sem precisar de um
+          botão exclusivo pra isso. */}
     </div>
   )
 }
 
-function PaginaEntrar() {
+function PaginaEntrar({ onNavegar }: { onNavegar: (p: PaginaSite) => void }) {
   const config = useLiveQuery(() => db.configuracoes.get(1), [], CARREGANDO)
   const temCredencial = config !== CARREGANDO && Boolean(config?.credencialEmail && config?.credencialSenha)
 
@@ -241,7 +236,20 @@ function PaginaEntrar() {
   const [confirmarSenha, setConfirmarSenha] = useState('')
   const [erro, setErro] = useState<string | null>(null)
   const [processando, setProcessando] = useState(false)
+  const [processandoDemo, setProcessandoDemo] = useState(false)
   const [mostrarRedefinir, setMostrarRedefinir] = useState(false)
+
+  // Acesso demo/rápido (G44 regra 3 / G60, ver `entrarDemo()` em `auth.ts`) —
+  // nunca toca em `email`/`senha`/`confirmarSenha` do formulário, é um
+  // caminho paralelo, não um preenchimento automático dele.
+  async function entrarSemSenha() {
+    setProcessandoDemo(true)
+    try {
+      await entrarDemo()
+    } finally {
+      setProcessandoDemo(false)
+    }
+  }
 
   async function salvar(e: FormEvent) {
     e.preventDefault()
@@ -383,6 +391,67 @@ function PaginaEntrar() {
         )}
       </form>
 
+      {/* "ACESSO RÁPIDO PARA TESTE" (G60) — porte EXATO do Kit (fonte
+          L7246-7250): divisor de texto + 1 atalho de demo, nunca um botão
+          "de resolução" (isso agora é o par de botões flutuantes 📱/🖥️/🕐,
+          `FerramentasTesteFlutuantes`, no componente raiz `AppRoot.tsx`).
+          Retirar antes de publicar (Backlog #030). */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '18px 0 10px' }}>
+        <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.35)' }} />
+        <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.75)', fontWeight: 700 }}>
+          ACESSO RÁPIDO PARA TESTE
+        </span>
+        <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.35)' }} />
+      </div>
+      <button
+        type="button"
+        disabled={processandoDemo}
+        onClick={entrarSemSenha}
+        style={{
+          display: 'block',
+          width: '100%',
+          background: 'rgba(255,255,255,0.12)',
+          border: '1px solid rgba(255,255,255,0.35)',
+          borderRadius: 10,
+          padding: 11,
+          color: '#fff',
+          fontWeight: 600,
+          fontSize: 13.5,
+          cursor: 'pointer',
+        }}
+      >
+        {processandoDemo ? 'Aguarde…' : 'Entrar como empresa-tenant (demo)'}
+      </button>
+      {/* "Aceitar convite de usuário (demo)" (3º atalho do Kit, só Modelo
+          Completo): NÃO PORTADO — não se aplica. MorfoFinP não tem convite
+          de usuário por link (app de uso pessoal, 1 pessoa só — ver Decisão
+          20/Etapa 8, "sem convite de equipe"); fabricar um botão pra um
+          fluxo que não existe seria pior que omiti-lo. Exceção registrada em
+          Decisões.md (Método item 8). */}
+      {/* Acesso administrador Morfo (08/09/2026, pedido do Rafael, mesmo
+          dia): logo abaixo do botão de tenant demo, mesmo tamanho/cor —
+          os dois emparelhados na mesma tela, não mais uma aba separada no
+          cabeçalho do site. */}
+      <button
+        type="button"
+        onClick={() => onNavegar('entrarN0')}
+        style={{
+          display: 'block',
+          width: '100%',
+          marginTop: 10,
+          background: 'rgba(255,255,255,0.12)',
+          border: '1px solid rgba(255,255,255,0.35)',
+          borderRadius: 10,
+          padding: 11,
+          color: '#fff',
+          fontWeight: 600,
+          fontSize: 13.5,
+          cursor: 'pointer',
+        }}
+      >
+        Acesso administrador Morfo
+      </button>
+
       {temCredencial && (
         <button
           type="button"
@@ -461,6 +530,7 @@ function PaginaEntrarN0() {
   const [confirmarSenha, setConfirmarSenha] = useState('')
   const [erro, setErro] = useState<string | null>(null)
   const [processando, setProcessando] = useState(false)
+  const [processandoDemo, setProcessandoDemo] = useState(false)
   const [mostrarRedefinir, setMostrarRedefinir] = useState(false)
 
   async function salvar(e: FormEvent) {
@@ -499,6 +569,17 @@ function PaginaEntrarN0() {
       // tela sozinho (useLiveQuery reativo), nada mais a fazer aqui.
     } finally {
       setProcessando(false)
+    }
+  }
+
+  // Acesso demo/rápido do N0 — ver `entrarDemoN0()` em `authN0.ts` e a nota
+  // gêmea em `entrarSemSenha()` de `PaginaEntrar` acima (G44 regra 3).
+  async function entrarSemSenhaN0() {
+    setProcessandoDemo(true)
+    try {
+      await entrarDemoN0()
+    } finally {
+      setProcessandoDemo(false)
     }
   }
 
@@ -611,6 +692,34 @@ function PaginaEntrarN0() {
           {processando ? 'Aguarde…' : temCredencial ? 'Entrar' : 'Criar acesso e entrar'}
         </button>
       </form>
+
+      {/* "ACESSO RÁPIDO PARA TESTE" (G60) — mesmo padrão exato da página N1
+          (ver `PaginaEntrar` acima), atalho próprio do N0. Retirar antes de
+          publicar (Backlog #030). */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '18px 0 10px' }}>
+        <div style={{ flex: 1, height: 1, background: `${N0_ACCENT}44` }} />
+        <span style={{ fontSize: 11, color: '#9B96A8', fontWeight: 700 }}>ACESSO RÁPIDO PARA TESTE</span>
+        <div style={{ flex: 1, height: 1, background: `${N0_ACCENT}44` }} />
+      </div>
+      <button
+        type="button"
+        disabled={processandoDemo}
+        onClick={entrarSemSenhaN0}
+        style={{
+          display: 'block',
+          width: '100%',
+          background: `${N0_ACCENT}22`,
+          border: `1px solid ${N0_ACCENT}`,
+          borderRadius: 10,
+          padding: 11,
+          color: '#fff',
+          fontWeight: 600,
+          fontSize: 13.5,
+          cursor: 'pointer',
+        }}
+      >
+        {processandoDemo ? 'Aguarde…' : '🏢 Entrar como Admin Morfo (demo)'}
+      </button>
 
       {temCredencial && (
         <button
@@ -785,12 +894,12 @@ export default function LoginView() {
     <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column', background: GRADIENTE_SITE }}>
       <CabecalhoSite pagina={pagina} onNavegar={setPagina} selo={seloEcossistema ?? 'parte do ecossistema Morfo'} />
       <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '24px 20px' }}>
-        {pagina === 'entrar' && <PaginaEntrar />}
+        {pagina === 'entrar' && <PaginaEntrar onNavegar={setPagina} />}
         {pagina === 'planos' && <PaginaPlanos onEscolher={() => setPagina('entrar')} />}
         {pagina === 'faq' && <PaginaFAQ />}
         {pagina === 'entrarN0' && <PaginaEntrarN0 />}
       </div>
-      <RodapeSite pagina={pagina} onNavegar={setPagina} whatsappNumero={whatsappNumero} whatsappMensagemPadrao={whatsappMensagemPadrao} />
+      <RodapeSite whatsappNumero={whatsappNumero} whatsappMensagemPadrao={whatsappMensagemPadrao} />
     </div>
   )
 }
