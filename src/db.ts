@@ -372,6 +372,32 @@ export interface UsuarioN0 {
   criadoEm: string // ISO
 }
 
+// Notificação bancária capturada (09/09/2026) — uma notificação do app do
+// banco/cartão que o Android leu (plugin `plugins/notificacao-bancaria`, só
+// no app nativo) e que AINDA NÃO virou lançamento. O usuário confirma/edita
+// (vira `Lancamento`, com `descricaoOriginal` = `texto` cru) ou descarta —
+// nunca vira lançamento sozinha (regra desde a concepção, ver `Histórico -
+// Modalidade Light e Premium.md`). `valor`/`tipo` são só a LEITURA
+// automática do texto (podem estar errados — por isso o formulário abre
+// pré-preenchido, não grava direto). Ver `src/notificacaoBancaria.ts`.
+export type StatusNotificacao = 'pendente' | 'confirmada' | 'descartada'
+
+export interface NotificacaoPendente {
+  id?: number
+  // Id gerado no lado nativo (UUID) — é a chave de deduplicação entre a fila
+  // nativa e este banco (INDEXADO: `.where('idNativo')`, ver v8).
+  idNativo: string
+  pacote: string // ex.: com.bradesco
+  app: string // nome legível do app, ex.: "Bradesco"
+  titulo: string
+  texto: string // texto cru completo da notificação — NUNCA editado
+  recebidoEm: string // ISO completo (data+hora)
+  valor?: number // valor reconhecido no texto (sempre positivo)
+  tipo?: 'saida' | 'entrada' // palpite pela leitura do texto
+  status: StatusNotificacao
+  lancamentoId?: number // preenchido ao confirmar
+}
+
 // Versão dos DADOS DE SEMENTE (não é versão de schema — isso é o `.version()`
 // abaixo). Incremente este número toda vez que `src/seed.ts` mudar de um jeito
 // que deveria alterar os números que aparecem na tela (categoria recategorizada,
@@ -407,6 +433,7 @@ class MFinpDB extends Dexie {
   configuracoes!: EntityTable<ConfiguracaoIcones, 'id'>
   planos!: EntityTable<PlanoRegistro, 'id'>
   usuariosN0!: EntityTable<UsuarioN0, 'id'>
+  notificacoesPendentes!: EntityTable<NotificacaoPendente, 'id'>
 
   constructor() {
     super(`mfinp-db-semente${VERSAO_SEMENTE_DEMO}`)
@@ -592,6 +619,28 @@ class MFinpDB extends Dexie {
       configuracoes: 'id',
       planos: '++id',
       usuariosN0: '++id, email',
+    })
+
+    // v8 (09/09/2026, notificação bancária): tabela NOVA
+    // `notificacoesPendentes` (ver `NotificacaoPendente` acima). Tabela nova
+    // sempre exige bump (regra da v6). INDEXA `idNativo` porque
+    // `src/notificacaoBancaria.ts` faz `.where('idNativo').equals(...)` pra
+    // não duplicar a mesma notificação quando a fila nativa é lida mais de
+    // uma vez (sem índice → `SchemaError`, mesma classe de bug da v5/v7), e
+    // `status` porque a tela lista só as pendentes. Nenhuma tabela existente
+    // mudou; sem `.upgrade()` (campo novo em tabela nova, nada a migrar).
+    this.version(8).stores({
+      contas: '++id, nome, tipo, ativa',
+      categorias: '++id, nome, grupo, ativa',
+      grupos: '++id, nome, ativo',
+      lancamentos: '++id, dataCompetencia, contaId, categoriaId, status, chaveImportacao, serieId, transferenciaId',
+      metas: '++id, grupo, mesVigencia',
+      saldosInformados: '++id, contaId, dataReferencia',
+      usuarios: '++id, login',
+      configuracoes: 'id',
+      planos: '++id',
+      usuariosN0: '++id, email',
+      notificacoesPendentes: '++id, idNativo, status',
     })
   }
 }

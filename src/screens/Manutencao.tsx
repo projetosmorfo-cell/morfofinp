@@ -32,12 +32,13 @@ const ORDEM_ABAS_PADRAO = ['resumo', 'situacao', 'lancamentos', 'carteira', 'pla
 const ROTULO_MENU_ENGRENAGEM: Record<string, string> = {
   categorias: 'Categorias e Grupos',
   contas: 'Contas e carteiras',
+  notificacoes: 'Notificações bancárias',
   assinatura: 'Minha Assinatura',
   manutencao: 'Manutenção',
   suporte: 'Suporte (WhatsApp)',
   sair: 'Sair',
 }
-const ORDEM_MENU_ENGRENAGEM_PADRAO = ['categorias', 'contas', 'assinatura', 'manutencao', 'suporte', 'sair']
+const ORDEM_MENU_ENGRENAGEM_PADRAO = ['categorias', 'contas', 'notificacoes', 'assinatura', 'manutencao', 'suporte', 'sair']
 
 // Tela "Manutenção" (01/09/2026, rodada seguinte) — pedido direto do Rafael
 // depois de um susto real: pra conseguir ver a versão mais nova do app, ele

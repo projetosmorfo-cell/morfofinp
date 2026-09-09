@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react'
+import { Building } from 'lucide-react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../db'
 import { criarAcesso, entrar, entrarDemo, redefinirAcesso } from './auth'
@@ -718,7 +719,14 @@ function PaginaEntrarN0() {
           cursor: 'pointer',
         }}
       >
-        {processandoDemo ? 'Aguarde…' : '🏢 Entrar como Admin Morfo (demo)'}
+        {processandoDemo ? (
+          'Aguarde…'
+        ) : (
+          <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+            <Building size={16} />
+            Entrar como Admin Morfo (demo)
+          </span>
+        )}
       </button>
 
       {temCredencial && (

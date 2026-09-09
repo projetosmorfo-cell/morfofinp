@@ -1,0 +1,24 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Aviso ao usuário ("Gasto detectado — toque pra confirmar") é uma
+         notificação do PRÓPRIO app; no Android 13+ isso exige permissão em
+         tempo de execução, pedida pelo plugin (`solicitarPermissaoAviso`). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <application>
+        <!-- Serviço de leitura de notificações de outros apps (banco/cartão).
+             Só funciona depois que a pessoa liga "Acesso a notificações" pro
+             MorfoFinP em Configurações do Android — o plugin abre essa tela
+             (`abrirConfiguracaoAcesso`). O sistema Android é quem inicia e
+             mantém este serviço vivo, mesmo com o app fechado. -->
+        <service
+            android:name="app.morfo.morfofinp.notificacao.NotificacaoListenerService"
+            android:label="MorfoFinP — leitura de notificações do banco"
+            android:exported="true"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+    </application>
+</manifest>

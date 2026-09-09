@@ -1,32 +1,29 @@
-# React + TypeScript + Vite
+# MorfoFinP
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+App de controle financeiro pessoal da Morfo. Vite + React + TypeScript + Dexie (IndexedDB, 100% local, sem backend), empacotado como app Android via Capacitor.
 
-Currently, two official plugins are available:
+## O que está neste repositório
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+Só o que o app precisa pra ser construído e rodar:
 
-## React Compiler
+- `src/` — código do app (telas, regras, banco local)
+- `public/` — ícones e arquivos estáticos
+- `plugins/notificacao-bancaria/` — plugin nativo Android que lê notificações do banco/cartão
+- `capacitor.config.ts`, `vite.config*.ts`, `tsconfig*.json`, `package.json`/`package-lock.json`, `.oxlintrc.json`, `index.html` — configuração de build
+- `.github/workflows/android.yml` — gera o `.apk` automaticamente no GitHub Actions
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+Documentação de produto (decisões, backlog, regras de negócio) fica fora daqui, na biblioteca do produto (Project/Drive).
 
-## Expanding the Oxlint configuration
+## Como construir
 
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```
+npm install
+npx vite build --config vite.config.local.ts   # MorfoFinP.html (arquivo único, abre com duplo clique)
+npx vite build                                  # dist/ (build web usado pelo Capacitor)
+npx tsc --noEmit -p tsconfig.app.json           # checagem de tipos
+npx oxlint                                      # lint
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+## App Android (.apk)
+
+A cada publicação na branch `main`, o GitHub Actions compila o `.apk` de teste e publica na aba **Releases** (`build-NNN`). O número vem de `src/buildInfo.ts`.

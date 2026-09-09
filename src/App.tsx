@@ -7,6 +7,7 @@ import Planejamento from './screens/Planejamento'
 import Categorias from './screens/Categorias'
 import Contas from './screens/Contas'
 import Manutencao from './screens/Manutencao'
+import NotificacoesBancarias from './screens/NotificacoesBancarias'
 import MinhaAssinatura from './kit/MinhaAssinatura'
 import GuidedTour, { TOUR_STEPS_N1, type PassoTour } from './kit/GuidedTour'
 import SimularData, { BannerDataSimulada } from './kit/SimularData'
@@ -16,6 +17,9 @@ import { avancarSeriesFixasPendentes } from './recorrencia'
 import { useModoVisao, useOrdemAbas, useMarcaSite, useOrdemMenuEngrenagem } from './configuracaoIcones'
 import { abrirSuporteWhatsApp } from './kit/suporte'
 import { sair } from './kit/auth'
+import { useLiveQuery } from 'dexie-react-hooks'
+import { db, type NotificacaoPendente } from './db'
+import { sincronizarPendentesNativas, ouvirNotificacoesAoVivo, marcarConfirmada } from './notificacaoBancaria'
 
 // Categorias saiu daqui em 30/08/2026 (rodada seguinte) — deixou de ser aba
 // do rodapé e virou item do menu de configurações (engrenagem, ver
@@ -51,11 +55,14 @@ const TELAS_LIGHT: Tela[] = ['resumo', 'lancamentos', 'carteira', 'planejamento'
 // ver `src/kit/SimularData.tsx`), assim como `manutencao` continua dando
 // acesso ao painel N0 (painel de desenvolvedor/Morfo, sem relação com o
 // tenant logado — ver `src/kit/AppRoot.tsx`).
-type Config = 'categorias' | 'contas' | 'manutencao' | 'assinatura' | 'ferramentasTeste'
+type Config = 'categorias' | 'contas' | 'notificacoes' | 'manutencao' | 'assinatura' | 'ferramentasTeste'
 
-const ROTULO_CONFIG: Record<'categorias' | 'contas' | 'assinatura' | 'manutencao', string> = {
+// 'notificacoes' (09/09/2026): tela "Notificações bancárias" — ver
+// `src/screens/NotificacoesBancarias.tsx` e `src/notificacaoBancaria.ts`.
+const ROTULO_CONFIG: Record<'categorias' | 'contas' | 'notificacoes' | 'assinatura' | 'manutencao', string> = {
   categorias: 'Categorias e Grupos',
   contas: 'Contas e carteiras',
+  notificacoes: 'Notificações bancárias',
   assinatura: 'Minha Assinatura',
   manutencao: 'Manutenção',
 }
@@ -73,7 +80,7 @@ const ROTULO_CONFIG: Record<'categorias' | 'contas' | 'assinatura' | 'manutencao
 // numa posição ou noutra, exatamente como as 5 abas do rodapé já
 // garantem (`ordemAbas`) — não existe (e não deve existir) um jeito de
 // esconder/remover nenhum dos dois.
-const ITENS_MENU_ENGRENAGEM_PADRAO = ['categorias', 'contas', 'assinatura', 'manutencao', 'suporte', 'sair'] as const
+const ITENS_MENU_ENGRENAGEM_PADRAO = ['categorias', 'contas', 'notificacoes', 'assinatura', 'manutencao', 'suporte', 'sair'] as const
 type ItemMenuEngrenagem = (typeof ITENS_MENU_ENGRENAGEM_PADRAO)[number]
 const ROTULO_MENU_ENGRENAGEM: Record<ItemMenuEngrenagem, string> = {
   ...ROTULO_CONFIG,
@@ -120,6 +127,10 @@ interface AlvoLancamento {
   id?: number
   categoriaIdSugerida?: number
   contaIdSugerida?: number
+  // Lançamento nascendo de uma notificação bancária (09/09/2026): o
+  // formulário abre pré-preenchido com o que foi lido do texto, e ao salvar
+  // a notificação vira 'confirmada' — ver `NotificacoesBancarias.tsx`.
+  notificacao?: NotificacaoPendente
 }
 
 // Engrenagem fixa no topo (30/08/2026) — abre um popover com as duas telas
@@ -309,6 +320,24 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: { onVoltar: (
     avancarSeriesFixasPendentes()
   }, [])
 
+  // Notificação bancária (09/09/2026): ao abrir o app, puxa o que o serviço
+  // nativo Android capturou enquanto o app estava fechado; enquanto aberto,
+  // ouve as novas ao vivo; e sempre que o app volta pro primeiro plano (a
+  // pessoa tocou no aviso "movimentação detectada"), sincroniza de novo. No
+  // navegador tudo isso é no-op (ver `ehNativo()`).
+  useEffect(() => {
+    sincronizarPendentesNativas()
+    let parar = () => {}
+    ouvirNotificacoesAoVivo().then((fn) => { parar = fn })
+    const aoVoltar = () => { if (document.visibilityState === 'visible') sincronizarPendentesNativas() }
+    document.addEventListener('visibilitychange', aoVoltar)
+    return () => {
+      parar()
+      document.removeEventListener('visibilitychange', aoVoltar)
+    }
+  }, [])
+  const qtdNotificacoesPendentes = useLiveQuery(() => db.notificacoesPendentes.where('status').equals('pendente').count(), []) ?? 0
+
   const { Componente } = TELAS[tela]
   const aoAbrirLancamento = (opcoes?: AlvoLancamento) => setLancamentoAberto(opcoes ?? {})
 
@@ -346,6 +375,30 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: { onVoltar: (
         </div>
       )}
       <BannerDataSimulada />
+      {qtdNotificacoesPendentes > 0 && configAberta !== 'notificacoes' && (
+        // Aviso de notificação bancária pendente — mesmo padrão de layout dos
+        // outros banners (bloco normal antes de <main>, nunca position:fixed).
+        //
+        // BUG REAL achado no Playwright antes de entregar (09/09/2026): a 1ª
+        // versão tinha o botão "Ver" na ponta direita — exatamente embaixo
+        // do botão de engrenagem (`.botao-engrenagem`, position:fixed no
+        // canto superior direito), que interceptava o clique; o teste travou
+        // com "botao-engrenagem intercepts pointer events". Corrigido: o
+        // banner inteiro é o botão (área grande, sem depender da ponta) e
+        // reserva 64px à direita (44px do botão + folga) pra nunca disputar
+        // espaço com a engrenagem.
+        <button
+          type="button"
+          data-testid="banner-notificacoes"
+          onClick={() => setConfigAberta('notificacoes')}
+          style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '10px 64px 10px 14px', background: '#2b2140', color: '#fff', border: 'none', borderRadius: 0, width: '100%', textAlign: 'left', cursor: 'pointer', font: 'inherit' }}
+        >
+          <span style={{ fontSize: 12, fontWeight: 700 }}>
+            {qtdNotificacoesPendentes} notificação(ões) do banco pra confirmar
+          </span>
+          <span style={{ background: 'rgba(255,255,255,0.18)', borderRadius: 8, padding: '6px 10px', fontSize: 12, fontWeight: 700, flexShrink: 0 }}>Ver ›</span>
+        </button>
+      )}
       <main>
         {configAberta ? (
           configAberta === 'categorias' ? (
@@ -360,6 +413,11 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: { onVoltar: (
             <Contas aoVoltar={() => setConfigAberta(null)} />
           ) : configAberta === 'assinatura' ? (
             <MinhaAssinatura aoVoltar={() => setConfigAberta(null)} />
+          ) : configAberta === 'notificacoes' ? (
+            <NotificacoesBancarias
+              aoVoltar={() => setConfigAberta(null)}
+              aoConfirmar={(n) => setLancamentoAberto({ notificacao: n })}
+            />
           ) : configAberta === 'ferramentasTeste' ? (
             <SimularData aoVoltar={() => setConfigAberta(null)} />
           ) : (
@@ -386,6 +444,22 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: { onVoltar: (
           categoriaIdSugerida={lancamentoAberto.categoriaIdSugerida}
           contaIdSugerida={lancamentoAberto.contaIdSugerida}
           aoMudarMes={setMes}
+          sugestao={
+            lancamentoAberto.notificacao
+              ? {
+                  data: lancamentoAberto.notificacao.recebidoEm.slice(0, 10),
+                  descricao: lancamentoAberto.notificacao.titulo || lancamentoAberto.notificacao.app,
+                  valor: lancamentoAberto.notificacao.valor,
+                  tipo: lancamentoAberto.notificacao.tipo,
+                  descricaoOriginal: [lancamentoAberto.notificacao.titulo, lancamentoAberto.notificacao.texto].filter(Boolean).join(' — '),
+                }
+              : undefined
+          }
+          aoSalvarComSucesso={
+            lancamentoAberto.notificacao?.id != null
+              ? () => { marcarConfirmada(lancamentoAberto.notificacao!.id!) }
+              : undefined
+          }
           onFechar={() => setLancamentoAberto(null)}
         />
       )}

@@ -38,6 +38,8 @@ export default function DetalheLancamento({
   categoriaIdSugerida,
   contaIdSugerida,
   aoMudarMes,
+  sugestao,
+  aoSalvarComSucesso,
   onFechar,
 }: {
   alvoId?: number
@@ -56,6 +58,25 @@ export default function DetalheLancamento({
   // lançamento aparece na hora, sem precisar a pessoa perceber sozinha que
   // precisa navegar manualmente.
   aoMudarMes?: (mes: string) => void
+  // 09/09/2026 — Notificação bancária (ver `src/notificacaoBancaria.ts` e
+  // `src/screens/NotificacoesBancarias.tsx`): quando o lançamento nasce de
+  // uma notificação capturada do app do banco/cartão, o formulário abre já
+  // pré-preenchido com o que foi reconhecido (valor, data, texto, tipo) e
+  // guarda em `descricaoOriginal` o TEXTO CRU da notificação — não o texto
+  // que o usuário digitar em `descricao` — porque é exatamente esse texto
+  // cru que a conciliação futura vai comparar (Decisão 24). Só vale na
+  // CRIAÇÃO; na edição de um lançamento existente é ignorado.
+  sugestao?: {
+    data?: string
+    descricao?: string
+    valor?: number
+    tipo?: 'saida' | 'entrada'
+    descricaoOriginal?: string
+  }
+  // Chamado uma vez, só quando o lançamento foi gravado com sucesso (nunca
+  // ao cancelar/fechar/excluir) — usado pela tela de Notificações bancárias
+  // pra marcar a notificação pendente como "confirmada".
+  aoSalvarComSucesso?: () => void
   onFechar: () => void
 }) {
   const categorias = useLiveQuery(() => db.categorias.orderBy('nome').toArray(), [])
@@ -77,12 +98,16 @@ export default function DetalheLancamento({
   const ehTransferenciaExistente = !!original?.transferenciaId
   const [carregado, setCarregado] = useState(false)
 
-  const [data, setData] = useState(hoje())
-  const [descricao, setDescricao] = useState('')
+  const [data, setData] = useState(sugestao?.data ?? hoje())
+  const [descricao, setDescricao] = useState(sugestao?.descricao ?? '')
   const [categoriaId, setCategoriaId] = useState<number | ''>(categoriaIdSugerida ?? '')
   const [contaId, setContaId] = useState<number | ''>(contaIdSugerida ?? '')
-  const [valor, setValor] = useState('')
-  const [tipo, setTipo] = useState<TipoLancamento>('saida')
+  const [valor, setValor] = useState(sugestao?.valor != null ? formatarMoeda(Math.abs(sugestao.valor)) : '')
+  const [tipo, setTipo] = useState<TipoLancamento>(sugestao?.tipo ?? 'saida')
+  // Texto cru da notificação, quando houver — ver prop `sugestao` acima.
+  // Fica fixo desde a abertura do formulário: editar `descricao` depois
+  // NUNCA muda isso (é o mesmo princípio de imutabilidade da Decisão 24).
+  const descricaoOriginalFixa = sugestao?.descricaoOriginal
   // Só usados quando tipo === 'transferencia' — a transferência sempre
   // envolve duas contas (origem/destino) e agora também duas categorias
   // independentes (podem ser iguais ou diferentes, ponto 3 do feedback).
@@ -193,6 +218,7 @@ export default function DetalheLancamento({
   // lista na hora, dando a impressão de que "não salvou".
   function fecharAposSalvar() {
     aoMudarMes?.(data.slice(0, 7))
+    aoSalvarComSucesso?.()
     onFechar()
   }
 
@@ -430,7 +456,7 @@ export default function DetalheLancamento({
           dataCompetencia: p.data,
           dataCaixa: p.data,
           descricao: descricao || '(sem descrição)',
-          descricaoOriginal: descricao || '(sem descrição)',
+          descricaoOriginal: descricaoOriginalFixa ?? (descricao || '(sem descrição)'),
           valor: tipo === 'saida' ? -p.valor : p.valor,
           contaId: contaEscolhidaId,
           pagoPor: 'conta' as const,
@@ -458,7 +484,7 @@ export default function DetalheLancamento({
         dataCompetencia: data,
         dataCaixa: data,
         descricao: descricao || '(sem descrição)',
-        descricaoOriginal: descricao || '(sem descrição)',
+        descricaoOriginal: descricaoOriginalFixa ?? (descricao || '(sem descrição)'),
         valor: valorComSinal,
         contaId: contaEscolhidaId,
         pagoPor: 'conta',
@@ -478,7 +504,7 @@ export default function DetalheLancamento({
       dataCompetencia: data,
       dataCaixa: data,
       descricao: descricao || '(sem descrição)',
-      descricaoOriginal: descricao || '(sem descrição)',
+      descricaoOriginal: descricaoOriginalFixa ?? (descricao || '(sem descrição)'),
       valor: valorComSinal,
       contaId: contaEscolhidaId,
       pagoPor: 'conta',

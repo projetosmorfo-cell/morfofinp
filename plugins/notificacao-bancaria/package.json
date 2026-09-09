@@ -1,0 +1,22 @@
+{
+  "name": "morfofinp-notificacao-bancaria",
+  "version": "0.1.0",
+  "description": "Plugin Capacitor local do MorfoFinP: lê notificações do app do banco/cartão no Android (NotificationListenerService) e entrega pro app confirmar/editar antes de virar lançamento.",
+  "private": true,
+  "main": "index.js",
+  "types": "index.d.ts",
+  "files": [
+    "android/src/main/",
+    "android/build.gradle",
+    "index.js",
+    "index.d.ts"
+  ],
+  "capacitor": {
+    "android": {
+      "src": "android"
+    }
+  },
+  "peerDependencies": {
+    "@capacitor/core": ">=8.0.0"
+  }
+}
