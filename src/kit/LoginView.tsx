@@ -1,913 +1,630 @@
-import { useState, type FormEvent } from 'react'
-import { Building } from 'lucide-react'
+import { useRef, useState, type CSSProperties, type Dispatch, type ReactNode, type SetStateAction } from 'react'
+import { ArrowRight, Building, Check, CheckCircle2, FileText, KeyRound, List, Mail, QrCode, UserPlus, X } from 'lucide-react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../db'
-import { criarAcesso, entrar, entrarDemo, redefinirAcesso } from './auth'
-import { criarAcessoN0, entrarN0, entrarDemoN0, redefinirAcessoN0 } from './authN0'
+import {
+  AMBER, BRANCO, CORAL, GREEN, INK, LINE, PAPER, PURPLE, PURPLE_DEEP, RED, TXT2, TXT3, KIT_BUILD, KIT_LOGOS, TELA_CHEIA_BASE,
+  AddressFieldsBasic, EmptyState, Field, FieldError, PhoneComWhats, SectionLabel, Segmented, Sheet, TopBar,
+  alpha, fmtBRL, inputStyle, linkBtnSmall, normalizeAddress, primaryBtn, renderRico, secondaryBtn, sitePagesPadrao, validaEmailEnvio, validaTelefone,
+  type Endereco, type KitPlan, type KitPlatform, type KitUser, type LoginPageCfg, type SiteConfig, type SiteHeaderCfg, type SitePage,
+} from './kitBase'
+import { criarAcesso, entrarDemo } from './auth'
+import { entrarDemoN0, N0_PADRAO_KIT } from './authN0'
+import { useMarcaSite, useSimulacaoResolucao } from '../configuracaoIcones'
 import { usePlanos } from './planos'
-import { abrirSuporteWhatsApp } from './suporte'
-import { useMarcaSite } from '../configuracaoIcones'
+import { salvarPlanoId } from './planoAtual'
+import { linkSuporteWhatsApp } from './suporte'
 import { CARIMBO_BUILD } from '../buildInfo'
-import morfoLogoUrl from '../assets/morfo-padrao-branco.svg'
 import produtoLogoUrl from '../assets/morfofinp-padrao-branco.svg'
 
-// Site institucional deslogado do MorfoFinP (08/09/2026, Roteiro de
-// Parametrização Morfo, Etapa 4/G22-G25) — expande o que a Etapa 8
-// (05/09/2026) tinha deixado como uma tela de login isolada, com "Ver
-// planos" só num pop-up. Rafael pediu (levantamento desta rodada) pra já
-// construir a aparência completa do padrão oficial, mesmo sem backend:
-// cabeçalho fixo com navegação entre páginas (Entrar / Planos / Perguntas
-// frequentes), cada uma como página de verdade — não mais um modal em cima
-// do formulário — e um vínculo de volta pro ecossistema Morfo (G22).
+// Site deslogado + Login do MorfoFinP = o código do Kit (09/09/2026, Decisão 48).
 //
-// O que NÃO foi replicado do Kit de Estrutura Mínima Morfo (arquivo
-// "esqueletomorfo.jsx", ~4200 linhas): o painel de configuração do N0 pra
-// editar/reordenar páginas do site, upload de logo própria, tema
-// claro/escuro/automático independente e o sistema de composição de 2 logos
-// (Morfo + Produto) com posicionamento configurável — tudo isso é
-// parametrização de ADMINISTRADOR, só faz sentido de verdade com o backend
-// (Backlog #028) gerenciando um tenant real. O que importa pro usuário
-// visitante (estrutura em páginas, cabeçalho, link de volta, planos, FAQ)
-// está aqui. O restante fica para quando o backend entrar em pauta.
-const CARREGANDO = Symbol('carregando')
-
-// Correção de fidelidade visual ao Roteiro de Parametrização Morfo (08/09/2026,
-// achado real do Rafael: "a tela de login está totalmente fora do padrão do
-// roteiro, nem cor, nem layout, nada"). O Bloco 1 (acima) tinha registrado
-// "cor de marca mantida a do MorfoFinP (--azul) — G24 pede fidelidade de
-// layout/estrutura ao MorfoLoc, não a paleta" — essa leitura estava ERRADA: o
-// próprio roteiro (item "Identidade", seção 2c) é explícito que "o padrão a
-// aplicar é visual (cor, tipografia, layout, gradiente)" pro site
-// deslogado/Login, INDEPENDENTE do tema do ambiente logado (Situação,
-// Lançamentos etc., que continua escuro/próprio do produto — mesmo princípio
-// do MorfoVida real: "tema do site/login independente do tema do app
-// logado"). G24 (fidelidade ao MorfoLoc) é sobre o cabeçalho/painel N0
-// especificamente, não uma isenção geral de cor pro resto da área deslogada.
-// Os valores abaixo são os PADRÃO do Kit (`Kit de Estrutura Mínima (Morfo) -
-// esqueleto-morfo.jsx`, função `siteGradienteDe`/constantes de cor no topo do
-// arquivo) — MorfoFinP ainda não definiu `siteConfig.cor1/cor2` próprios,
-// então usa o gradiente oficial da Morfo tal como está no Kit, sem inventar
-// variação.
-const GRADIENTE_SITE = 'linear-gradient(160deg, #E8825A, #5E2E97 40%, #6214A8)'
-const COR_ROXA = '#5E2E97'
-const COR_VERMELHA = '#D2483B'
-const COR_INK = '#1C1B22'
-const COR_TXT2 = '#6B6558'
-const COR_TXT3 = '#8B8579'
-const COR_LINHA = '#E7E3DC'
-
-// Proporção real dos 2 arquivos oficiais (medida no próprio SVG, nunca
-// esticar — mesma regra já aplicada nos documentos do Anexo A, ver Lições
-// Aprendidas). Morfo usa a variante "Padrão" (empilhada: triângulo sobre o
-// nome) — a mesma que o comentário original do Kit documenta como a certa
-// pra Login; o produto usa a variante "Padrão" dele (lockup largo, o mesmo
-// já usado na capa/cabeçalho dos documentos do Anexo A).
-const MORFO_RATIO = 103.227255 / 97.234443 // ≈ 1.0616
-const PRODUTO_RATIO = 777.767 / 126.317 // ≈ 6.1576
-
-const inputStyle: React.CSSProperties = {
-  width: '100%',
-  background: '#fff',
-  border: `1px solid ${COR_LINHA}`,
-  borderRadius: 10,
-  padding: '10px 12px',
-  color: COR_INK,
-  fontSize: 14,
-}
-const labelStyle: React.CSSProperties = {
-  display: 'block',
-  fontSize: 12.5,
-  color: COR_TXT2,
-  margin: '12px 0 4px',
-  fontWeight: 600,
-}
-const cardBrancoStyle: React.CSSProperties = {
-  background: '#fff',
-  borderRadius: 16,
-  padding: 16,
-}
-
-// 'entrarN0' (08/09/2026, G59 — "critério de aceite binário do encaixe"):
-// login do NÍVEL N0, separado do login de tenant acima ("Login separa os
-// níveis" — G59 regra 1).
+// Achado real do Rafael (G63/G54): o Login entregue até o build 012 NÃO era o
+// Login do Kit — "parte do ecossistema Morfo", "Perguntas frequentes",
+// "ENTRAR", "Entrar como empresa-tenant (demo)" e "Acesso administrador
+// Morfo" não existem em lugar nenhum do `esqueleto-morfo-v1.jsx`; o "PASSOU"
+// de "Login = código do Kit" tinha sido herdado da verificação antiga
+// (Decisão 32/G59), de antes do Kit trocar — só o ícone apontado foi conferido,
+// nunca a tela inteira. Esta versão REGENERA o Login inteiro a partir do Kit
+// atual e o diff literal (G54 regra 6) está no relatório da entrega.
 //
-// CORREÇÃO REAL (08/09/2026, mesma rodada do build 005→006): a versão
-// anterior deixava esta página FORA de `NAV_PAGINAS` de propósito — um link
-// discreto no rodapé, visualmente secundário, pra não competir com
-// Entrar/Planos/FAQ. Rafael pediu explicitamente pra reverter essa
-// separação: "deixe o botão de acesso do adm junto com o do n1, igual" —
-// ou seja, no MESMO grupo/linha do botão de acesso do tenant (N1, a aba
-// "Entrar"), com o MESMO estilo visual, não mais um tratamento diferente.
-// Corrigido: o botão de acesso administrador virou uma 4ª aba renderizada
-// no mesmo cabeçalho fixo (`CabecalhoSite`), lado a lado com Entrar/Planos/
-// FAQ, com o styling idêntico (mesma pílula, mesmo tamanho, mesma regra de
-// destaque quando ativa). Continua fora do array `NAV_PAGINAS` só por
-// motivo técnico (esse array é iterado por `.map()`; o botão de admin é
-// renderizado logo em seguida, à parte, dentro do mesmo `<div>` de
-// navegação) — nunca mais por intenção de parecer diferente.
-type PaginaSite = 'entrar' | 'planos' | 'faq' | 'entrarN0'
+// Organização deste arquivo (cada bloco anota a linha de origem no Kit):
+//   1. camada do site (Kit L6904-L7034): siteWebLayoutDe, fraseCorStyle,
+//      paginasSiteComLogin, logoHeaderSite, SiteHeaderWeb, loginPageCfgDe,
+//      BlocoLogosLogin, SiteNavHorizontalWeb, SiteNavVerticalWeb
+//   2. folhas do Login (Kit L6826-L6894): ForgotPasswordSheet, AceitarConviteSheet
+//   3. contratação (Kit L7216-L7241, L7315-L7395): planFeaturesAuto, PlanoCard,
+//      ContratarPacoteFlow
+//   4. LoginViewKit (Kit L7035-L7213) — a tela em si, literal
+//   5. ADAPTADOR MorfoFinP (único trecho que não é do Kit): monta o objeto
+//      `platform` que o Kit consome a partir do Dexie (credenciais N0/N1,
+//      planos, marca) e traduz `onLogin`/`onSelfRegister` pras sessões do
+//      produto. É a "configuração do produto por cima" da G44 regra 3 —
+//      nunca código paralelo de tela.
+//
+// Toda diferença em relação ao texto do Kit está marcada "ADAPTAÇÃO" com o
+// motivo. O que não está marcado é transcrição literal (só com tipos TS).
 
-const NAV_PAGINAS: { id: PaginaSite; titulo: string }[] = [
-  { id: 'entrar', titulo: 'Entrar' },
-  { id: 'planos', titulo: 'Planos' },
-  { id: 'faq', titulo: 'Perguntas frequentes' },
-]
+/* =====================================================================
+   1. CAMADA DO SITE — Kit L6904-L7034
+   ===================================================================== */
 
-// Cabeçalho do site (G24: fidelidade estrutural ao padrão MorfoLoc — logo do
-// produto + vínculo de volta pro ecossistema Morfo + navegação por páginas).
-// Composição de 2 logos (Morfo + MorfoFinP, decisão 34 do Kit) — sem isso o
-// vínculo de volta do G22 fica só um texto, não a marca em si.
-function CabecalhoSite({
-  pagina,
-  onNavegar,
-  selo,
-}: {
-  pagina: PaginaSite
-  onNavegar: (p: PaginaSite) => void
-  // "Marca do site institucional" (08/09/2026, G59 — item aprovado pro N0,
-  // editável em DevApp → Parâmetros → Marca). Fallback pro texto fixo de
-  // sempre quando o N0 ainda não configurou nada.
-  selo: string
-}) {
-  return (
-    <div style={{ flexShrink: 0 }}>
-      <div
-        style={{
-          maxWidth: 720,
-          margin: '0 auto',
-          padding: '20px 20px 14px',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          textAlign: 'center',
-        }}
-      >
-        <img src={morfoLogoUrl} alt="Morfo" style={{ height: 40, width: 40 * MORFO_RATIO, display: 'block', marginBottom: 8 }} />
-        <img
-          src={produtoLogoUrl}
-          alt="MorfoFinP"
-          style={{ height: 24, width: 24 * PRODUTO_RATIO, display: 'block', marginBottom: 8 }}
-        />
-        {/* Vínculo de volta pro site institucional da Morfo (G22) — placeholder: o
-            subdomínio real do ecossistema Morfo ainda não existe (pendência já
-            registrada em Decisões.md), então este não é um link clicável de verdade
-            ainda, só a indicação visual de que o produto faz parte do ecossistema. */}
-        <span
-          title="Link real assim que o site institucional da Morfo publicar este produto"
-          style={{
-            fontSize: 11,
-            fontWeight: 700,
-            color: 'rgba(255,255,255,0.85)',
-            border: '1px solid rgba(255,255,255,0.5)',
-            borderRadius: 999,
-            padding: '2px 9px',
-          }}
-        >
-          {selo}
-        </span>
-        <p style={{ margin: '8px 0 0', fontSize: 13, color: 'rgba(255,255,255,0.85)' }}>Controle financeiro pessoal.</p>
-      </div>
-      <div style={{ maxWidth: 720, margin: '0 auto', display: 'flex', justifyContent: 'center', gap: 4, padding: '0 20px 14px', flexWrap: 'wrap' }}>
-        {NAV_PAGINAS.map((pg) => (
-          <button
-            key={pg.id}
-            type="button"
-            onClick={() => onNavegar(pg.id)}
-            style={{
-              background: pagina === pg.id ? '#fff' : 'transparent',
-              color: pagina === pg.id ? COR_ROXA : '#fff',
-              border: pagina === pg.id ? 'none' : '1px solid rgba(255,255,255,0.55)',
-              borderRadius: 999,
-              padding: '7px 14px',
-              fontSize: 12.5,
-              fontWeight: 700,
-              cursor: 'pointer',
-            }}
-          >
-            {pg.titulo}
-          </button>
-        ))}
-        {/* Acesso administrador Morfo: saiu daqui em 08/09/2026 (pedido do
-            Rafael, mesmo dia) — agora vive junto do botão "Entrar como
-            empresa-tenant (demo)" em `PaginaEntrar`, mesmo tamanho/cor,
-            os dois emparelhados na tela de Login (não mais uma aba de
-            navegação separada aqui no cabeçalho). */}
-      </div>
+/* Kit L6904-L6912 */
+function siteWebLayoutDe(platform: KitPlatform) {
+  const w = platform?.siteConfig?.webLayout || {}
+  const header: SiteHeaderCfg = { composicao: 'morfo_produto', logoMorfo: 'quadrada', logoProduto: 'horizontal', logoMorfoUri: null, logoProdutoUri: null, posicao: 'centro', altura: 'estreita', espaco: 'nenhum', frasePos: 'abaixo', ...(w.header || {}) }
+  header.posicaoMorfo = header.posicaoMorfo || header.posicao || 'centro'
+  header.posicaoProduto = header.posicaoProduto || header.posicao || 'centro'
+  return { modo: w.modo || 'horizontal', fixagemVertical: w.fixagemVertical || 'usuario_escolhe', header }
+}
+/* Kit L6914-L6919 */
+function fraseCorStyle(sc: SiteConfig | undefined): CSSProperties {
+  const v = sc?.fraseCor || 'fundo_escuro'
+  if (v === 'fundo_claro') return { color: '#2A2733' }
+  if (v === 'destaque') return { color: '#fff', background: 'rgba(0,0,0,0.28)', border: '1px solid rgba(255,255,255,0.55)', borderRadius: 999, padding: '3px 12px', display: 'inline-block' }
+  return { color: 'rgba(255,255,255,0.85)' }
+}
+/* Kit L6922 / L6928 / L6929-L6936 */
+const SITE_LOGIN_PAGE_ID = '__login'
+const SITE_PLANOS_PAGE_ID = '__planos'
+function sitePagesDe(platform: KitPlatform): SitePage[] { return platform?.sitePages || sitePagesPadrao() }
+function paginasSiteComLogin(platform: KitPlatform, soVisiveis: boolean): SitePage[] {
+  const custom = sitePagesDe(platform).filter(pg => !soVisiveis || pg.visivel).slice()
+  const idxLogin = Math.max(0, Math.min(platform?.siteConfig?.loginPageIndex ?? 0, custom.length))
+  const comLogin = custom.slice(); comLogin.splice(idxLogin, 0, { id: SITE_LOGIN_PAGE_ID, titulo: 'Entrar', fixa: true })
+  const idxPlanos = Math.max(0, Math.min(platform?.siteConfig?.planosPageIndex ?? comLogin.length, comLogin.length))
+  comLogin.splice(idxPlanos, 0, { id: SITE_PLANOS_PAGE_ID, titulo: 'Planos', fixa: true })
+  return comLogin
+}
+/* Kit L6938-L6943 */
+function logoHeaderSite(platform: KitPlatform, marca: 'morfo' | 'produto', forma: string, uriPropria: string | null) {
+  if (uriPropria) return uriPropria
+  const b = platform?.branding || {}
+  if (marca === 'morfo') return forma === 'horizontal' ? (b.morfoTopo || KIT_LOGOS.MORFO_HORIZONTAL_URI) : (b.morfoExterna || KIT_LOGOS.MORFO_SIMBOLO_URI)
+  return forma === 'quadrada' ? (b.produtoExterna || KIT_LOGOS.PRODUTO_WORDMARK_URI) : (b.produtoTopo || KIT_LOGOS.PRODUTO_WORDMARK_URI)
+}
+/* Kit L6944-L6978 */
+function SiteHeaderWeb({ platform, cfg }: { platform: KitPlatform; cfg: ReturnType<typeof siteWebLayoutDe> }) {
+  const h = cfg.header
+  const sc = platform.siteConfig || {}
+  const frase = sc.subtitulo ?? 'Plataforma de gestão para o seu negócio'
+  const logoH = h.altura === 'larga' ? 42 : 26
+  const padTop = (h.altura === 'larga' ? 14 : 8) + (h.espaco === 'cima' || h.espaco === 'ambos' ? 14 : 0)
+  const padBottom = (h.altura === 'larga' ? 14 : 8) + (h.espaco === 'baixo' || h.espaco === 'ambos' ? 14 : 0)
+  const temMorfo = h.composicao === 'morfo' || h.composicao === 'morfo_produto'
+  const temProduto = h.composicao === 'produto' || h.composicao === 'morfo_produto'
+  const imgMorfo = temMorfo ? <img key="lm" src={logoHeaderSite(platform, 'morfo', h.logoMorfo, h.logoMorfoUri)} alt="Morfo" style={{ height: logoH, maxWidth: 170, objectFit: 'contain' }} /> : null
+  const imgProduto = temProduto ? <img key="lp" src={logoHeaderSite(platform, 'produto', h.logoProduto, h.logoProdutoUri)} alt={NOME_PRODUTO} style={{ height: Math.round(logoH * 0.82), maxWidth: 170, objectFit: 'contain' }} /> : null
+  const zonas: Record<'esquerda' | 'centro' | 'direita', ReactNode[]> = { esquerda: [], centro: [], direita: [] }
+  if (imgMorfo) zonas[h.posicaoMorfo!].push(imgMorfo)
+  if (imgProduto) {
+    if (imgMorfo && h.posicaoMorfo === h.posicaoProduto) zonas[h.posicaoProduto!].push(<span key="dv" style={{ width: 1, height: Math.round(logoH * 0.7), background: 'rgba(255,255,255,0.35)', flexShrink: 0 }} />)
+    zonas[h.posicaoProduto!].push(imgProduto)
+  }
+  const fraseEl = frase ? <div style={{ fontSize: 12.5, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', ...fraseCorStyle(sc) }}>{frase}</div> : null
+  if (h.frasePos === 'centro' && fraseEl) zonas.centro.push(<div key="frc">{fraseEl}</div>)
+  const linhaLogos = <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+    {h.frasePos === 'esquerda' && fraseEl}
+    <div style={{ flex: 1, minWidth: 0, display: 'flex', justifyContent: 'flex-start', alignItems: 'center', gap: 10 }}>{zonas.esquerda}</div>
+    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 10, flexShrink: 0 }}>{zonas.centro}</div>
+    <div style={{ flex: 1, minWidth: 0, display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 10 }}>{zonas.direita}</div>
+    {h.frasePos === 'direita' && fraseEl}
+  </div>
+  return <div style={{ padding: `${padTop}px 22px ${padBottom}px`, background: 'rgba(0,0,0,0.18)', borderBottom: '1px solid rgba(255,255,255,0.14)' }}>
+    {h.frasePos === 'acima' && fraseEl && <div style={{ textAlign: 'center', marginBottom: 4 }}>{fraseEl}</div>}
+    {linhaLogos}
+    {h.frasePos === 'abaixo' && fraseEl && <div style={{ textAlign: 'center', marginTop: 4 }}>{fraseEl}</div>}
+  </div>
+}
+/* Kit L6985 */
+function loginPageCfgDe(sc: SiteConfig | undefined, chave?: 'loginPage' | 'loginPageMobile'): LoginPageCfg { return { composicao: 'ambos', posicao: 'centro', logoMorfo: 'quadrada', logoProduto: 'quadrada', frase: null, frasePos: 'abaixo', ...((sc || {})[chave || 'loginPage'] || {}) } }
+/* Kit L6986-L7014 */
+function BlocoLogosLogin({ platform, lp, sc }: { platform: KitPlatform; lp: LoginPageCfg; sc: SiteConfig }) {
+  const frase = lp.frase != null && lp.frase !== '' ? lp.frase : (sc.subtitulo ?? 'Plataforma de gestão para o seu negócio')
+  const alinha = lp.posicao === 'esquerda' ? 'flex-start' : lp.posicao === 'direita' ? 'flex-end' : 'center'
+  const temMorfo = lp.composicao !== 'produto'
+  const temProduto = lp.composicao !== 'morfo'
+  const logoMorfoEl = temMorfo ? <div key="lm" style={{ width: 76, height: 76, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><img src={logoHeaderSite(platform, 'morfo', lp.logoMorfo || 'quadrada', null)} alt="Morfo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /></div> : null
+  const logoProdutoEl = temProduto ? <img key="lp" src={logoHeaderSite(platform, 'produto', lp.logoProduto || 'quadrada', null)} alt={NOME_PRODUTO} style={{ height: 46, display: 'block', maxWidth: 220, objectFit: 'contain' }} /> : null
+  const logos = <>{logoMorfoEl}{logoProdutoEl}</>
+  const fraseOculta = lp.frasePos === 'ocultar'
+  const fraseEl = frase && !fraseOculta ? <div style={{ fontSize: 13, ...fraseCorStyle(sc) }}>{frase}</div> : null
+  if (lp.frasePos === 'esquerda' || lp.frasePos === 'direita') return <div style={{ display: 'flex', alignItems: 'center', justifyContent: alinha, gap: 14, marginBottom: 20 }}>
+    {lp.frasePos === 'esquerda' && fraseEl}
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>{logos}</div>
+    {lp.frasePos === 'direita' && fraseEl}
+  </div>
+  if (lp.frasePos === 'centro' && temMorfo && temProduto) return <div style={{ display: 'flex', flexDirection: 'column', alignItems: alinha, gap: 8, marginBottom: 20 }}>
+    {logoMorfoEl}
+    {fraseEl}
+    {logoProdutoEl}
+  </div>
+  return <div style={{ display: 'flex', flexDirection: 'column', alignItems: alinha, gap: 8, marginBottom: 20 }}>
+    {lp.frasePos === 'acima' && fraseEl}
+    {logos}
+    {(lp.frasePos === 'abaixo' || (lp.frasePos === 'centro' && !(temMorfo && temProduto))) && fraseEl}
+  </div>
+}
+/* Kit L7016-L7020 */
+function SiteNavHorizontalWeb({ paginas, ativa, onOpen }: { paginas: SitePage[]; ativa: string | undefined; onOpen: (pg: SitePage) => void }) {
+  return <div style={{ display: 'flex', alignItems: 'center', gap: 2, padding: '0 14px', background: 'rgba(0,0,0,0.12)', borderBottom: '1px solid rgba(255,255,255,0.12)', overflowX: 'auto' }}>
+    {paginas.map(pg => <button key={pg.id} onClick={() => onOpen(pg)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 13px', border: 'none', background: 'transparent', color: ativa === pg.id ? '#fff' : 'rgba(255,255,255,0.72)', fontWeight: 800, fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap', borderBottom: ativa === pg.id ? '2px solid #fff' : '2px solid transparent' }}><FileText size={13} /> {pg.titulo}</button>)}
+  </div>
+}
+/* Kit L7022-L7034 */
+function SiteNavVerticalWeb({ paginas, ativa, onOpen, fixado, podeAlternar, onSetFixado, onAbrir, onHoverIn, onHoverOut }: { paginas: SitePage[]; ativa: string | undefined; onOpen: (pg: SitePage) => void; fixado: boolean; podeAlternar: boolean; onSetFixado: (v: boolean) => void; onAbrir: () => void; onHoverIn: () => void; onHoverOut: () => void }) {
+  if (fixado) return <div style={{ width: 220, flexShrink: 0, background: 'rgba(0,0,0,0.22)', borderRight: '1px solid rgba(255,255,255,0.14)', padding: '12px 8px', display: 'flex', flexDirection: 'column', gap: 2, overflowY: 'auto' }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 6px 8px' }}>
+      <span style={{ fontSize: 11, fontWeight: 900, letterSpacing: 0.5, color: 'rgba(255,255,255,0.7)' }}>MENU</span>
+      {podeAlternar && <button onClick={() => onSetFixado(false)} style={{ background: 'none', border: 'none', borderRadius: 8, cursor: 'pointer', padding: 4, color: 'rgba(255,255,255,0.7)', fontSize: 10, fontWeight: 800 }}>SOLTAR</button>}
     </div>
-  )
+    {paginas.map(pg => <button key={pg.id} onClick={() => onOpen(pg)} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '10px', borderRadius: 10, border: 'none', background: ativa === pg.id ? 'rgba(255,255,255,0.14)' : 'transparent', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', textAlign: 'left' }}><FileText size={14} /> {pg.titulo}</button>)}
+  </div>
+  return <div role="button" tabIndex={0} onClick={onAbrir} onKeyDown={e => { if (e.key === 'Enter') onAbrir() }} onMouseEnter={onHoverIn} onMouseLeave={onHoverOut} title="Menu do site" style={{ width: 42, flexShrink: 0, background: 'rgba(0,0,0,0.22)', borderRight: '1px solid rgba(255,255,255,0.14)', display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 12, gap: 8, cursor: 'pointer' }}>
+    <List size={16} color="#fff" />
+    <span style={{ writingMode: 'vertical-rl', fontSize: 9, fontWeight: 900, letterSpacing: 1, color: 'rgba(255,255,255,0.8)' }}>MENU DO SITE</span>
+  </div>
 }
 
-function RodapeSite({
-  whatsappNumero,
-  whatsappMensagemPadrao,
-}: {
-  whatsappNumero: string | undefined
-  whatsappMensagemPadrao: string | undefined
-}) {
-  return (
-    <div style={{ flexShrink: 0, textAlign: 'center', padding: '16px 20px 22px' }}>
-      <button
-        type="button"
-        onClick={() => abrirSuporteWhatsApp(whatsappMensagemPadrao ?? 'Oi! Tenho uma dúvida antes de usar o MorfoFinP.', whatsappNumero)}
-        style={{ background: 'none', border: 'none', color: '#fff', fontSize: 12, fontWeight: 700, textDecoration: 'underline', cursor: 'pointer', padding: 0, marginBottom: 10 }}
-      >
-        Precisa de ajuda? Fale com o suporte
-      </button>
-      {/* Carimbo {versão}.{build} no rodapé do Login — regra G52, antes ausente
-          nesta tela (achado na mesma auditoria de fidelidade de 08/09/2026). */}
-      <p style={{ margin: 0, fontSize: 11, color: 'rgba(255,255,255,0.6)' }}>MorfoFinP · Desenvolvido por Morfo</p>
-      <p style={{ margin: '2px 0 0', fontSize: 10.5, color: 'rgba(255,255,255,0.45)' }}>{CARIMBO_BUILD}</p>
-      {/* Acesso administrador Morfo (08/09/2026): morou aqui até a rodada do
-          build 005→006 (link/botão à parte, ver histórico em `PaginaSite`
-          acima) — agora é uma aba igual às do tenant, no cabeçalho
-          (`CabecalhoSite`). "Voltar ao site" também some daqui: voltar é só
-          clicar em "Entrar" no mesmo cabeçalho, mesma mecânica de trocar de
-          página que já existe pra Entrar/Planos/FAQ, sem precisar de um
-          botão exclusivo pra isso. */}
+/* =====================================================================
+   2. FOLHAS DO LOGIN — Kit L6826-L6894
+   ===================================================================== */
+
+/* Kit L6826-L6856 */
+function ForgotPasswordSheet({ platform, onClose }: { platform: KitPlatform; onClose: () => void }) {
+  const [login, setLogin] = useState(''); const [enviado, setEnviado] = useState(false); const [erro, setErro] = useState('')
+  const localizarConta = (loginBuscado: string) => {
+    const dev = (platform?.devUsers || []).find(u => u.login === loginBuscado)
+    if (dev) return { email: dev.email }
+    for (const t of platform?.tenants || []) {
+      const u = t.users.find(u => u.login === loginBuscado)
+      if (u) return { email: u.email }
+    }
+    return null
+  }
+  const enviar = () => {
+    const conta = localizarConta(login.trim())
+    if (!conta) { setErro('Não encontramos nenhuma conta com esse login.'); return }
+    if (!conta.email) { setErro('Essa conta não tem e-mail cadastrado. Fale com a Morfo pra redefinir a senha.'); return }
+    setErro(''); setEnviado(true)
+  }
+  if (enviado) return <Sheet title="Verifique seu e-mail" onClose={onClose}>
+    <div style={{ textAlign: 'center', padding: '12px 0' }}>
+      <div style={{ width: 56, height: 56, borderRadius: 999, background: alpha(GREEN, 10.2), display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}><Mail size={26} color={GREEN} /></div>
+      <p style={{ fontSize: 13, color: TXT2, lineHeight: 1.6, marginBottom: 20 }}>Encontramos a conta do login <strong>{login}</strong> e enviamos um link de redefinição de senha pro e-mail cadastrado nela.</p>
+      <button style={{ ...primaryBtn, width: '100%' }} onClick={onClose}>Entendi</button>
     </div>
-  )
+  </Sheet>
+  return <Sheet title="Esqueci minha senha" onClose={onClose}>
+    <p style={{ fontSize: 12.5, color: TXT3, marginTop: 0, marginBottom: 16, lineHeight: 1.5 }}>Digite seu login (funciona tanto pra usuário {NOME_PRODUTO} ADM quanto pra usuário de uma empresa cliente). Enviamos um link de redefinição pro e-mail cadastrado nele.</p>
+    <Field label="Login"><input style={inputStyle} value={login} onChange={e => { setLogin(e.target.value); setErro('') }} placeholder="seu login" onKeyDown={e => e.key === 'Enter' && login.trim() && enviar()} /></Field>
+    {erro && <div style={{ fontSize: 12.5, color: RED, marginBottom: 10, fontWeight: 600 }}>{erro}</div>}
+    <button disabled={!login.trim()} style={{ ...primaryBtn, width: '100%', opacity: login.trim() ? 1 : 0.5 }} onClick={enviar}><Mail size={16} /> Enviar link de redefinição</button>
+  </Sheet>
+}
+/* Kit L573-L579 */
+function loginJaEmUsoGlobalmente(platform: KitPlatform, login: string, exclude?: { devUserId?: string; tenantId?: string; userId?: string }) {
+  const alvo = (login || '').trim().toLowerCase()
+  if (!alvo || alvo === '-') return false
+  const bate = (u: KitUser) => u && (u.login || '').trim().toLowerCase() === alvo
+  if ((platform.devUsers || []).some(u => bate(u) && u.id !== exclude?.devUserId)) return true
+  return (platform.tenants || []).some(t => (t.users || []).some(u => bate(u) && !(t.id === exclude?.tenantId && u.id === exclude?.userId)))
+}
+/* Kit L6867-L6894 */
+function AceitarConviteSheet({ platform, setPlatform, onClose, onEntrar }: { platform: KitPlatform; setPlatform: Dispatch<SetStateAction<KitPlatform>>; onClose: () => void; onEntrar: (tenantId: string, userId: string) => void }) {
+  const pendentes = platform.tenants.flatMap(t => t.users.filter(u => u.status === 'pendente_aprovacao' && u.token).map(u => ({ ...u, tenant: t })))
+  const [tokenSelecionado, setTokenSelecionado] = useState(pendentes[0]?.token || '')
+  const [nome, setNome] = useState(''); const [senha, setSenha] = useState(''); const [erro, setErro] = useState('')
+  const escolhido = pendentes.find(p => p.token === tokenSelecionado)
+  const aceitar = () => {
+    if (!escolhido) { setErro('Escolha um convite.'); return }
+    if (!nome.trim() || !senha.trim()) { setErro('Preencha seu nome e uma senha.'); return }
+    const loginGerado = nome.trim().toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 10)
+    if (loginJaEmUsoGlobalmente(platform, loginGerado, { tenantId: escolhido.tenant.id, userId: escolhido.id })) { setErro(`O login gerado a partir do seu nome ("${loginGerado}") já está em uso em outro ambiente — tente com o nome completo ou de um jeito um pouco diferente.`); return }
+    setPlatform(p => ({ ...p, tenants: p.tenants.map(t => t.id !== escolhido.tenant.id ? t : { ...t, users: t.users.map(u => u.id === escolhido.id ? { ...u, name: nome.trim(), login: loginGerado, senha, status: 'ativo' } : u) }) }))
+    onEntrar(escolhido.tenant.id, escolhido.id)
+  }
+  return <Sheet title="Aceitar convite" onClose={onClose}>
+    <p style={{ fontSize: 12.5, color: TXT3, marginTop: 0, marginBottom: 16, lineHeight: 1.5 }}>Demonstração — sem link/URL real, escolha abaixo qual convite pendente você está aceitando.</p>
+    {pendentes.length === 0 ? <EmptyState icon={Mail} title="Nenhum convite pendente" hint='Peça pra Morfo gerar um em Empresas → detalhe da empresa → "Gerar link de pré-cadastro".' /> : <>
+      <Field label="Convite"><select style={inputStyle} value={tokenSelecionado} onChange={e => setTokenSelecionado(e.target.value)}>
+        {pendentes.map(p => <option key={p.id} value={p.token}>{p.tenant.companyName}{(p.phone || p.email) ? ` · ${[p.phone, p.email].filter(Boolean).join(' · ')}` : ''}</option>)}
+      </select></Field>
+      <Field label="Seu nome"><input style={inputStyle} value={nome} onChange={e => setNome(e.target.value)} /></Field>
+      <Field label="Escolha uma senha"><input type="password" style={inputStyle} value={senha} onChange={e => setSenha(e.target.value)} /></Field>
+      {erro && <div style={{ fontSize: 12.5, color: RED, marginBottom: 10, fontWeight: 600 }}>{erro}</div>}
+      <button style={{ ...primaryBtn, width: '100%' }} onClick={aceitar}><Check size={16} /> Concluir cadastro e entrar</button>
+    </>}
+  </Sheet>
 }
 
-function PaginaEntrar({ onNavegar }: { onNavegar: (p: PaginaSite) => void }) {
-  const config = useLiveQuery(() => db.configuracoes.get(1), [], CARREGANDO)
-  const temCredencial = config !== CARREGANDO && Boolean(config?.credencialEmail && config?.credencialSenha)
+/* =====================================================================
+   3. CONTRATAÇÃO — Kit L7216-L7241 e L7315-L7395
+   ===================================================================== */
 
-  const [email, setEmail] = useState('')
-  const [senha, setSenha] = useState('')
-  const [confirmarSenha, setConfirmarSenha] = useState('')
-  const [erro, setErro] = useState<string | null>(null)
-  const [processando, setProcessando] = useState(false)
-  const [processandoDemo, setProcessandoDemo] = useState(false)
-  const [mostrarRedefinir, setMostrarRedefinir] = useState(false)
+/* Kit L7216-L7226.
+   ADAPTAÇÃO (G44 regra 3, configuração do produto): as 4 linhas automáticas
+   do Kit vêm de campos de plano que só existem no domínio de exemplo do Kit
+   (`itemLimit` = "registros de Entidade A", `userLimit`, `restrictions`). O
+   plano do MorfoFinP (`PlanoRegistro`, cadastrado no N0 → Gerenciar Planos)
+   não tem esses campos — quando NENHUM deles existe, a lista é só o texto
+   livre do plano (`features`), em vez de imprimir "undefined usuários" /
+   "Registros de Entidade A". Com os campos presentes, o cálculo é o do Kit. */
+function planFeaturesAuto(plano: KitPlan | undefined) {
+  if (!plano) return []
+  if (plano.userLimit == null && plano.itemLimit === undefined && !plano.restrictions) return [...(plano.features || [])]
+  const r = plano.restrictions || {}
+  const list = [
+    plano.itemLimit ? `Até ${plano.itemLimit} registros de Entidade A` : 'Registros de Entidade A ilimitados',
+    `${plano.userLimit} usuário${(plano.userLimit ?? 0) > 1 ? 's' : ''}`,
+    r.exportacaoDetalhada ? 'Exportação detalhada (CSV/PDF completo)' : 'Exportação simples',
+    r.layoutPersonalizado ? 'Layout e menus personalizáveis' : 'Layout padrão da Morfo',
+  ]
+  return [...list, ...(plano.features || [])]
+}
+/* Kit L7227-L7241 */
+function PlanoCard({ plano, selected, onSelect }: { plano: KitPlan; selected: boolean; onSelect: () => void }) {
+  return <button onClick={onSelect} style={{ textAlign: 'left', width: '100%', padding: 16, borderRadius: 16, border: `2px solid ${selected ? PURPLE : LINE}`, background: selected ? alpha(PURPLE, 3.9) : BRANCO, cursor: 'pointer', position: 'relative' }}>
+    {plano.destaque && <div style={{ position: 'absolute', top: -10, right: 14, background: CORAL, color: '#fff', fontSize: 10, fontWeight: 800, padding: '3px 10px', borderRadius: 999 }}>MAIS ESCOLHIDO</div>}
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+      <div><div style={{ fontWeight: 800, fontSize: 16, color: INK }}>{plano.name}</div>{plano.porte && <div style={{ fontSize: 11.5, color: TXT3 }}>Porte {plano.porte}</div>}</div>
+      {plano.gratuito
+        ? <div style={{ textAlign: 'right' }}><div style={{ fontSize: 18, fontWeight: 800, color: GREEN }}>Grátis</div><div style={{ fontSize: 10.5, color: TXT3 }}>por {plano.validadeDias} dias</div></div>
+        : <div style={{ textAlign: 'right' }}><div style={{ fontSize: 21, fontWeight: 800, color: PURPLE }}>{fmtBRL(plano.monthlyValue)}</div><div style={{ fontSize: 10.5, color: TXT3 }}>/mês</div></div>}
+    </div>
+    {plano.description && <div style={{ fontSize: 12.5, color: TXT2, marginTop: 8 }}>{plano.description}</div>}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 10 }}>
+      {planFeaturesAuto(plano).map((f, i) => <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: TXT2 }}><Check size={13} color={GREEN} /> {f}</div>)}
+    </div>
+  </button>
+}
+/* Kit L7315-L7395 */
+export interface SelfRegisterPayload { companyName: string; ownerName: string; phone: string; hasWhatsapp: boolean; email: string; city: string; fiscalAddress: Endereco; login: string; senha: string; planoContratado: KitPlan | undefined; paymentMethod: string | null; primeiraCobrancaPaga: boolean; autoLiberado: boolean }
+function ContratarPacoteFlow({ plans, onClose, onFinish }: { plans: KitPlan[]; onClose: () => void; onFinish: (payload: SelfRegisterPayload) => void }) {
+  const [step, setStep] = useState(1)
+  const [planId, setPlanId] = useState(plans.find(p => p.destaque)?.id || plans[0]?.id || '')
+  const [companyName, setCompanyName] = useState(''); const [ownerName, setOwnerName] = useState(''); const [phone, setPhone] = useState(''); const [hasWhatsapp, setHasWhatsapp] = useState(true); const [email, setEmail] = useState(''); const [login, setLogin] = useState(''); const [senha, setSenha] = useState('')
+  const [fiscalAddress, setFiscalAddress] = useState<Endereco>(normalizeAddress(null))
+  const [method, setMethod] = useState<'pix' | 'cartao_credito' | 'boleto'>('pix'); const [processando, setProcessando] = useState(false)
+  const plano = plans.find(p => p.id === planId)
+  const phoneOk = validaTelefone(phone)
+  const enderecoFiscalOk = fiscalAddress.cep.trim() && fiscalAddress.logradouro.trim() && fiscalAddress.cidade.trim() && fiscalAddress.uf.trim()
+  const dadosCompletos = companyName.trim() && ownerName.trim() && login.trim() && senha.trim() && phoneOk && validaEmailEnvio(email) && enderecoFiscalOk
 
-  // Acesso demo/rápido (G44 regra 3 / G60, ver `entrarDemo()` em `auth.ts`) —
-  // nunca toca em `email`/`senha`/`confirmarSenha` do formulário, é um
-  // caminho paralelo, não um preenchimento automático dele.
-  async function entrarSemSenha() {
-    setProcessandoDemo(true)
-    try {
-      await entrarDemo()
-    } finally {
-      setProcessandoDemo(false)
-    }
-  }
-
-  async function salvar(e: FormEvent) {
-    e.preventDefault()
-    setErro(null)
-
-    if (!email.trim()) {
-      setErro('Preencha o e-mail.')
-      return
-    }
-    if (!email.includes('@')) {
-      setErro('Digite um e-mail válido (com @).')
-      return
-    }
-    if (senha.length < 4) {
-      setErro('A senha precisa ter pelo menos 4 caracteres.')
-      return
-    }
-
+  const confirmarPagamento = () => {
     setProcessando(true)
-    try {
-      if (!temCredencial) {
-        if (senha !== confirmarSenha) {
-          setErro('As duas senhas precisam ser iguais.')
-          return
-        }
-        await criarAcesso(email, senha)
-      } else {
-        const ok = await entrar(email, senha)
-        if (!ok) {
-          setErro('E-mail ou senha incorretos.')
-          return
-        }
-      }
-      // Sucesso: `sessaoAtiva` já foi gravado — `AppRoot.tsx` troca de tela
-      // sozinho (useLiveQuery reativo), nada mais a fazer aqui.
-    } finally {
-      setProcessando(false)
-    }
+    setTimeout(() => {
+      const autoLiberado = method !== 'boleto'
+      onFinish({ companyName, ownerName, phone, hasWhatsapp, email: email.trim(), city: `${fiscalAddress.cidade}/${fiscalAddress.uf}`, fiscalAddress, login, senha, planoContratado: plano, paymentMethod: method, primeiraCobrancaPaga: autoLiberado, autoLiberado })
+      setProcessando(false); setStep(4)
+    }, 900)
   }
-
-  async function confirmarRedefinir() {
+  const confirmarGratuito = () => {
     setProcessando(true)
-    await redefinirAcesso()
-    setMostrarRedefinir(false)
-    setEmail('')
-    setSenha('')
-    setConfirmarSenha('')
-    setErro(null)
-    setProcessando(false)
+    setTimeout(() => {
+      onFinish({ companyName, ownerName, phone, hasWhatsapp, email: email.trim(), city: `${fiscalAddress.cidade}/${fiscalAddress.uf}`, fiscalAddress, login, senha, planoContratado: plano, paymentMethod: null, primeiraCobrancaPaga: false, autoLiberado: true })
+      setProcessando(false); setStep(4)
+    }, 500)
   }
 
-  // Aguardando a 1ª leitura do Dexie — evita mostrar "Criar acesso" por um
-  // instante antes de saber se já existe credencial (flash de tela errada
-  // toda vez que o Rafael abre o app já logado). `config === undefined`
-  // NÃO entra aqui (é um caso real e permanente: banco sem credencial
-  // nenhuma) — só o sentinela distingue "carregando" de "vazio de verdade".
-  if (config === CARREGANDO) return null
+  return <Sheet title={step === 1 ? 'Escolha seu plano' : step === 2 ? 'Dados da empresa' : step === 3 ? 'Pagamento' : 'Tudo certo!'} onClose={onClose} resetScrollKey={step}>
+    <div style={{ display: 'flex', gap: 4, marginBottom: 16 }}>{(plano?.gratuito ? [1, 2, 4] : [1, 2, 3, 4]).map(n => <div key={n} style={{ flex: 1, height: 3, borderRadius: 999, background: n <= step ? PURPLE : LINE }} />)}</div>
 
-  return (
-    <div style={{ width: '100%', maxWidth: 360, margin: '0 auto' }}>
-      <form onSubmit={salvar} style={cardBrancoStyle}>
-        <h2 style={{ marginTop: 0, marginBottom: 4, color: COR_INK, fontSize: 16 }}>
-          {temCredencial ? 'Entrar' : 'Criar acesso'}
-        </h2>
-
-        <label htmlFor="login-email" style={labelStyle}>
-          E-mail
-        </label>
-        <input
-          id="login-email"
-          // `type="text"`, não `"email"` — de propósito (bug real encontrado na
-          // Etapa 8): `type="email"` faz o NAVEGADOR validar o formato no
-          // submit, mesmo sem `required`, e bloqueia `onSubmit` em silêncio
-          // quando o texto não tem "@". A validação de formato é só a nossa,
-          // em `salvar()` acima, sempre com mensagem visível.
-          type="text"
-          inputMode="email"
-          autoComplete="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          style={{ ...inputStyle, borderColor: erro && (!email.trim() || !email.includes('@')) ? COR_VERMELHA : COR_LINHA }}
-        />
-
-        <label htmlFor="login-senha" style={labelStyle}>
-          Senha
-        </label>
-        <input
-          id="login-senha"
-          type="password"
-          autoComplete={temCredencial ? 'current-password' : 'new-password'}
-          value={senha}
-          onChange={(e) => setSenha(e.target.value)}
-          style={{ ...inputStyle, borderColor: erro && senha.length < 4 ? COR_VERMELHA : COR_LINHA }}
-        />
-
-        {!temCredencial && (
-          <>
-            <label htmlFor="login-confirmar-senha" style={labelStyle}>
-              Confirmar senha
-            </label>
-            <input
-              id="login-confirmar-senha"
-              type="password"
-              autoComplete="new-password"
-              value={confirmarSenha}
-              onChange={(e) => setConfirmarSenha(e.target.value)}
-              style={{ ...inputStyle, borderColor: erro && senha !== confirmarSenha ? COR_VERMELHA : COR_LINHA }}
-            />
-          </>
-        )}
-
-        {erro && <p style={{ color: COR_VERMELHA, fontSize: 12.5, marginTop: 8, fontWeight: 600 }}>{erro}</p>}
-
-        <button
-          type="submit"
-          disabled={processando}
-          style={{
-            width: '100%',
-            marginTop: 16,
-            background: COR_ROXA,
-            border: 'none',
-            borderRadius: 10,
-            padding: 12,
-            color: '#fff',
-            fontWeight: 700,
-            fontSize: 14,
-            cursor: 'pointer',
-          }}
-        >
-          {processando ? 'Aguarde…' : temCredencial ? 'Entrar' : 'Criar acesso e entrar'}
-        </button>
-
-        {!temCredencial && (
-          <p style={{ color: COR_TXT3, fontSize: 11.5, marginTop: 10, marginBottom: 0 }}>
-            1ª vez usando esta versão do app — escolha um e-mail e senha pra você mesmo. Sem
-            conexão com nenhuma conta externa (Google, etc.) e sem backend real ainda (Backlog
-            #028) — é só a entrada oficial do app a partir de agora.
-          </p>
-        )}
-      </form>
-
-      {/* "ACESSO RÁPIDO PARA TESTE" (G60) — porte EXATO do Kit (fonte
-          L7246-7250): divisor de texto + 1 atalho de demo, nunca um botão
-          "de resolução" (isso agora é o par de botões flutuantes 📱/🖥️/🕐,
-          `FerramentasTesteFlutuantes`, no componente raiz `AppRoot.tsx`).
-          Retirar antes de publicar (Backlog #030). */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '18px 0 10px' }}>
-        <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.35)' }} />
-        <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.75)', fontWeight: 700 }}>
-          ACESSO RÁPIDO PARA TESTE
-        </span>
-        <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.35)' }} />
+    {step === 1 && <>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
+        {plans.map(pl => <PlanoCard key={pl.id} plano={pl} selected={pl.id === planId} onSelect={() => setPlanId(pl.id)} />)}
       </div>
-      <button
-        type="button"
-        disabled={processandoDemo}
-        onClick={entrarSemSenha}
-        style={{
-          display: 'block',
-          width: '100%',
-          background: 'rgba(255,255,255,0.12)',
-          border: '1px solid rgba(255,255,255,0.35)',
-          borderRadius: 10,
-          padding: 11,
-          color: '#fff',
-          fontWeight: 600,
-          fontSize: 13.5,
-          cursor: 'pointer',
-        }}
-      >
-        {processandoDemo ? 'Aguarde…' : 'Entrar como empresa-tenant (demo)'}
-      </button>
-      {/* "Aceitar convite de usuário (demo)" (3º atalho do Kit, só Modelo
-          Completo): NÃO PORTADO — não se aplica. MorfoFinP não tem convite
-          de usuário por link (app de uso pessoal, 1 pessoa só — ver Decisão
-          20/Etapa 8, "sem convite de equipe"); fabricar um botão pra um
-          fluxo que não existe seria pior que omiti-lo. Exceção registrada em
-          Decisões.md (Método item 8). */}
-      {/* Acesso administrador Morfo (08/09/2026, pedido do Rafael, mesmo
-          dia): logo abaixo do botão de tenant demo, mesmo tamanho/cor —
-          os dois emparelhados na mesma tela, não mais uma aba separada no
-          cabeçalho do site. */}
-      <button
-        type="button"
-        onClick={() => onNavegar('entrarN0')}
-        style={{
-          display: 'block',
-          width: '100%',
-          marginTop: 10,
-          background: 'rgba(255,255,255,0.12)',
-          border: '1px solid rgba(255,255,255,0.35)',
-          borderRadius: 10,
-          padding: 11,
-          color: '#fff',
-          fontWeight: 600,
-          fontSize: 13.5,
-          cursor: 'pointer',
-        }}
-      >
-        Acesso administrador Morfo
-      </button>
+      <button disabled={!planId} style={{ ...primaryBtn, width: '100%', opacity: planId ? 1 : 0.5 }} onClick={() => setStep(2)}>Continuar <ArrowRight size={15} /></button>
+    </>}
 
-      {temCredencial && (
-        <button
-          type="button"
-          onClick={() => setMostrarRedefinir(true)}
-          style={{
-            display: 'block',
-            width: '100%',
-            marginTop: 14,
-            background: 'none',
-            border: 'none',
-            color: '#fff',
-            fontSize: 12.5,
-            textDecoration: 'underline',
-            cursor: 'pointer',
-          }}
-        >
-          Esqueceu a senha?
-        </button>
-      )}
+    {step === 2 && <>
+      <div style={{ background: alpha(PURPLE, 3.9), border: `1px solid ${alpha(PURPLE, 20)}`, borderRadius: 12, padding: 12, marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span style={{ fontSize: 13, fontWeight: 700, color: INK }}>{plano?.name}</span>{plano?.gratuito ? <span style={{ fontSize: 13, fontWeight: 800, color: GREEN }}>Grátis por {plano.validadeDias} dias</span> : <span style={{ fontSize: 13, fontWeight: 800, color: PURPLE }}>{fmtBRL(plano?.monthlyValue)}/mês</span>}
+      </div>
+      <Field label="Nome da empresa"><input style={inputStyle} value={companyName} onChange={e => setCompanyName(e.target.value)} /></Field>
+      <Field label="Seu nome"><input style={inputStyle} value={ownerName} onChange={e => setOwnerName(e.target.value)} /></Field>
+      <PhoneComWhats phone={phone} setPhone={setPhone} hasWhatsapp={hasWhatsapp} setHasWhatsapp={setHasWhatsapp} />
+      <FieldError show={phone.trim() && !phoneOk} text="Telefone inválido (use DDD + número)" />
+      <Field label="E-mail"><input type="email" style={inputStyle} value={email} onChange={e => setEmail(e.target.value)} placeholder="empresa@exemplo.com" /></Field>
+      <FieldError show={email.trim() && !validaEmailEnvio(email)} text="E-mail inválido" />
+      <SectionLabel>Endereço fiscal</SectionLabel>
+      <AddressFieldsBasic value={fiscalAddress} onChange={setFiscalAddress} />
+      <Field label="Escolha um login"><input style={inputStyle} value={login} onChange={e => setLogin(e.target.value)} /></Field>
+      <Field label="Escolha uma senha"><input style={inputStyle} type="password" value={senha} onChange={e => setSenha(e.target.value)} /></Field>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button style={{ ...secondaryBtn, flex: 1 }} onClick={() => setStep(1)}>Voltar</button>
+        <button disabled={!dadosCompletos || processando} style={{ ...primaryBtn, flex: 1, opacity: (dadosCompletos && !processando) ? 1 : 0.5 }} onClick={() => plano?.gratuito ? confirmarGratuito() : setStep(3)}>{plano?.gratuito ? (processando ? 'Ativando...' : <>Ativar plano gratuito <Check size={15} /></>) : <>Continuar <ArrowRight size={15} /></>}</button>
+      </div>
+    </>}
 
-      {mostrarRedefinir && (
-        <div
-          onClick={() => setMostrarRedefinir(false)}
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 16px', zIndex: 50 }}
-        >
-          <div onClick={(e) => e.stopPropagation()} style={{ ...cardBrancoStyle, width: '100%', maxWidth: 420 }}>
-            <h2 style={{ marginTop: 0, color: COR_INK, fontSize: 16 }}>Redefinir acesso</h2>
-            <p style={{ color: COR_TXT2, fontSize: 13.5 }}>
-              Sem backend, não existe recuperação de senha por e-mail — a única opção é cadastrar
-              um e-mail/senha novo agora. <strong>Seus lançamentos, categorias e contas não são
-              afetados</strong> — só o e-mail/senha de entrada são apagados.
-            </p>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button
-                type="button"
-                style={{ flex: 1, background: 'none', border: `1px solid ${COR_LINHA}`, borderRadius: 10, padding: 12, color: COR_INK, cursor: 'pointer', fontSize: 14 }}
-                onClick={() => setMostrarRedefinir(false)}
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                style={{ flex: 1, background: COR_VERMELHA, border: `1px solid ${COR_VERMELHA}`, borderRadius: 10, padding: 12, color: '#fff', fontWeight: 600, cursor: 'pointer', fontSize: 14 }}
-                disabled={processando}
-                onClick={confirmarRedefinir}
-              >
-                {processando ? 'Aguarde…' : 'Redefinir e cadastrar de novo'}
-              </button>
+    {step === 3 && !plano?.gratuito && <>
+      <div style={{ background: PAPER, border: `1px solid ${LINE}`, borderRadius: 12, padding: 12, marginBottom: 16 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ fontSize: 12.5, color: TXT3 }}>{plano?.name} · primeira mensalidade</span><span style={{ fontSize: 15, fontWeight: 800, color: GREEN }}>{fmtBRL(plano?.monthlyValue)}</span></div>
+      </div>
+      <Field label="Forma de pagamento"><Segmented value={method} onChange={setMethod} options={[{ value: 'pix', label: 'Pix' }, { value: 'cartao_credito', label: 'Cartão' }, { value: 'boleto', label: 'Boleto' }]} /></Field>
+      {method === 'pix' && <div style={{ textAlign: 'center', padding: '20px 0' }}><QrCode size={90} color={INK} style={{ margin: '0 auto' }} /><p style={{ fontSize: 12, color: TXT3, marginTop: 10 }}>Simulação — em um pagamento real, o QR code apareceria aqui.</p></div>}
+      {method === 'cartao_credito' && <><Field label="Número do cartão"><input style={inputStyle} placeholder="0000 0000 0000 0000" /></Field><div style={{ display: 'flex', gap: 8 }}><Field label="Validade"><input style={inputStyle} placeholder="MM/AA" /></Field><Field label="CVV"><input style={inputStyle} placeholder="000" /></Field></div></>}
+      {method === 'boleto' && <div style={{ background: alpha(AMBER, 7.8), border: `1px solid ${alpha(AMBER, 26.7)}`, borderRadius: 12, padding: 12, margin: '6px 0 16px' }}><p style={{ fontSize: 12.5, color: INK, margin: 0, lineHeight: 1.5 }}>O boleto leva até 2 dias úteis pra compensar. Seu acesso já fica disponível (restrito) enquanto isso — a Morfo libera tudo assim que o pagamento cair, ou você pode acompanhar o status.</p></div>}
+      <div style={{ display: 'flex', gap: 8, marginTop: method === 'pix' ? 0 : 6 }}>
+        <button style={{ ...secondaryBtn, flex: 1 }} onClick={() => setStep(2)}>Voltar</button>
+        <button disabled={processando} style={{ ...primaryBtn, flex: 1, opacity: processando ? 0.6 : 1 }} onClick={confirmarPagamento}>{processando ? 'Processando...' : <>Confirmar pagamento <Check size={15} /></>}</button>
+      </div>
+    </>}
+
+    {step === 4 && <div style={{ textAlign: 'center', padding: '12px 0' }}>
+      <div style={{ width: 64, height: 64, borderRadius: 999, background: alpha(GREEN, 10.2), display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}><CheckCircle2 size={32} color={GREEN} /></div>
+      <div style={{ fontSize: 17, fontWeight: 800, color: INK, marginBottom: 8 }}>{plano?.gratuito ? 'Plano gratuito ativado!' : method === 'boleto' ? 'Cadastro feito!' : 'Pagamento confirmado!'}</div>
+      <p style={{ fontSize: 13, color: TXT2, lineHeight: 1.5, marginBottom: 20 }}>{plano?.gratuito ? `Seu ambiente do ${plano?.name} já está liberado, grátis por ${plano.validadeDias} dias. Bem-vindo à ${NOME_PRODUTO}!` : method === 'boleto' ? 'Assim que o boleto compensar (até 2 dias úteis), seu ambiente é liberado por completo. Enquanto isso você já pode entrar e configurar o básico.' : `Seu ambiente do ${plano?.name} já está liberado. Bem-vindo à ${NOME_PRODUTO}!`}</p>
+      <button style={{ ...primaryBtn, width: '100%' }} onClick={onClose}>Entrar agora <ArrowRight size={15} /></button>
+    </div>}
+  </Sheet>
+}
+
+/* =====================================================================
+   4. LOGINVIEW — Kit L7035-L7213 (literal)
+   ===================================================================== */
+
+/* Kit L211: NOME_PRODUTO = "MorfoMod" no Kit → "MorfoFinP" aqui (identidade
+   do produto, a única coisa que muda por produto — G55). No Kit o nome
+   aparece literal nos textos ("MorfoMod ADM", "Bem-vindo à MorfoMod!",
+   rodapé "MorfoMod · Desenvolvido por Morfo Sistemas") — aqui os mesmos
+   textos passam por esta constante, como o próprio Kit faz em NOME_PRODUTO. */
+const NOME_PRODUTO = 'MorfoFinP'
+
+type LoginLevel = 'dev' | 'tenant'
+function LoginViewKit({ platform, setPlatform, areaWeb, onLogin, onSelfRegister }: { platform: KitPlatform; setPlatform: Dispatch<SetStateAction<KitPlatform>>; areaWeb: boolean; onLogin: (level: LoginLevel, tenantId: string | null, userId?: string) => void; onSelfRegister: (payload: SelfRegisterPayload) => void }) {
+  const [login, setLogin] = useState(''); const [senha, setSenha] = useState(''); const [error, setError] = useState(''); const [selfOpen, setSelfOpen] = useState(false); const [forgotOpen, setForgotOpen] = useState(false)
+  const [aceitarConviteOpen, setAceitarConviteOpen] = useState(false)
+  const [sitePageOpen, setSitePageOpen] = useState<SitePage | null>(null)
+  const paginasSite: SitePage[] = [...sitePagesDe(platform).filter(pg => pg.visivel), { id: SITE_PLANOS_PAGE_ID, titulo: 'Planos', fixa: true }]
+  const abrirPaginaMobile = (pg: SitePage) => { if (pg.id === SITE_PLANOS_PAGE_ID) { setSelfOpen(true); return } setSitePageOpen(pg) }
+  const siteMenuTipo = platform.siteMenu?.tipo || 'fixo'
+  const [cortinaAberta, setCortinaAberta] = useState(false)
+  const [cortinaFixada, setCortinaFixada] = useState(false)
+  const wcfg = siteWebLayoutDe(platform)
+  const [siteVertFixadoUsuario, setSiteVertFixadoUsuario] = useState(false)
+  const siteVertFixado = wcfg.fixagemVertical === 'sempre_fixo' || (wcfg.fixagemVertical === 'usuario_escolhe' && siteVertFixadoUsuario)
+  const sitePodeAlternar = wcfg.fixagemVertical === 'usuario_escolhe'
+  const [siteVertAberto, setSiteVertAberto] = useState(false)
+  const [paginaAtivaWeb, setPaginaAtivaWeb] = useState(SITE_LOGIN_PAGE_ID)
+  const siteHoverT = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const siteHoverIn = () => { if (siteHoverT.current) clearTimeout(siteHoverT.current); setSiteVertAberto(true) }
+  const siteHoverOut = () => { if (siteHoverT.current) clearTimeout(siteHoverT.current); siteHoverT.current = setTimeout(() => setSiteVertAberto(false), 300) }
+  const submit = () => {
+    /* ADAPTAÇÃO (1 linha): o login do MorfoFinP é guardado normalizado
+       (`criarAcesso` grava trim + minúsculas) — a comparação usa a mesma
+       normalização, senão "Rafael@x" nunca bateria com "rafael@x". No Kit a
+       comparação é literal (`u.login === login`). Senha continua literal. */
+    const loginN = login.trim().toLowerCase()
+    const dev = platform.devUsers.find(u => u.login === loginN && u.senha === senha)
+    if (dev) { onLogin('dev', null, dev.id); return }
+    for (const t of platform.tenants) { const u = t.users.find(u => u.login === loginN && u.senha === senha && u.status === 'ativo'); if (u) { onLogin('tenant', t.id, u.id); return } }
+    setError('Login ou senha inválidos')
+  }
+  const onEnterKey = (e: React.KeyboardEvent) => { if (e.key === 'Enter') submit() }
+  const sc = platform.siteConfig || {}
+  const gradienteSite = sc.cor1 && sc.cor2 ? `linear-gradient(160deg, ${sc.cor1}, ${sc.cor2})` : `linear-gradient(160deg, ${CORAL}, ${PURPLE} 40%, ${PURPLE_DEEP})`
+  const cartaoLogin = <div style={{ background: BRANCO, borderRadius: 18, padding: 20 }}>
+    <Field label="Login"><input style={inputStyle} value={login} onChange={e => setLogin(e.target.value)} onKeyDown={onEnterKey} placeholder="seu login" /></Field>
+    <Field label="Senha"><input style={inputStyle} type="password" value={senha} onChange={e => setSenha(e.target.value)} onKeyDown={onEnterKey} placeholder="sua senha" /></Field>
+    <button onClick={() => setForgotOpen(true)} style={{ ...linkBtnSmall, display: 'block', color: PURPLE, fontSize: 12, fontWeight: 700, padding: 0, marginBottom: 14 }}>Esqueci minha senha</button>
+    {error && <div style={{ fontSize: 12.5, color: RED, marginBottom: 10, fontWeight: 600 }}>{error}</div>}
+    <button style={{ ...primaryBtn, width: '100%', marginBottom: 8 }} onClick={submit}><KeyRound size={16} /> Entrar</button>
+    <button style={{ ...primaryBtn, width: '100%', marginBottom: 14, background: CORAL }} onClick={() => setSelfOpen(true)}><UserPlus size={16} /> Contratar um plano</button>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '4px 0 14px' }}><div style={{ flex: 1, height: 1, background: LINE }} /><span style={{ fontSize: 11, color: TXT3, fontWeight: 700 }}>ACESSO RÁPIDO PARA TESTE</span><div style={{ flex: 1, height: 1, background: LINE }} /></div>
+    <button style={{ ...secondaryBtn, width: '100%', marginBottom: 8 }} onClick={() => onLogin('tenant', platform.tenants[0].id)}>Entrar como empresa cliente (demo)</button>
+    <button style={{ ...secondaryBtn, width: '100%', marginBottom: 8 }} onClick={() => onLogin('dev', null)}><Building size={16} /> Entrar como Admin Morfo (demo)</button>
+    <button style={{ ...secondaryBtn, width: '100%' }} onClick={() => setAceitarConviteOpen(true)}><Mail size={16} /> Aceitar convite de usuário (demo)</button>
+  </div>
+  const rodapeInfo = <>
+    <div style={{ textAlign: 'center', fontSize: 11, color: 'rgba(255,255,255,0.6)', marginTop: 18 }}>Protótipo MVP · dados de demonstração · <strong>{KIT_BUILD}</strong></div>
+    <div style={{ textAlign: 'center', fontSize: 10.5, color: 'rgba(255,255,255,0.45)', marginTop: 4 }}>Desenvolvido por Morfo Sistemas</div>
+    {/* ADAPTAÇÃO (G52 — carimbo de build do produto, regra do Roteiro, não do
+        Kit): 3ª linha, mesmo estilo da 2ª, com o número real da entrega. O Kit
+        mostra só a versão do esqueleto (KIT_BUILD) porque não tem contador de
+        entrega; o MorfoFinP tem (Decisão 33) e o Rafael exige que ele apareça. */}
+    <div style={{ textAlign: 'center', fontSize: 10.5, color: 'rgba(255,255,255,0.45)', marginTop: 4 }}>{NOME_PRODUTO} {CARIMBO_BUILD}</div>
+  </>
+  const overlaysComuns = <>
+    {selfOpen && <ContratarPacoteFlow plans={(platform.plans || []).filter(p => !p.ficticio)} onClose={() => setSelfOpen(false)} onFinish={onSelfRegister} />}
+    {forgotOpen && <ForgotPasswordSheet platform={platform} onClose={() => setForgotOpen(false)} />}
+    {aceitarConviteOpen && <AceitarConviteSheet platform={platform} setPlatform={setPlatform} onClose={() => setAceitarConviteOpen(false)} onEntrar={(tenantId, userId) => { setAceitarConviteOpen(false); onLogin('tenant', tenantId, userId) }} />}
+  </>
+  const popupPaginaMobile = sitePageOpen && <div className="mloc-tela-cheia" style={{ ...TELA_CHEIA_BASE, background: PAPER, zIndex: 60, overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
+    <TopBar title={sitePageOpen.titulo} onBack={() => setSitePageOpen(null)} />
+    <div style={{ padding: 16 }}>
+      {sitePageOpen.imagemUri && <img src={sitePageOpen.imagemUri} alt="" style={{ width: '100%', maxHeight: 200, objectFit: 'cover', borderRadius: 14, marginBottom: 14 }} />}
+      <div style={{ fontSize: 14.5, color: TXT2, lineHeight: 1.8 }}>{renderRico(sitePageOpen.conteudo)}</div>
+      <div style={{ marginTop: 22, borderTop: `1px solid ${LINE}`, paddingTop: 12, fontSize: 11, color: TXT3 }}>{platform.siteConfig?.rodape ?? `${NOME_PRODUTO} · Desenvolvido por Morfo Sistemas`}</div>
+    </div>
+  </div>
+  if (areaWeb) {
+    const paginasNavWeb = paginasSiteComLogin(platform, true)
+    const paginaWebAtiva = paginasNavWeb.find(pg => pg.id === paginaAtivaWeb) || paginasNavWeb.find(pg => pg.id === SITE_LOGIN_PAGE_ID)
+    const abrirPaginaWeb = (pg: SitePage) => { if (pg.id === SITE_PLANOS_PAGE_ID) { setSelfOpen(true); setSiteVertAberto(false); return } setPaginaAtivaWeb(pg.id); setSiteVertAberto(false) }
+    const lp = loginPageCfgDe(sc)
+    const blocoLogosLogin = <BlocoLogosLogin platform={platform} lp={lp} sc={sc} />
+    return <div className="mloc-sempre-claro" style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: gradienteSite }}>
+      <div className="mloc-site-full" style={{ flexShrink: 0 }}>
+        <SiteHeaderWeb platform={platform} cfg={wcfg} />
+        {wcfg.modo === 'horizontal' && <SiteNavHorizontalWeb paginas={paginasNavWeb} ativa={paginaWebAtiva?.id} onOpen={abrirPaginaWeb} />}
+      </div>
+      <div className="mloc-site-full" style={{ flex: 1, minHeight: 0, display: 'flex', position: 'relative' }}>
+        {wcfg.modo === 'vertical' && <SiteNavVerticalWeb paginas={paginasNavWeb} ativa={paginaWebAtiva?.id} onOpen={abrirPaginaWeb}
+          fixado={siteVertFixado} podeAlternar={sitePodeAlternar} onSetFixado={setSiteVertFixadoUsuario}
+          onAbrir={() => setSiteVertAberto(true)} onHoverIn={siteHoverIn} onHoverOut={siteHoverOut} />}
+        <div style={{ flex: 1, minWidth: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: 28 }}>
+          {(!paginaWebAtiva || paginaWebAtiva.id === SITE_LOGIN_PAGE_ID)
+            ? <div style={{ width: '100%', maxWidth: 500, margin: '0 auto' }}>
+              {blocoLogosLogin}
+              {cartaoLogin}
+              {rodapeInfo}
             </div>
-          </div>
+            : <div style={{ width: '100%', maxWidth: 820, margin: '0 auto', background: BRANCO, borderRadius: 16, padding: '20px 22px' }}>
+              <h1 style={{ fontSize: 20, fontWeight: 800, color: INK, margin: '0 0 12px' }}>{paginaWebAtiva.titulo}</h1>
+              {paginaWebAtiva.imagemUri && <img src={paginaWebAtiva.imagemUri} alt="" style={{ width: '100%', maxHeight: 260, objectFit: 'cover', borderRadius: 14, marginBottom: 14 }} />}
+              <div style={{ fontSize: 14.5, color: TXT2, lineHeight: 1.8 }}>{renderRico(paginaWebAtiva.conteudo)}</div>
+              <div style={{ marginTop: 22, borderTop: `1px solid ${LINE}`, paddingTop: 12, fontSize: 11, color: TXT3 }}>{sc.rodape ?? `${NOME_PRODUTO} · Desenvolvido por Morfo Sistemas`}</div>
+            </div>}
         </div>
-      )}
-    </div>
-  )
-}
-
-// Login do N0 (08/09/2026, G59, regra 1: "login separa os níveis" —
-// administrador Morfo entra direto no painel N0 do Kit, com nada do
-// aplicativo de negócio). Mirror deliberado de `PaginaEntrar` acima (mesmo
-// fluxo criar/entrar/redefinir, mesma validação honesta de `type="text"` +
-// `inputMode="email"`, mesmo motivo — `type="email"` bloqueia submit em
-// silêncio), mas em CREDENCIAL SEPARADA (`src/kit/authN0.ts`) e com um
-// campo a mais (Nome) pra alimentar o registro de "Usuários Morfo" (ver
-// `UsuarioN0` em `db.ts`). Tema visualmente distinto (roxo escuro, cor do
-// painel N0) — sinaliza que esta não é a entrada normal do tenant.
-const N0_BG = '#201E28'
-const N0_ACCENT = '#8B7CF6'
-
-function PaginaEntrarN0() {
-  const config = useLiveQuery(() => db.configuracoes.get(1), [], CARREGANDO)
-  const temCredencial = config !== CARREGANDO && Boolean(config?.credencialEmailN0 && config?.credencialSenhaN0)
-
-  const [nome, setNome] = useState('')
-  const [email, setEmail] = useState('')
-  const [senha, setSenha] = useState('')
-  const [confirmarSenha, setConfirmarSenha] = useState('')
-  const [erro, setErro] = useState<string | null>(null)
-  const [processando, setProcessando] = useState(false)
-  const [processandoDemo, setProcessandoDemo] = useState(false)
-  const [mostrarRedefinir, setMostrarRedefinir] = useState(false)
-
-  async function salvar(e: FormEvent) {
-    e.preventDefault()
-    setErro(null)
-
-    if (!email.trim()) {
-      setErro('Preencha o e-mail.')
-      return
-    }
-    if (!email.includes('@')) {
-      setErro('Digite um e-mail válido (com @).')
-      return
-    }
-    if (senha.length < 4) {
-      setErro('A senha precisa ter pelo menos 4 caracteres.')
-      return
-    }
-
-    setProcessando(true)
-    try {
-      if (!temCredencial) {
-        if (senha !== confirmarSenha) {
-          setErro('As duas senhas precisam ser iguais.')
-          return
-        }
-        await criarAcessoN0(email, senha, nome)
-      } else {
-        const ok = await entrarN0(email, senha)
-        if (!ok) {
-          setErro('E-mail ou senha incorretos.')
-          return
-        }
-      }
-      // Sucesso: `sessaoAtivaN0` já foi gravado — `AppRoot.tsx` troca de
-      // tela sozinho (useLiveQuery reativo), nada mais a fazer aqui.
-    } finally {
-      setProcessando(false)
-    }
-  }
-
-  // Acesso demo/rápido do N0 — ver `entrarDemoN0()` em `authN0.ts` e a nota
-  // gêmea em `entrarSemSenha()` de `PaginaEntrar` acima (G44 regra 3).
-  async function entrarSemSenhaN0() {
-    setProcessandoDemo(true)
-    try {
-      await entrarDemoN0()
-    } finally {
-      setProcessandoDemo(false)
-    }
-  }
-
-  async function confirmarRedefinir() {
-    setProcessando(true)
-    await redefinirAcessoN0()
-    setMostrarRedefinir(false)
-    setNome('')
-    setEmail('')
-    setSenha('')
-    setConfirmarSenha('')
-    setErro(null)
-    setProcessando(false)
-  }
-
-  if (config === CARREGANDO) return null
-
-  return (
-    <div style={{ width: '100%', maxWidth: 360, margin: '0 auto' }}>
-      <div style={{ textAlign: 'center', marginBottom: 14 }}>
-        <span
-          style={{
-            fontSize: 10.5,
-            fontWeight: 800,
-            color: N0_ACCENT,
-            border: `1px solid ${N0_ACCENT}`,
-            borderRadius: 999,
-            padding: '3px 10px',
-          }}
-        >
-          Painel do administrador Morfo
-        </span>
-      </div>
-      <form
-        onSubmit={salvar}
-        style={{ background: N0_BG, borderRadius: 16, padding: 16, border: `1px solid ${N0_ACCENT}44` }}
-      >
-        <h2 style={{ marginTop: 0, marginBottom: 4, color: '#fff', fontSize: 16 }}>
-          {temCredencial ? 'Entrar como administrador' : 'Criar acesso de administrador'}
-        </h2>
-        <p style={{ color: '#9B96A8', fontSize: 11.5, marginTop: 0, marginBottom: 12 }}>
-          Este login leva direto ao painel N0 (tenants, financeiro, auditoria, parâmetros) — nunca ao
-          aplicativo de negócio.
-        </p>
-
-        {!temCredencial && (
-          <>
-            <label htmlFor="login-n0-nome" style={{ display: 'block', fontSize: 12.5, color: '#9B96A8', margin: '0 0 4px', fontWeight: 600 }}>
-              Nome
-            </label>
-            <input
-              id="login-n0-nome"
-              type="text"
-              autoComplete="name"
-              value={nome}
-              onChange={(e) => setNome(e.target.value)}
-              style={{ width: '100%', background: '#141319', border: `1px solid ${N0_ACCENT}44`, borderRadius: 10, padding: '10px 12px', color: '#fff', fontSize: 14 }}
-            />
-          </>
-        )}
-
-        <label htmlFor="login-n0-email" style={{ display: 'block', fontSize: 12.5, color: '#9B96A8', margin: '12px 0 4px', fontWeight: 600 }}>
-          E-mail
-        </label>
-        <input
-          id="login-n0-email"
-          type="text"
-          inputMode="email"
-          autoComplete="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          style={{ width: '100%', background: '#141319', border: `1px solid ${erro && (!email.trim() || !email.includes('@')) ? '#F5615C' : N0_ACCENT + '44'}`, borderRadius: 10, padding: '10px 12px', color: '#fff', fontSize: 14 }}
-        />
-
-        <label htmlFor="login-n0-senha" style={{ display: 'block', fontSize: 12.5, color: '#9B96A8', margin: '12px 0 4px', fontWeight: 600 }}>
-          Senha
-        </label>
-        <input
-          id="login-n0-senha"
-          type="password"
-          autoComplete={temCredencial ? 'current-password' : 'new-password'}
-          value={senha}
-          onChange={(e) => setSenha(e.target.value)}
-          style={{ width: '100%', background: '#141319', border: `1px solid ${erro && senha.length < 4 ? '#F5615C' : N0_ACCENT + '44'}`, borderRadius: 10, padding: '10px 12px', color: '#fff', fontSize: 14 }}
-        />
-
-        {!temCredencial && (
-          <>
-            <label htmlFor="login-n0-confirmar-senha" style={{ display: 'block', fontSize: 12.5, color: '#9B96A8', margin: '12px 0 4px', fontWeight: 600 }}>
-              Confirmar senha
-            </label>
-            <input
-              id="login-n0-confirmar-senha"
-              type="password"
-              autoComplete="new-password"
-              value={confirmarSenha}
-              onChange={(e) => setConfirmarSenha(e.target.value)}
-              style={{ width: '100%', background: '#141319', border: `1px solid ${erro && senha !== confirmarSenha ? '#F5615C' : N0_ACCENT + '44'}`, borderRadius: 10, padding: '10px 12px', color: '#fff', fontSize: 14 }}
-            />
-          </>
-        )}
-
-        {erro && <p style={{ color: '#F5615C', fontSize: 12.5, marginTop: 8, fontWeight: 600 }}>{erro}</p>}
-
-        <button
-          type="submit"
-          disabled={processando}
-          style={{ width: '100%', marginTop: 16, background: N0_ACCENT, border: 'none', borderRadius: 10, padding: 12, color: '#fff', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}
-        >
-          {processando ? 'Aguarde…' : temCredencial ? 'Entrar' : 'Criar acesso e entrar'}
-        </button>
-      </form>
-
-      {/* "ACESSO RÁPIDO PARA TESTE" (G60) — mesmo padrão exato da página N1
-          (ver `PaginaEntrar` acima), atalho próprio do N0. Retirar antes de
-          publicar (Backlog #030). */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '18px 0 10px' }}>
-        <div style={{ flex: 1, height: 1, background: `${N0_ACCENT}44` }} />
-        <span style={{ fontSize: 11, color: '#9B96A8', fontWeight: 700 }}>ACESSO RÁPIDO PARA TESTE</span>
-        <div style={{ flex: 1, height: 1, background: `${N0_ACCENT}44` }} />
-      </div>
-      <button
-        type="button"
-        disabled={processandoDemo}
-        onClick={entrarSemSenhaN0}
-        style={{
-          display: 'block',
-          width: '100%',
-          background: `${N0_ACCENT}22`,
-          border: `1px solid ${N0_ACCENT}`,
-          borderRadius: 10,
-          padding: 11,
-          color: '#fff',
-          fontWeight: 600,
-          fontSize: 13.5,
-          cursor: 'pointer',
-        }}
-      >
-        {processandoDemo ? (
-          'Aguarde…'
-        ) : (
-          <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-            <Building size={16} />
-            Entrar como Admin Morfo (demo)
-          </span>
-        )}
-      </button>
-
-      {temCredencial && (
-        <button
-          type="button"
-          onClick={() => setMostrarRedefinir(true)}
-          style={{ display: 'block', width: '100%', marginTop: 14, background: 'none', border: 'none', color: '#fff', fontSize: 12.5, textDecoration: 'underline', cursor: 'pointer' }}
-        >
-          Esqueceu a senha de administrador?
-        </button>
-      )}
-
-      {mostrarRedefinir && (
-        <div
-          onClick={() => setMostrarRedefinir(false)}
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 16px', zIndex: 50 }}
-        >
-          <div onClick={(e) => e.stopPropagation()} style={{ background: N0_BG, border: `1px solid ${N0_ACCENT}44`, borderRadius: 16, padding: 16, width: '100%', maxWidth: 420 }}>
-            <h2 style={{ marginTop: 0, color: '#fff', fontSize: 16 }}>Redefinir acesso de administrador</h2>
-            <p style={{ color: '#9B96A8', fontSize: 13.5 }}>
-              Sem backend, não existe recuperação de senha por e-mail — a única opção é cadastrar um
-              e-mail/senha novo agora. Isso não afeta a sessão nem os dados de nenhum tenant.
-            </p>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button
-                type="button"
-                style={{ flex: 1, background: 'none', border: `1px solid ${N0_ACCENT}44`, borderRadius: 10, padding: 12, color: '#fff', cursor: 'pointer', fontSize: 14 }}
-                onClick={() => setMostrarRedefinir(false)}
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                style={{ flex: 1, background: '#F5615C', border: '1px solid #F5615C', borderRadius: 10, padding: 12, color: '#fff', fontWeight: 600, cursor: 'pointer', fontSize: 14 }}
-                disabled={processando}
-                onClick={confirmarRedefinir}
-              >
-                {processando ? 'Aguarde…' : 'Redefinir e cadastrar de novo'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-// Página própria de Planos (G25: "diferente do site institucional, o site do
-// produto se estrutura em páginas separadas... Planos/Contratação só modelo
-// Completo") — antes era um modal em cima do Login, agora é uma página de
-// verdade, acessível pelo menu do cabeçalho mesmo sem estar logado.
-function PaginaPlanos({ onEscolher }: { onEscolher: () => void }) {
-  const planos = usePlanos()
-  return (
-    <div style={{ width: '100%', maxWidth: 480, margin: '0 auto' }}>
-      <h2 style={{ marginTop: 0, textAlign: 'center', color: '#fff' }}>Planos</h2>
-      {planos.length === 0 && (
-        <p style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12.5, textAlign: 'center' }}>
-          Nenhum plano cadastrado ainda pelo painel N0.
-        </p>
-      )}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {planos.map((p) => (
-          <div
-            key={p.id}
-            style={{
-              ...cardBrancoStyle,
-              border: `1.5px solid ${p.destaque ? COR_ROXA : COR_LINHA}`,
-              // Fundo SÓLIDO, nunca translúcido — este card fica direto sobre o
-              // gradiente da página (não sobre outro card escuro como no tema do
-              // ambiente logado), então um `rgba(...)` de baixa opacidade deixa o
-              // gradiente vazar por baixo e o texto escuro perde contraste (mesma
-              // classe de bug já documentada neste arquivo pra fundo translúcido).
-              background: p.destaque ? '#F3EDFA' : '#fff',
-            }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
-              <strong style={{ fontSize: 15, color: COR_INK }}>{p.nome}</strong>
-              <span style={{ fontSize: 15, fontWeight: 800, color: COR_ROXA, whiteSpace: 'nowrap' }}>
-                {p.valorMensal > 0 ? `R$ ${p.valorMensal.toFixed(2)}/mês` : 'Grátis'}
+        {wcfg.modo === 'vertical' && !siteVertFixado && siteVertAberto && <div onClick={() => setSiteVertAberto(false)} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.35)', zIndex: 56, display: 'flex' }}>
+          <div onClick={e => e.stopPropagation()} onMouseEnter={siteHoverIn} onMouseLeave={siteHoverOut} style={{ width: 240, background: `linear-gradient(rgba(0,0,0,0.22), rgba(0,0,0,0.22)), ${gradienteSite}`, height: '100%', padding: '14px 10px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2, boxShadow: '4px 0 16px rgba(0,0,0,0.35)', borderRight: '1px solid rgba(255,255,255,0.14)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 6px 10px' }}>
+              <span style={{ fontSize: 11, fontWeight: 900, letterSpacing: 0.5, color: 'rgba(255,255,255,0.7)' }}>MENU DO SITE</span>
+              <span style={{ display: 'flex', gap: 4 }}>
+                {sitePodeAlternar && <button onClick={() => { setSiteVertFixadoUsuario(true); setSiteVertAberto(false) }} style={{ background: 'none', border: 'none', borderRadius: 8, cursor: 'pointer', padding: 4, color: 'rgba(255,255,255,0.7)', fontSize: 10, fontWeight: 800 }}>FIXAR</button>}
+                <button onClick={() => setSiteVertAberto(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={16} color="#fff" /></button>
               </span>
             </div>
-            <ul style={{ margin: '8px 0 0', paddingLeft: 18 }}>
-              {p.funcionalidades.map((f) => (
-                <li key={f} style={{ fontSize: 12.5, color: COR_TXT2 }}>
-                  {f}
-                </li>
-              ))}
-            </ul>
-            <button
-              type="button"
-              onClick={onEscolher}
-              style={{
-                marginTop: 12,
-                width: '100%',
-                background: p.destaque ? COR_ROXA : 'none',
-                color: p.destaque ? '#fff' : COR_ROXA,
-                border: `1px solid ${COR_ROXA}`,
-                borderRadius: 10,
-                padding: 10,
-                fontWeight: 700,
-                fontSize: 13.5,
-                cursor: 'pointer',
-              }}
-            >
-              Criar acesso com este plano
-            </button>
+            {paginasNavWeb.map(pg => <button key={pg.id} onClick={() => abrirPaginaWeb(pg)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px', borderRadius: 10, border: 'none', background: paginaWebAtiva?.id === pg.id ? 'rgba(255,255,255,0.14)' : 'transparent', color: '#fff', fontWeight: 700, fontSize: 13.5, cursor: 'pointer', textAlign: 'left' }}><FileText size={15} /> {pg.titulo}</button>)}
           </div>
-        ))}
+        </div>}
       </div>
-      <p style={{ color: 'rgba(255,255,255,0.75)', fontSize: 11.5, marginTop: 12, textAlign: 'center' }}>
-        Placeholder: nome, preço e funcionalidades ainda não são reais (depende de definição
-        comercial + backend, Backlog #028) — depois de entrar, dá pra trocar de plano em Minha
-        Assinatura.
-      </p>
+      {overlaysComuns}
     </div>
-  )
+  }
+  const lpMobile = loginPageCfgDe(sc, 'loginPageMobile')
+  return <div className="mloc-sempre-claro" style={{ minHeight: '100%', maxHeight: '100%', overflowY: 'auto', WebkitOverflowScrolling: 'touch', display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', padding: 28, background: gradienteSite }}>
+    <div style={{ marginBottom: paginasSite.length > 0 && siteMenuTipo === 'fixo' ? 14 : 24 }}>
+      <BlocoLogosLogin platform={platform} lp={lpMobile} sc={sc} />
+    </div>
+    {paginasSite.length > 0 && siteMenuTipo === 'fixo' && <div style={{ margin: '-10px -28px 24px' }}>
+      <SiteNavHorizontalWeb paginas={paginasSite} ativa={sitePageOpen?.id} onOpen={abrirPaginaMobile} />
+    </div>}
+    {cartaoLogin}
+    {rodapeInfo}
+    {overlaysComuns}
+    {popupPaginaMobile}
+    {paginasSite.length > 0 && siteMenuTipo === 'cortina' && <>
+      <button onClick={() => setCortinaAberta(true)} title="Menu do site" style={{ position: 'fixed', top: 100, left: 'calc(50% - 215px)', zIndex: 55, border: 'none', background: 'rgba(255,255,255,0.22)', color: '#fff', borderRadius: '0 12px 12px 0', padding: '12px 6px', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}><List size={16} /><span style={{ fontSize: 8.5, fontWeight: 800, writingMode: 'vertical-rl' }}>MENU</span></button>
+      {(cortinaAberta || cortinaFixada) && <div onClick={() => { if (!cortinaFixada) setCortinaAberta(false) }} style={{ position: 'fixed', top: 0, bottom: 0, left: 0, right: 0, margin: '0 auto', width: '100%', maxWidth: 'var(--mloc-maxw, 430px)', background: cortinaFixada ? 'transparent' : 'rgba(0,0,0,0.45)', zIndex: 56, display: 'flex', pointerEvents: cortinaFixada ? 'none' : 'auto' }}>
+        <div onClick={e => e.stopPropagation()} style={{ width: 220, maxWidth: '75%', background: `linear-gradient(rgba(0,0,0,0.22), rgba(0,0,0,0.22)), ${gradienteSite}`, height: '100%', padding: '14px 10px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2, pointerEvents: 'auto', boxShadow: '4px 0 16px rgba(0,0,0,0.35)', borderRight: '1px solid rgba(255,255,255,0.14)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 6px 10px' }}>
+            <span style={{ fontSize: 11, fontWeight: 900, letterSpacing: 0.5, color: 'rgba(255,255,255,0.7)' }}>MENU DO SITE</span>
+            <span style={{ display: 'flex', gap: 4 }}>
+              <button onClick={() => setCortinaFixada(v => !v)} style={{ background: cortinaFixada ? 'rgba(255,255,255,0.16)' : 'none', border: 'none', borderRadius: 8, cursor: 'pointer', padding: 4, color: 'rgba(255,255,255,0.85)', fontSize: 10, fontWeight: 800 }}>{cortinaFixada ? 'FIXADO' : 'FIXAR'}</button>
+              <button onClick={() => { setCortinaFixada(false); setCortinaAberta(false) }} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={16} color="#fff" /></button>
+            </span>
+          </div>
+          {paginasSite.map(pg => <button key={pg.id} onClick={() => { abrirPaginaMobile(pg); if (!cortinaFixada) setCortinaAberta(false) }} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '10px', borderRadius: 10, border: 'none', background: sitePageOpen?.id === pg.id ? 'rgba(255,255,255,0.14)' : 'transparent', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', textAlign: 'left' }}><FileText size={14} /> {pg.titulo}</button>)}
+        </div>
+      </div>}
+    </>}
+  </div>
 }
 
-// Perguntas frequentes (G25) — conteúdo escrito a partir do que já está
-// decidido/documentado do MorfoFinP (Decisões.md, Estado Atual.md), não
-// texto de marketing inventado: a Biblioteca do Produto ainda não tem
-// argumentos de venda formais (Comercial/Marketing), então esta página fica
-// só com o que é FATO sobre o produto hoje — pendência de conteúdo comercial
-// de verdade registrada em Decisões.md (G25/2d: nunca bloqueia, só registra).
-const FAQ_ITENS: { pergunta: string; resposta: string }[] = [
-  {
-    pergunta: 'O que é o MorfoFinP?',
-    resposta:
-      'Um app de controle financeiro pessoal: resumo do mês, metas por categoria, lançamentos, carteira de contas e planejamento — derivado de uma planilha que já era usada no dia a dia.',
-  },
-  {
-    pergunta: 'Meus dados ficam salvos onde?',
-    resposta:
-      'Direto no seu navegador/dispositivo (armazenamento local), sem servidor externo por trás ainda. Isso significa que os dados não saem do seu aparelho por conta própria.',
-  },
-  {
-    pergunta: 'Preciso pagar alguma coisa?',
-    resposta:
-      'Os planos mostrados na página de Planos ainda são um rascunho (placeholder) — o preço e o que cada um inclui de verdade ainda não foram definidos.',
-  },
-  {
-    pergunta: 'Dá pra usar no celular?',
-    resposta: 'Sim, o app funciona no navegador do celular ou do computador, sem precisar instalar nada de uma loja de aplicativos.',
-  },
-]
+/* =====================================================================
+   5. ADAPTADOR MorfoFinP — "configuração do produto por cima" (G44 regra 3)
+   ===================================================================== */
 
-function PaginaFAQ() {
-  return (
-    <div style={{ width: '100%', maxWidth: 560, margin: '0 auto' }}>
-      <h2 style={{ marginTop: 0, textAlign: 'center', color: '#fff' }}>Perguntas frequentes</h2>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {FAQ_ITENS.map((item) => (
-          <div key={item.pergunta} style={cardBrancoStyle}>
-            <strong style={{ fontSize: 13.5, color: COR_INK }}>{item.pergunta}</strong>
-            <p style={{ fontSize: 12.5, margin: '6px 0 0', color: COR_TXT2 }}>{item.resposta}</p>
-          </div>
-        ))}
-      </div>
-      <p style={{ color: 'rgba(255,255,255,0.75)', fontSize: 11.5, marginTop: 12, textAlign: 'center' }}>
-        Placeholder: perguntas escritas a partir do que já está decidido sobre o produto — sem
-        conteúdo comercial (Marketing/Vendas) definido ainda na Biblioteca do Produto.
-      </p>
-    </div>
-  )
+// Formata o número do WhatsApp guardado como "5511986897908" pra "(11) 98689-7908",
+// o mesmo formato que as páginas padrão do Kit usam ("(11) 4000-0000").
+function formatarTelefoneBR(numero: string): string {
+  const d = numero.replace(/\D/g, '').replace(/^55/, '')
+  if (d.length === 11) return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`
+  if (d.length === 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`
+  return numero
 }
+
+// Perguntas frequentes (G25) — a página existia no site anterior do produto
+// (Decisão 27) e é PRESERVADA como configuração (`platform.sitePages`), no
+// mecanismo de páginas do próprio Kit — nunca mais como uma tela própria.
+// Conteúdo idêntico ao que já estava no ar (fatos do produto, sem marketing
+// inventado), só no formato de texto rico do Kit (`renderRico`: **negrito**).
+const CONTEUDO_FAQ = [
+  '**O que é o MorfoFinP?**\nUm app de controle financeiro pessoal: resumo do mês, metas por categoria, lançamentos, carteira de contas e planejamento — derivado de uma planilha que já era usada no dia a dia.',
+  '**Meus dados ficam salvos onde?**\nDireto no seu navegador/dispositivo (armazenamento local), sem servidor externo por trás ainda. Isso significa que os dados não saem do seu aparelho por conta própria.',
+  '**Preciso pagar alguma coisa?**\nOs planos mostrados na página de Planos ainda são um rascunho (placeholder) — o preço e o que cada um inclui de verdade ainda não foram definidos.',
+  '**Dá pra usar no celular?**\nSim, o app funciona no navegador do celular ou do computador, sem precisar instalar nada de uma loja de aplicativos.',
+].join('\n\n')
+
+const CARREGANDO = Symbol('carregando')
 
 export default function LoginView() {
-  const [pagina, setPagina] = useState<PaginaSite>('entrar')
-  const { seloEcossistema, whatsappNumero, whatsappMensagemPadrao } = useMarcaSite()
+  const config = useLiveQuery(() => db.configuracoes.get(1), [], CARREGANDO)
+  const planosDexie = usePlanos()
+  const { whatsappNumero, whatsappMensagemPadrao } = useMarcaSite()
+  const areaWeb = useSimulacaoResolucao() === 'web'
 
-  return (
-    <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column', background: GRADIENTE_SITE }}>
-      <CabecalhoSite pagina={pagina} onNavegar={setPagina} selo={seloEcossistema ?? 'parte do ecossistema Morfo'} />
-      <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '24px 20px' }}>
-        {pagina === 'entrar' && <PaginaEntrar onNavegar={setPagina} />}
-        {pagina === 'planos' && <PaginaPlanos onEscolher={() => setPagina('entrar')} />}
-        {pagina === 'faq' && <PaginaFAQ />}
-        {pagina === 'entrarN0' && <PaginaEntrarN0 />}
-      </div>
-      <RodapeSite whatsappNumero={whatsappNumero} whatsappMensagemPadrao={whatsappMensagemPadrao} />
-    </div>
-  )
+  // Aguardando a 1ª leitura do Dexie — `config === undefined` NÃO entra aqui
+  // (é o caso real de banco sem credencial nenhuma); só o sentinela distingue
+  // "carregando" de "vazio de verdade" (bug real da Etapa 8, ver histórico).
+  if (config === CARREGANDO) return null
+
+  // --- platform.devUsers: administrador Morfo (N0). Sem credencial N0 gravada
+  // ainda, vale o usuário padrão do Kit (`generatePlatform`, L646:
+  // login "morfomod", senha "306583", e-mail projetos.morfo@gmail.com — G55,
+  // mesmo dado do MorfoLoc); com credencial gravada, ela manda.
+  const devUsers: KitUser[] = config?.credencialEmailN0 && config?.credencialSenhaN0
+    ? [{ id: 'n0', name: 'Admin Morfo', login: config.credencialEmailN0, senha: config.credencialSenhaN0, email: config.credencialEmailN0 }]
+    : [{ id: 'n0', name: N0_PADRAO_KIT.nome, login: N0_PADRAO_KIT.login, senha: N0_PADRAO_KIT.senha, email: N0_PADRAO_KIT.email }]
+  // --- platform.tenants: a empresa cliente (N1) é o próprio usuário do app
+  // (1 tenant, `t0` — mesmo id usado por DevApp → "Entrar como este tenant").
+  // O usuário só existe depois de "Contratar um plano" (ou do atalho demo).
+  const tenantUsers: KitUser[] = config?.credencialEmail && config?.credencialSenha
+    ? [{ id: 'u0', name: config.credencialEmail, login: config.credencialEmail, senha: config.credencialSenha, email: config.credencialEmail, status: 'ativo' }]
+    : []
+  // --- platform.plans: catálogo real do N0 (Gerenciar Planos, Dexie), na
+  // forma que o Kit lê (`name`/`monthlyValue`/`features`).
+  const plans: KitPlan[] = planosDexie.map(p => ({ id: String(p.id), name: p.nome, monthlyValue: p.valorMensal, destaque: p.destaque, features: p.funcionalidades }))
+  // --- platform.sitePages: as 2 páginas padrão do Kit (Sobre a Morfo,
+  // Contato — G55) + FAQ do produto (config preservada, ver CONTEUDO_FAQ).
+  // Configuração do produto por cima: o telefone-exemplo do Kit
+  // ("(11) 4000-0000") vira o WhatsApp de suporte real do MorfoFinP (Decisão
+  // 20 — número escolhido pelo Rafael; editável em N0 → Parâmetros → Marca) e
+  // a página Contato ganha o link direto — é assim que o canal de suporte
+  // do site deslogado continua funcionando dentro da estrutura do Kit.
+  const numeroSuporte = whatsappNumero || linkSuporteWhatsApp().match(/wa\.me\/(\d+)/)?.[1] || ''
+  const telefoneSuporte = numeroSuporte ? formatarTelefoneBR(numeroSuporte) : '(11) 4000-0000'
+  const linkWhats = linkSuporteWhatsApp(whatsappMensagemPadrao, whatsappNumero)
+  const sitePages: SitePage[] = [
+    ...sitePagesPadrao().map(pg => ({ ...pg, conteudo: (pg.conteudo || '').replace('(11) 4000-0000', telefoneSuporte) + (pg.id === 'contato' ? `\n\n[Falar no WhatsApp](${linkWhats})` : '') })),
+    { id: 'faq', titulo: 'Perguntas frequentes', visivel: true, conteudo: CONTEUDO_FAQ },
+  ]
+  const platform: KitPlatform = {
+    devUsers,
+    tenants: [{ id: 't0', companyName: NOME_PRODUTO, users: tenantUsers }],
+    plans,
+    sitePages,
+    // Identidade do produto (G55: "a única coisa que muda por produto") — pelo
+    // mecanismo de branding do próprio Kit: wordmark do MorfoFinP no lugar do
+    // "morfoMod" de exemplo; logos Morfo continuam as do Kit.
+    branding: { produtoExterna: produtoLogoUrl, produtoTopo: produtoLogoUrl },
+  }
+
+  // AceitarConviteSheet só chama setPlatform quando existe convite pendente
+  // (`status: "pendente_aprovacao"` com token) — o MorfoFinP não gera convite
+  // (app de 1 usuário, sem backend), então a folha sempre cai no EmptyState
+  // do Kit e este setter nunca é acionado. Fica como no-op declarado.
+  const setPlatform: Dispatch<SetStateAction<KitPlatform>> = () => {}
+
+  // onLogin do Kit → sessões do produto (persistidas no Dexie; `AppRoot.tsx`
+  // troca de tela sozinho via useLiveQuery). 'dev' = N0, 'tenant' = N1.
+  // Sem credencial gravada ainda (1º uso / atalho demo), `entrarDemo*()` cria
+  // a credencial — N0 nasce com os valores padrão do Kit (G55).
+  const onLogin = (level: LoginLevel) => {
+    if (level === 'dev') void entrarDemoN0()
+    else void entrarDemo()
+  }
+  // onSelfRegister do Kit → "Contratar um plano" vira a credencial N1 do
+  // produto (login/senha escolhidos no passo 2) + plano contratado (Minha
+  // Assinatura). Os demais dados do passo 2 (empresa, telefone, e-mail,
+  // endereço fiscal) são coletados pelo fluxo do Kit mas, sem backend/tenant
+  // real (Backlog #028), não têm onde ficar — pendência nomeada na Decisão 48.
+  const onSelfRegister = (payload: SelfRegisterPayload) => {
+    void (async () => {
+      const planoId = payload.planoContratado ? Number(payload.planoContratado.id) : NaN
+      if (!Number.isNaN(planoId)) await salvarPlanoId(planoId)
+      await criarAcesso(payload.login, payload.senha)
+    })()
+  }
+
+  // Raiz: no Kit, `App()` (L7460-L7461) envolve o Login numa coluna com
+  // `maxWidth: var(--mloc-maxw)` (430px mobile / 100% web) e a fonte do
+  // esqueleto. Aqui a coluna já é o `#root` do produto (480px, Etapa 4 — mesma
+  // adaptação registrada na Decisão 37 pro botão de área simulada), então só
+  // a variável e a fonte são declaradas, com o valor do produto.
+  return <div style={{ height: '100%', width: '100%', display: 'flex', flexDirection: 'column', position: 'relative', fontFamily: "ui-sans-serif, -apple-system, 'Segoe UI', Roboto, sans-serif", ['--mloc-maxw' as string]: areaWeb ? '100%' : '480px' } as CSSProperties}>
+    <LoginViewKit platform={platform} setPlatform={setPlatform} areaWeb={areaWeb} onLogin={onLogin} onSelfRegister={onSelfRegister} />
+  </div>
 }

@@ -51,17 +51,27 @@ export async function sairN0(): Promise<void> {
   await salvarConfiguracaoIcones({ sessaoAtivaN0: false })
 }
 
+// Usuário administrador Morfo PADRÃO do Kit (`generatePlatform`, L646 do
+// `Kit de Estrutura Mínima (Morfo) - esqueleto-morfo.jsx`, 09/09/2026):
+// `{ name: "Admin Morfo", login: "morfomod", senha: "306583", email:
+// "projetos.morfo@gmail.com" }`. G55: parâmetro/dado-padrão do esqueleto vem
+// com o MESMO valor do MorfoLoc — antes desta rodada o demo N0 nascia com
+// "admin@morfo.local"/"demo123", valor inventado aqui (Decisão 48).
+export const N0_PADRAO_KIT = { nome: 'Admin Morfo', login: 'morfomod', senha: '306583', email: 'projetos.morfo@gmail.com' } as const
+
 // Acesso demo/rápido do N0, sem digitar credencial — mesma lógica e mesmo
 // motivo de `entrarDemo()` (N1, ver `auth.ts`), G44 regra 3 / Decisão 31 /
 // Lição 16. Se já existe credencial N0 salva, só reativa a sessão; senão,
-// cria uma credencial demo fixa (e já registra o administrador demo em
-// "Usuários Morfo", via `criarAcessoN0`).
+// grava como credencial o usuário padrão do Kit (e já registra o
+// administrador em "Usuários Morfo", via `criarAcessoN0`) — é o mesmo
+// caminho que o botão "Entrar" do Login segue quando a pessoa digita
+// "morfomod"/"306583" num banco ainda sem credencial N0.
 export async function entrarDemoN0(): Promise<void> {
   const atual = await db.configuracoes.get(1)
   if (atual?.credencialEmailN0) {
     await salvarConfiguracaoIcones({ sessaoAtivaN0: true })
   } else {
-    await criarAcessoN0('admin@morfo.local', 'demo123', 'Admin Morfo (demo)')
+    await criarAcessoN0(N0_PADRAO_KIT.login, N0_PADRAO_KIT.senha, N0_PADRAO_KIT.nome)
   }
 }
 
