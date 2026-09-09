@@ -13,6 +13,7 @@ import { sairN0 } from './authN0'
 import { useTodosPlanos, criarPlano, atualizarPlano, inativarPlano, reativarPlano, type Plano } from './planos'
 import { useMarcaSite, salvarMarcaSite } from '../configuracaoIcones'
 import SiteParametrosN0 from './SiteParametrosN0'
+import RodapeAbas from './RodapeAbas'
 
 // Painel N0 ("Morfo/dev") — camada de administração da plataforma, adaptada
 // do Kit de Estrutura Mínima Morfo (`DevApp`, seção 2). Roteiro de
@@ -709,41 +710,9 @@ export default function DevApp({ onEntrarComoTenant }: { onEntrarComoTenant: () 
         {aba === 'parametros' && <AbaParametros />}
       </div>
 
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          borderTop: '1px solid rgba(255,255,255,0.08)',
-          background: DEV_BG,
-          padding: '6px 4px calc(env(safe-area-inset-bottom, 6px) + 6px)',
-          flexShrink: 0,
-        }}
-      >
-        {ABAS.map(({ key, label, Icone }) => {
-          const ativo = aba === key
-          return (
-            <button
-              key={key}
-              type="button"
-              onClick={() => setAba(key)}
-              style={{
-                flex: 1,
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: 3,
-                border: 'none',
-                background: 'transparent',
-                cursor: 'pointer',
-                padding: '7px 2px',
-              }}
-            >
-              <Icone width={20} height={20} color={ativo ? DEV_ACCENT : '#7A7686'} strokeWidth={ativo ? 2.4 : 2} />
-              <span style={{ fontSize: 9.5, fontWeight: 700, color: ativo ? DEV_ACCENT : '#7A7686' }}>{label}</span>
-            </button>
-          )
-        })}
-      </div>
+      {/* Rodapé extraído pra `RodapeAbas.tsx` (Decisão 50) — mesmos valores de
+          sempre; o N1 usa a mesma peça. */}
+      <RodapeAbas abas={ABAS} ativa={aba} onTrocar={setAba} />
     </div>
   )
 }

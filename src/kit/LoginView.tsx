@@ -455,10 +455,10 @@ export default function LoginView() {
 
   // Raiz: no Kit, `App()` (L7460-L7461) envolve o Login numa coluna com
   // `maxWidth: var(--mloc-maxw)` (430px mobile / 100% web) e a fonte do
-  // esqueleto. Aqui a coluna já é o `#root` do produto (480px, Etapa 4 — mesma
-  // adaptação registrada na Decisão 37 pro botão de área simulada), então só
-  // a variável e a fonte são declaradas, com o valor do produto.
-  return <div style={{ height: '100%', width: '100%', display: 'flex', flexDirection: 'column', position: 'relative', fontFamily: "ui-sans-serif, -apple-system, 'Segoe UI', Roboto, sans-serif", ['--mloc-maxw' as string]: areaWeb ? '100%' : '480px' } as CSSProperties}>
+  // esqueleto. Aqui a coluna já é o `#root` do produto (430px desde a
+  // Decisão 50 — o mesmo valor do Kit), então só a variável e a fonte são
+  // declaradas.
+  return <div style={{ height: '100%', width: '100%', display: 'flex', flexDirection: 'column', position: 'relative', fontFamily: "ui-sans-serif, -apple-system, 'Segoe UI', Roboto, sans-serif", ['--mloc-maxw' as string]: areaWeb ? '100%' : '430px' } as CSSProperties}>
     <LoginViewKit platform={platform} setPlatform={setPlatform} areaWeb={areaWeb} onLogin={onLogin} onSelfRegister={onSelfRegister} />
   </div>
 }

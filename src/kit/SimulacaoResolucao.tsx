@@ -78,7 +78,16 @@ export function SimulacaoResolucaoFrame({ children }: { children: ReactNode }) {
           (Backlog #030)
         </div>
       )}
-      <div key="conteudo" style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+      {/* Decisão 50 (09/09/2026, bug real): este div era `display: block` com
+          `overflow: auto` — virou ELE o contêiner de rolagem do app inteiro,
+          no lugar do `<main>` (`flex: 1; overflow-y: auto` só funciona com o
+          pai em flex column). Efeito: em Lançamentos o `<main>` crescia até
+          5.600px, a lista passava por cima do rodapé (sumia, só aparecia
+          rolando até o fim) e em Carteira sobrava espaço vazio abaixo do
+          rodapé. `display: flex; flexDirection: column` devolve ao `<main>` o
+          papel de único contêiner de rolagem (como era antes da Decisão 37).
+          `simulacao-conteudo`: sem barra de rolagem visível (ver index.css). */}
+      <div key="conteudo" className="simulacao-conteudo" style={{ flex: 1, minHeight: 0, overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
         {children}
       </div>
     </div>
@@ -100,9 +109,15 @@ export function FerramentasTesteFlutuantes({ onAbrirFerramentaData }: { onAbrirF
     salvarSimulacaoResolucao(web ? undefined : 'web')
   }
 
+  // Decisão 51 (09/09/2026, Backlog 031 — decisão do Rafael: "sobe pra cima do
+  // rodapé"): o Kit usa `bottom: 8` porque as ferramentas ficam no rodapé da
+  // moldura, fora de qualquer barra de abas. Aqui a barra do N0/N1 mede a
+  // própria altura e publica `--rodape-altura` (ver `RodapeAbas.tsx`); no
+  // Login (sem barra) a variável é 0 e o botão fica nos mesmos 8px do Kit.
+  // ADAPTAÇÃO registrada — único valor que muda em relação ao Kit.
   const base: React.CSSProperties = {
     position: 'fixed',
-    bottom: 8,
+    bottom: 'calc(8px + var(--rodape-altura, 0px))',
     zIndex: 90,
     width: 30,
     height: 30,
@@ -123,7 +138,7 @@ export function FerramentasTesteFlutuantes({ onAbrirFerramentaData }: { onAbrirF
         onClick={alternarArea}
         title={
           web
-            ? 'Ferramenta de teste MVP: voltar pra largura normal de produção (~480px)'
+            ? 'Ferramenta de teste MVP: voltar pra largura normal de produção (430px)'
             : 'Ferramenta de teste MVP: alternar pra área simulada WEB (100% da largura do navegador)'
         }
         style={{ ...base, left: 12, background: web ? '#f59e0b' : 'rgba(0,0,0,0.35)' }}

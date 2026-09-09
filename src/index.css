@@ -30,13 +30,20 @@ body {
 #root {
   display: flex;
   flex-direction: column;
-  max-width: 480px;
+  /* 430px = valor do Kit de Estrutura Mínima (`--mloc-maxw`, `App()` L7460).
+     Era 480px desde a Etapa 4; Decisão 50 (09/09/2026): Rafael pediu pra
+     "diminuir a área como na imagem" do Kit — vale pro app inteiro (Login,
+     N0, N1), mesma coluna do MorfoLoc (G55). */
+  max-width: 430px;
   margin: 0 auto;
   min-height: 100%;
 }
 
 main {
   flex: 1;
+  /* min-height: 0 — sem isso o item flex não encolhe abaixo do conteúdo e
+     nunca rola (Decisão 50, junto do conserto em SimulacaoResolucao.tsx). */
+  min-height: 0;
   /* Padding de topo removido (01/09/2026, rodada seguinte — cabeçalho fixo,
      ponto 5) — quem cria o respiro no topo agora é `.cabecalho-fixo`
      (padding próprio), não o `<main>`, porque o cabeçalho precisa ficar
@@ -174,26 +181,21 @@ nav.rodape {
   border-top: 1px solid var(--borda);
 }
 
-nav.rodape button {
-  flex: 1;
-  text-align: center;
-  /* 04/09/2026, rodada seguinte (F-11 da revisão de UI): medido em 390px
-     (mobile), a altura tocável do botão dava 42px — abaixo da referência de
-     ~44px pra alvo de toque confortável (item 17/31 da régua de revisão).
-     `min-height` garante o piso sem mudar a aparência em telas largas (onde
-     o mouse não precisa do mesmo respiro). */
-  min-height: 44px;
-  padding: 14px 0 calc(14px + env(safe-area-inset-bottom));
-  background: none;
-  border: none;
-  color: var(--texto-fraco);
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-}
+/* Decisão 50 (09/09/2026): o markup/estilo dos botões do rodapé mora em
+   `src/kit/RodapeAbas.tsx` (mesma peça do N0, ícone + texto) — as regras
+   antigas de `nav.rodape button`/`.ativo` (texto puro, 12px, azul) saíram. */
 
-nav.rodape button.ativo {
-  color: var(--azul);
+/* Contêiner de rolagem da moldura de simulação e do site deslogado (Kit):
+   rolagem funciona, barra invisível — como no MorfoLoc (Decisão 50). */
+.simulacao-conteudo,
+.simulacao-conteudo .mloc-sempre-claro,
+.simulacao-conteudo .mloc-sempre-claro * {
+  scrollbar-width: none;
+}
+.simulacao-conteudo::-webkit-scrollbar,
+.simulacao-conteudo .mloc-sempre-claro::-webkit-scrollbar,
+.simulacao-conteudo .mloc-sempre-claro *::-webkit-scrollbar {
+  display: none;
 }
 
 /* 04/09/2026, mesmo dia (pedido do Rafael): "Lançamentos" fica no meio das 5
@@ -329,7 +331,7 @@ nav.rodape button.ativo {
   border-radius: 16px;
   padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
   width: 100%;
-  max-width: 480px;
+  max-width: 430px; /* coluna do app, Decisão 50 */
   max-height: 78vh;
   overflow-y: auto;
 }
@@ -372,7 +374,7 @@ nav.rodape button.ativo {
 /* Botão flutuante de incluir lançamento */
 .botao-flutuante {
   position: fixed;
-  right: max(16px, calc((100vw - 480px) / 2 + 16px));
+  right: max(16px, calc((100vw - 430px) / 2 + 16px));
   bottom: 84px;
   width: 56px;
   height: 56px;
@@ -758,7 +760,7 @@ nav.rodape button.ativo {
 .botao-engrenagem {
   position: fixed;
   top: 12px;
-  right: max(16px, calc((100vw - 480px) / 2 + 16px));
+  right: max(16px, calc((100vw - 430px) / 2 + 16px));
   /* 04/09/2026, rodada seguinte (F-11): 40×40px medido no mobile, um pouco
      abaixo da referência de toque (~44px). */
   width: 44px;
@@ -782,7 +784,7 @@ nav.rodape button.ativo {
   /* 4px de respiro abaixo do botão de engrenagem, que cresceu de 40 pra
      44px nesta mesma rodada (F-11) — 12px (top do botão) + 44px + 4px. */
   top: 60px;
-  right: max(16px, calc((100vw - 480px) / 2 + 16px));
+  right: max(16px, calc((100vw - 430px) / 2 + 16px));
   background: var(--bg-elevado);
   border: 1px solid var(--borda);
   border-radius: 12px;

@@ -1,0 +1,87 @@
+import { useLayoutEffect, useRef, type ComponentType, type ReactNode, type SVGProps } from 'react'
+
+// Barra de abas do rodapé — UMA peça só pra N0 e N1 (09/09/2026, Decisão 50).
+// Pedido do Rafael: "quero no N1 a mesma configuração padrão de menus
+// principais no rodapé igual ao N0, referência é o N0 com ícones e texto".
+// Este componente é o rodapé que o `DevApp` (N0) já tinha (ícone Heroicons
+// 20px + rótulo 9.5px/700, cor de destaque no ativo), extraído sem mudar
+// nenhum valor — o N0 passou a usar daqui, e o N1 (`App.tsx` → `Rodape`)
+// também, com as abas dele. Mesmo código = mesma aparência, sem 2ª cópia.
+
+export const RODAPE_ACENTO = '#8B7CF6' // DEV_ACCENT do DevApp
+export const RODAPE_INATIVO = '#7A7686'
+export const RODAPE_FUNDO = '#141319' // DEV_BG do DevApp
+
+export interface AbaRodape<K extends string> {
+  key: K
+  label: string
+  Icone: ComponentType<SVGProps<SVGSVGElement>>
+  // Conteúdo extra abaixo do rótulo (ex.: marca de "tela principal" do N1) —
+  // opcional, o N0 não usa.
+  extra?: ReactNode
+  dataTour?: string
+}
+
+export default function RodapeAbas<K extends string>({ abas, ativa, onTrocar, className }: { abas: AbaRodape<K>[]; ativa: K; onTrocar: (k: K) => void; className?: string }) {
+  const ref = useRef<HTMLElement>(null)
+  // Publica a altura real da barra em `--rodape-altura` (Decisão 51): os
+  // botões flutuantes de teste (`SimulacaoResolucao.tsx`) ficam logo acima
+  // dela em vez de cobrir a 1ª/última aba (Backlog 031). Medida de verdade
+  // (`getBoundingClientRect`), não um número fixo — inclui safe-area do
+  // celular. Zera ao desmontar (Login não tem barra).
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const raiz = document.documentElement
+    const medir = () => raiz.style.setProperty('--rodape-altura', `${Math.round(el.getBoundingClientRect().height)}px`)
+    medir()
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(medir) : null
+    ro?.observe(el)
+    return () => {
+      ro?.disconnect()
+      raiz.style.setProperty('--rodape-altura', '0px')
+    }
+  }, [])
+  return (
+    <nav
+      ref={ref}
+      className={className}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        borderTop: '1px solid rgba(255,255,255,0.08)',
+        background: RODAPE_FUNDO,
+        padding: '6px 4px calc(env(safe-area-inset-bottom, 6px) + 6px)',
+        flexShrink: 0,
+      }}
+    >
+      {abas.map(({ key, label, Icone, extra, dataTour }) => {
+        const ativo = ativa === key
+        return (
+          <button
+            key={key}
+            type="button"
+            className={ativo ? 'ativo' : ''}
+            onClick={() => onTrocar(key)}
+            data-tour={dataTour}
+            style={{
+              flex: 1,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: 3,
+              border: 'none',
+              background: 'transparent',
+              cursor: 'pointer',
+              padding: '7px 2px',
+            }}
+          >
+            <Icone width={20} height={20} color={ativo ? RODAPE_ACENTO : RODAPE_INATIVO} strokeWidth={ativo ? 2.4 : 2} />
+            <span style={{ fontSize: 9.5, fontWeight: 700, color: ativo ? RODAPE_ACENTO : RODAPE_INATIVO }}>{label}</span>
+            {extra}
+          </button>
+        )
+      })}
+    </nav>
+  )
+}

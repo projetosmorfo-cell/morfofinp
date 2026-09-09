@@ -11,6 +11,8 @@ import NotificacoesBancarias from './screens/NotificacoesBancarias'
 import MinhaAssinatura from './kit/MinhaAssinatura'
 import GuidedTour, { TOUR_STEPS_N1, type PassoTour } from './kit/GuidedTour'
 import SimularData, { BannerDataSimulada } from './kit/SimularData'
+import RodapeAbas from './kit/RodapeAbas'
+import { CalendarDaysIcon, ChartPieIcon, ListBulletIcon, ScaleIcon, WalletIcon } from '@heroicons/react/24/outline'
 import DetalheLancamento from './components/DetalheLancamento'
 import { mesInicial } from './mes'
 import { avancarSeriesFixasPendentes } from './recorrencia'
@@ -27,12 +29,14 @@ import { sincronizarPendentesNativas, ouvirNotificacoesAoVivo, marcarConfirmada 
 // "Manutenção" (01/09/2026, 3ª rodada do dia) entrou no mesmo menu — ver
 // `src/screens/Manutencao.tsx` pro motivo (limpar versão antiga do app
 // grudada no navegador sem apagar os lançamentos do Rafael).
+// Ícones (Heroicons outline, mesma biblioteca do rodapé do N0 — Decisão 50):
+// o rodapé do N1 passou a ser a MESMA peça do N0 (`RodapeAbas`), ícone + texto.
 const TELAS = {
-  resumo: { rotulo: 'Resumo', Componente: ResumoDoMes },
-  situacao: { rotulo: 'Situação', Componente: Situacao },
-  lancamentos: { rotulo: 'Lançamentos', Componente: Lancamentos },
-  carteira: { rotulo: 'Carteira', Componente: Carteira },
-  planejamento: { rotulo: 'Planejamento', Componente: Planejamento },
+  resumo: { rotulo: 'Resumo', Componente: ResumoDoMes, Icone: ChartPieIcon },
+  situacao: { rotulo: 'Situação', Componente: Situacao, Icone: ScaleIcon },
+  lancamentos: { rotulo: 'Lançamentos', Componente: Lancamentos, Icone: ListBulletIcon },
+  carteira: { rotulo: 'Carteira', Componente: Carteira, Icone: WalletIcon },
+  planejamento: { rotulo: 'Planejamento', Componente: Planejamento, Icone: CalendarDaysIcon },
 } as const
 
 // Visão "Light" (04/09/2026, pedido do Rafael) — rodapé reduzido, escondendo
@@ -99,27 +103,24 @@ function Rodape({
   telasVisiveis: Tela[]
   onTrocar: (t: Tela) => void
 }) {
+  // Decisão 50 (09/09/2026): mesma peça do rodapé do N0 (`RodapeAbas`),
+  // ícone + texto — a marca verde de "tela principal" (Lançamentos, pedido
+  // do Rafael de 04/09) continua, agora como `extra` abaixo do rótulo.
   return (
-    <nav className="rodape">
-      {telasVisiveis.map((chave) => (
-        <button
-          key={chave}
-          type="button"
-          className={chave === tela ? 'ativo' : ''}
-          onClick={() => onTrocar(chave)}
-          // data-tour (05/09/2026, Etapa 6 — Tour guiado): ver
-          // `src/kit/GuidedTour.tsx`/`TOUR_STEPS_N1`.
-          data-tour={`nav-tab-${chave}`}
-        >
-          {TELAS[chave].rotulo}
-          {/* 04/09/2026, mesmo dia (pedido do Rafael): "Lançamentos" ganha uma
-              marca permanente indicando que é a tela principal do app,
-              com 4 ou 5 abas no rodapé (Light/Premium) — não é o mesmo
-              indicador de "ativo" (cor azul), que muda com a navegação. */}
-          {chave === 'lancamentos' && <span className="rodape-destaque-principal" />}
-        </button>
-      ))}
-    </nav>
+    <RodapeAbas
+      className="rodape"
+      abas={telasVisiveis.map((chave) => ({
+        key: chave,
+        label: TELAS[chave].rotulo,
+        Icone: TELAS[chave].Icone,
+        // data-tour (05/09/2026, Etapa 6 — Tour guiado): ver
+        // `src/kit/GuidedTour.tsx`/`TOUR_STEPS_N1`.
+        dataTour: `nav-tab-${chave}`,
+        extra: chave === 'lancamentos' ? <span className="rodape-destaque-principal" /> : undefined,
+      }))}
+      ativa={tela}
+      onTrocar={onTrocar}
+    />
   )
 }
 
