@@ -71,18 +71,59 @@ jobs:
 
       - name: Chave de assinatura fixa (debug)
         # Sem isto, cada execução gera um debug.keystore NOVO e o Android recusa
-        # instalar um build por cima do anterior ("assinatura diferente" —
-        # obriga a desinstalar e perder os dados). A chave em android-signing/
-        # é a chave de DEBUG padrão do Android (senha "android"), versionada
-        # de propósito: serve só pra atualizar o app de teste no celular.
+        # instalar um build por cima do anterior ("o pacote tem conflito com um
+        # já instalado" — obriga a desinstalar e perder os dados). A chave em
+        # android-signing/ é a chave de DEBUG padrão do Android (alias
+        # androiddebugkey, senha "android"), versionada de propósito: serve só
+        # pra atualizar o app de teste no celular.
+        #
+        # 10/09/2026 — copiar pra ~/.android NÃO bastava: o Gradle procura o
+        # keystore de debug em $ANDROID_USER_HOME, depois em
+        # $ANDROID_SDK_HOME/.android e só então em ~/.android, e o runner do
+        # GitHub define essas variáveis apontando pra dentro do SDK. Quando ele
+        # não acha, GERA UMA CHAVE NOVA em silêncio — build seguinte já não
+        # instala por cima. Por isso agora, além da cópia, a assinatura é
+        # declarada explicitamente no build.gradle (passo abaixo), apontando
+        # direto pro arquivo do repositório: não depende de variável de
+        # ambiente nenhuma.
         run: |
           mkdir -p ~/.android
           cp android-signing/debug.keystore ~/.android/debug.keystore
+          echo "ANDROID_USER_HOME=$HOME/.android" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_HOME=$HOME" >> "$GITHUB_ENV"
 
       - name: Gerar projeto Android + sincronizar plugins
         run: |
           npx cap add android
           npx cap sync android
+
+      - name: Fixar a assinatura de debug no build.gradle
+        # A pasta android/ é gerada do zero a cada execução (não é versionada),
+        # então este passo reescreve o build.gradle recém-criado. Sem isso, o
+        # `signingConfig` de debug é o padrão do Gradle, que aponta pra um
+        # caminho de máquina — e é justamente ele que muda de execução pra
+        # execução. Falha ruidosamente se não achar o bloco `android {`.
+        run: |
+          python3 - <<'PY'
+          import re, sys
+          caminho = 'android/app/build.gradle'
+          fonte = open(caminho, encoding='utf-8').read()
+          bloco = '''
+              signingConfigs {
+                  debug {
+                      storeFile file("$rootDir/../android-signing/debug.keystore")
+                      storePassword "android"
+                      keyAlias "androiddebugkey"
+                      keyPassword "android"
+                  }
+              }
+          '''
+          novo, n = re.subn(r'(?m)^android \{\s*$', 'android {\n' + bloco, fonte, count=1)
+          if n != 1:
+              sys.exit('NAO ACHEI o bloco "android {" em ' + caminho)
+          open(caminho, 'w', encoding='utf-8').write(novo)
+          print(novo[:900])
+          PY
 
       - name: Carimbar versão do app (versionCode/versionName)
         run: |
@@ -101,6 +142,20 @@ jobs:
           mkdir -p saida
           cp android/app/build/outputs/apk/debug/app-debug.apk "saida/MorfoFinP-build-${{ steps.build.outputs.nnn }}.apk"
           ls -la saida
+
+      - name: Impressão digital do certificado (tem que ser SEMPRE a mesma)
+        # Evidência, não suposição: se esta linha mudar de um build pro outro, o
+        # celular vai recusar instalar por cima. A digital esperada é a da chave
+        # versionada em android-signing/debug.keystore:
+        #   SHA1: CE:55:D4:32:27:F9:93:D5:27:FD:99:D1:38:2F:09:0A:96:4D:24:49
+        run: |
+          keytool -printcert -jarfile "saida/MorfoFinP-build-${{ steps.build.outputs.nnn }}.apk" | grep -A3 -i "fingerprint" || true
+          ESPERADA="CE:55:D4:32:27:F9:93:D5:27:FD:99:D1:38:2F:09:0A:96:4D:24:49"
+          ATUAL=$(keytool -printcert -jarfile "saida/MorfoFinP-build-${{ steps.build.outputs.nnn }}.apk" | grep -i "SHA1:" | head -1 | sed 's/.*SHA1: *//' | tr -d ' \r')
+          echo "esperada: $ESPERADA"
+          echo "atual:    $ATUAL"
+          test "$ATUAL" = "$ESPERADA" || { echo "::error::O .apk foi assinado com uma chave DIFERENTE da versionada — ele não instalaria por cima do build anterior."; exit 1; }
+          echo "Assinatura confere."
 
       - name: Publicar como artefato do workflow
         uses: actions/upload-artifact@v4
