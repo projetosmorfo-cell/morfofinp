@@ -5,6 +5,7 @@ import App from '../App'
 import DevApp from './DevApp'
 import LoginView from './LoginView'
 import { SimulacaoResolucaoFrame, FerramentasTesteFlutuantes } from './SimulacaoResolucao'
+import { AplicadorDeTema } from './ConfigN1'
 import SimularData from './SimularData'
 
 // Raiz de camadas — REESCRITA em 08/09/2026 (Roteiro de Parametrização
@@ -79,6 +80,9 @@ export default function AppRoot() {
   // fluxo normal, `position: fixed`) pra aparecer em qualquer camada.
   return (
     <SimulacaoResolucaoFrame>
+      {/* Aplica o tema salvo (Decisão 55 — "Aparência") no <html> assim que o
+          app abre, em qualquer camada; não renderiza nada. */}
+      <AplicadorDeTema />
       {conteudo}
       <FerramentasTesteFlutuantes onAbrirFerramentaData={() => setFerramentaDataAberta(true)} />
       {ferramentaDataAberta && (

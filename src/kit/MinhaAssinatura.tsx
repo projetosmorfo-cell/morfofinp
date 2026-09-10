@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { usePlanos, type Plano } from './planos'
+import { usePlanos, recursosAutomaticos, type Plano } from './planos'
 import { usePlanoAtual, salvarPlanoId } from './planoAtual'
 
 // Modelo de negócio Completo (05/09/2026, Roteiro de Parametrização Morfo,
@@ -40,11 +40,21 @@ function CartaoPlano({
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
         <strong style={{ fontSize: 14.5 }}>{plano.nome}</strong>
         <span style={{ fontSize: 14.5, fontWeight: 800, color: 'var(--azul)', whiteSpace: 'nowrap' }}>
-          {plano.valorMensal > 0 ? `R$ ${plano.valorMensal.toFixed(2)}/mês` : 'Grátis'}
+          {plano.gratuito
+            ? `Grátis · ${plano.validadeDias ?? 0} dias`
+            : plano.valorMensal > 0 ? `R$ ${plano.valorMensal.toFixed(2)}/mês` : 'Grátis'}
         </span>
       </div>
+      {plano.descricaoCurta && (
+        <p className="texto-fraco" style={{ fontSize: 12, margin: '4px 0 0' }}>{plano.descricaoCurta}</p>
+      )}
+      {/* A lista de recursos é montada a partir dos campos reais do plano
+          (limites e acessos) + o texto livre — `recursosAutomaticos`, o
+          `planFeaturesAuto` do Kit. É o que faz os parâmetros novos
+          (limite de usuários, acessos liberados) aparecerem de fato pro
+          cliente quando preenchidos no N0. */}
       <ul style={{ margin: '8px 0 0', paddingLeft: 18 }}>
-        {plano.funcionalidades.map((f) => (
+        {recursosAutomaticos(plano).map((f) => (
           <li key={f} className="texto-fraco" style={{ fontSize: 12.5 }}>
             {f}
           </li>

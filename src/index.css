@@ -11,6 +11,47 @@
   color-scheme: dark;
 }
 
+/* ---- Tema claro (10/09/2026, Decisão 55 — Parte B: "Aparência" do Kit,
+   L4739-L4780). MECANISMO idêntico ao Kit: um atributo `data-mloc-tema` no
+   <html> e um bloco de CSS só de variáveis — remover o recurso é apagar
+   estes 2 seletores, sem tocar em nenhuma tela. Diferença registrada: o Kit
+   guarda a escolha no `mlocStorage`; aqui vai no singleton `db.configuracoes`
+   (`temaPreferido`), o armazenamento que este produto já usa.
+   "auto" = nenhum atributo no <html>: cai no `prefers-color-scheme` abaixo.
+   EXPERIMENTAL, com o mesmo aviso do Kit na tela: o app foi desenhado escuro
+   (Etapa 4) — telas que fixam cor escura na marra não acompanham. ---- */
+:root[data-mloc-tema='claro'] {
+  --bg: #f7f5f2;
+  --bg-elevado: #ffffff;
+  --borda: #e7e3dc;
+  --texto: #1c1b22;
+  --texto-fraco: #6b6558;
+  --azul: #2563eb;
+  --verde: #15803d;
+  --vermelho: #b91c1c;
+  --amarelo: #a16207;
+  color-scheme: light;
+}
+/* "Automático" só vale quando o Rafael ESCOLHE automático (atributo
+   `auto` no <html>) — sem escolha nenhuma, o app continua escuro, como
+   sempre foi. Deixar o `prefers-color-scheme` valer por padrão viraria o
+   app inteiro pra claro no primeiro celular configurado em modo claro,
+   sem ninguém ter pedido — mudança silenciosa de uma decisão de produto. */
+@media (prefers-color-scheme: light) {
+  :root[data-mloc-tema='auto'] {
+    --bg: #f7f5f2;
+    --bg-elevado: #ffffff;
+    --borda: #e7e3dc;
+    --texto: #1c1b22;
+    --texto-fraco: #6b6558;
+    --azul: #2563eb;
+    --verde: #15803d;
+    --vermelho: #b91c1c;
+    --amarelo: #a16207;
+    color-scheme: light;
+  }
+}
+
 * {
   box-sizing: border-box;
 }
@@ -86,6 +127,27 @@ main {
    `.seletor-mes` — o padding do próprio `.cabecalho-fixo` já basta. */
 .cabecalho-fixo h1 {
   margin: 4px 0 8px;
+}
+
+/* Composer do chat interno (10/09/2026, Decisão 53, ponto 3) — mesmo truque
+   de `.cabecalho-fixo`, só que colado na borda de BAIXO em vez de cima:
+   `position: sticky; bottom: 0` dentro de `<main>` (o único contêiner com
+   rolagem do app) mantém a caixa de escrever sempre visível enquanto a
+   lista de mensagens rola por trás, sem precisar de um 2º contêiner de
+   rolagem aninhado (mesma classe de bug já documentada — Decisão 50 — de
+   um wrapper novo virar contêiner de rolagem concorrente com `<main>`).
+   `margin: 0 -16px` cancela o padding horizontal de `<main>` e o próprio
+   `padding` reaplica a medida, igual ao cabeçalho. */
+.chat-composer-fixo {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  background: var(--bg);
+  margin: 0 -16px;
+  padding: 10px 16px;
+  display: flex;
+  gap: 8px;
+  border-top: 1px solid var(--borda);
 }
 
 h1 {
@@ -274,16 +336,48 @@ nav.rodape {
   white-space: nowrap;
 }
 
+/* 10/09/2026: a linha do mês estava alta demais (setas de 44×44 + gap de 16px).
+   Enxugada — as setas continuam com 44px de LARGURA (alvo de toque horizontal,
+   que é onde o dedo erra numa linha dessas) mas com 34px de altura, e o gap
+   caiu pra 8px. */
 .seletor-mes {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 16px;
+  gap: 8px;
   margin: 0;
 }
 
+/* Fora do mês atual (10/09/2026) — ver `SeletorMes.tsx`. Cor de alerta + tarja
+   discreta no nome do mês, e o atalho "Hoje" ao lado. */
+.seletor-mes-fora strong {
+  color: var(--amarelo);
+  background: rgba(234, 179, 8, 0.14);
+  border-radius: 999px;
+  padding: 2px 10px;
+}
+
+/* Seletor mais específico que `.seletor-mes button` (0,2,0 × 0,1,1) de
+   propósito: sem isso o botão "Hoje" herdava os 44×44 fixos das setas e o
+   texto não cabia dentro dele. Largura pelo conteúdo, nunca fixa. */
+.seletor-mes .seletor-mes-hoje {
+  margin-top: 0;
+  width: auto;
+  height: 30px;
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  border-radius: 999px;
+  border: 1px solid var(--amarelo);
+  background: none;
+  color: var(--amarelo);
+  cursor: pointer;
+}
+
 .seletor-mes strong {
-  min-width: 150px;
+  min-width: 128px;
   text-align: center;
 }
 
@@ -292,9 +386,12 @@ nav.rodape {
   border: 1px solid var(--borda);
   color: var(--texto);
   /* 04/09/2026, rodada seguinte (F-11): 32×32px medido — o caso mais claro
-     de alvo de toque abaixo do recomendado (~44px) da revisão de UI. */
+     de alvo de toque abaixo do recomendado (~44px) da revisão de UI.
+     10/09/2026: altura reduzida pra 34px (linha mais estreita, pedido do
+     Rafael) — a largura de 44px, que é onde o dedo erra numa linha
+     horizontal, foi mantida. */
   width: 44px;
-  height: 44px;
+  height: 34px;
   border-radius: 8px;
   font-size: 16px;
   cursor: pointer;
@@ -332,7 +429,7 @@ nav.rodape {
   padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
   width: 100%;
   max-width: 430px; /* coluna do app, Decisão 50 */
-  max-height: 78vh;
+  max-height: 82vh;
   overflow-y: auto;
 }
 
@@ -375,7 +472,12 @@ nav.rodape {
 .botao-flutuante {
   position: fixed;
   right: max(16px, calc((100vw - 430px) / 2 + 16px));
-  bottom: 84px;
+  /* 84px era a folga fixa acima da barra de abas. Com a faixa de totais
+     colada logo acima das abas (10/09/2026), o botão precisa subir mais a
+     altura DELA — medida de verdade e publicada em `--totais-altura` por
+     `RodapeTotais`. Sem a faixa na tela, a variável não existe e o valor
+     volta a ser exatamente o de sempre. */
+  bottom: calc(84px + var(--totais-altura, 0px) + 8px);
   width: 56px;
   height: 56px;
   border-radius: 50%;
@@ -516,6 +618,19 @@ nav.rodape {
   text-align: right;
 }
 
+/* Tarja de status COLADA na direita (10/09/2026, pedido do Rafael: "a tarja
+   de status alinhada à direita em todas as telas que mostram o registro
+   completo"). Medido antes da correção, nas duas telas que usam esta linha
+   (Lançamentos e o drill-in da Carteira): valor terminando em x=389 e tarja
+   em x=370 — 19px de desalinhamento, porque `.status-pill` traz
+   `align-self: center` (regra global, usada também na listagem SIMPLES
+   dentro das categorias, que o Rafael pediu pra NÃO mexer). O override
+   abaixo é escopado só ao bloco da linha completa, então a listagem simples
+   continua exatamente como está. */
+.llc-valores .status-pill {
+  align-self: flex-end;
+}
+
 /* Bloco que envolve a listagem SIMPLES inteira (01/09/2026) — pedido do
    Rafael: "toda sua área com fundo em outra cor... com efeito de 3d se
    estivessem afundados nível pra dentro da categoria" + "leve indentação em
@@ -642,7 +757,11 @@ nav.rodape {
    (`.tabela-lancamentos-simples td`, acima) tem os 5px de respiro. */
 .sessao-data-simples {
   padding: 0 8px;
-  font-size: 11px;
+  /* Enxugada em 10/09/2026 ("estreite mais as linhas do cabeçalho com data"):
+     11px→10px com `line-height` travado em 1.1 — sem o line-height, a caixa da
+     linha continua com a altura padrão da fonte e a redução não aparece. */
+  font-size: 10px;
+  line-height: 1.1;
   color: var(--texto-fraco);
   letter-spacing: 0.02em;
 }
@@ -703,7 +822,10 @@ nav.rodape {
    de respiro; a data é só um separador de seção, não um item de lista. */
 .sessao-data {
   padding: 0 4px;
-  font-size: 12px;
+  /* Mesma redução da `.sessao-data-simples` (10/09/2026): 12px→10.5px com
+     `line-height: 1.1`. É separador de sessão, não item de lista. */
+  font-size: 10.5px;
+  line-height: 1.1;
   color: var(--texto-fraco);
   letter-spacing: 0.02em;
 }
@@ -757,62 +879,11 @@ nav.rodape {
    abre o menu de configurações (Categorias / Contas e carteiras). Mesma
    lógica de posicionamento do `.botao-flutuante` (centralizado dentro do
    max-width de 480px em telas largas), só que no topo em vez do rodapé. */
-.botao-engrenagem {
-  position: fixed;
-  top: 12px;
-  right: max(16px, calc((100vw - 430px) / 2 + 16px));
-  /* 04/09/2026, rodada seguinte (F-11): 40×40px medido no mobile, um pouco
-     abaixo da referência de toque (~44px). */
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  background: var(--bg-elevado);
-  border: 1px solid var(--borda);
-  color: var(--texto);
-  font-size: 18px;
-  line-height: 1;
-  cursor: pointer;
-  z-index: 41;
-}
 
-.botao-engrenagem:active {
-  opacity: 0.85;
-}
 
-.menu-engrenagem {
-  position: fixed;
-  /* 4px de respiro abaixo do botão de engrenagem, que cresceu de 40 pra
-     44px nesta mesma rodada (F-11) — 12px (top do botão) + 44px + 4px. */
-  top: 60px;
-  right: max(16px, calc((100vw - 430px) / 2 + 16px));
-  background: var(--bg-elevado);
-  border: 1px solid var(--borda);
-  border-radius: 12px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
-  overflow: hidden;
-  z-index: 41;
-  min-width: 200px;
-}
 
-.menu-engrenagem button {
-  display: block;
-  width: 100%;
-  text-align: left;
-  background: none;
-  border: none;
-  color: var(--texto);
-  font: inherit;
-  padding: 14px 16px;
-  cursor: pointer;
-}
 
-.menu-engrenagem button + button {
-  border-top: 1px solid var(--borda);
-}
 
-.menu-engrenagem button:active {
-  background: var(--bg);
-}
 
 /* Botão "voltar" — antes era só texto sem fundo/borda (var(--texto) puro),
    quase imperceptível no topo da tela (feedback do Rafael, 31/08/2026,
@@ -1153,8 +1224,12 @@ nav.rodape {
 /* F-08: menu "⋮" por linha de grupo/categoria (Categorias e Grupos) — junta
    "Restaurar ícone padrão" e "Inativar/Excluir", ações (c)/(d) da régua de
    densidade, deixando só "Editar" sempre visível ao lado dele. Mesmo
-   componente visual do `.menu-engrenagem` (popover simples), em miniatura e
-   ancorado à própria linha em vez de fixo na tela. */
+   componente visual do popover simples de menu, em miniatura e ancorado à
+   própria linha em vez de fixo na tela.
+   BUG REAL corrigido em 10/09/2026: uma substituição automática da rodada
+   anterior (build 022) comeu o fim deste comentário junto com a regra
+   `.menu-linha-wrap` inteira — o comentário ficou aberto e engoliu o seletor
+   `.botao-menu-linha`, que passou a não existir. Restaurado abaixo. */
 .menu-linha-wrap {
   position: relative;
   display: inline-block;
@@ -1240,4 +1315,545 @@ nav.rodape {
    campo em texto; isto só reforça visualmente qual input/select é. */
 .campo-com-erro {
   border-color: var(--vermelho) !important;
+}
+
+/* Chat interno N1↔N0 — animação de "tremer" + selo vermelho pulsante:
+   as classes `.mloc-shake`/`.mloc-badge-pulse` e seus @keyframes NÃO moram
+   mais aqui. Passaram a vir do `shell.css` do Kit, colado inteiro no <head>
+   do `index.html` (G44 regra 11a, 10/09/2026) — fonte única, sem cópia
+   parcial. Este comentário fica só pra ninguém procurar por elas aqui.
+   Idem `.mloc-area-web`, `.mloc-tela-cheia`, `.mloc-sempre-claro`,
+   `.mloc-forcar-escuro`, `.mloc-site-full` e as variáveis `--mloc-*`. */
+
+/* ---- Overrides deste produto sobre o `shell.css` do Kit (G44 regra 11a +
+   regra 3: adaptação registrada, nunca recorte do arquivo colado). O
+   `shell.css` vai INTEIRO no <head> do `index.html`; este bloco carrega
+   depois e ajusta só os 2 pontos em que ele conflita com uma decisão de
+   produto já tomada aqui:
+
+   1. `#root { color: var(--mloc-ink, #1C1B22) }` (shell.css) faz a cor de
+      texto herdada nascer da tinta CLARA do Kit — o MorfoFinP é escuro por
+      padrão desde a Etapa 4 (e a escolha claro/escuro/automático é do
+      usuário, Decisão 55). Sem este override, todo texto que herda cor
+      ficaria escuro sobre fundo escuro.
+   2. `html, body { background: #F7F5F2 }` (shell.css): o `body` já é
+      sobrescrito acima por `background: var(--bg)`; o `html` não era, e
+      aparece como faixa clara em qualquer área que o `body` não cubra
+      (bounce de rolagem no iOS, área fora da coluna de 430px).
+
+   Nada mais do shell.css é alterado — as classes `.mloc-*` e as variáveis
+   `--mloc-*` valem como vêm do Kit. ---- */
+/* Achado real na verificação (não por leitura de código): o `shell.css` pinta
+   o fundo do app com a paleta DELE — `html:not([data-mloc-tema="claro"]) body
+   { background: #17161C }` sob `prefers-color-scheme: dark`, e `#F7F5F2` no
+   `:root` claro. Isso vence o `body { background: var(--bg) }` deste arquivo
+   por especificidade (0,1,2 contra 0,0,1) — medido: o fundo virou #17161C em
+   vez do #0f1115 do produto, e ficaria BRANCO num aparelho em modo claro com
+   o app ainda escuro. Os seletores abaixo repetem exatamente a mesma
+   especificidade do shell.css e, por virem depois, devolvem o fundo pro token
+   do produto nos 3 estados (auto/claro/escuro). */
+html,
+html body,
+html:not([data-mloc-tema="claro"]),
+html:not([data-mloc-tema="claro"]) body,
+html[data-mloc-tema="escuro"],
+html[data-mloc-tema="escuro"] body {
+  background: var(--bg);
+}
+#root {
+  color: var(--texto);
+}
+
+/* ---- Barra de marca do N1 (Kit `TenantBrandBar`, L910) — primeira linha fixa
+   do app, fora da área que rola. Substituiu o botão de engrenagem flutuante
+   (`.botao-engrenagem`, removido na mesma rodada).
+
+   BUG REAL corrigido em 10/09/2026: no build 022 este bloco saiu quebrado —
+   o comentário não fechava, a regra `.barra-marca-n1` não existia e o arquivo
+   terminava no meio de uma frase, levando junto `.linha-completa-wrapper`.
+   Resultado prático: a barra do topo do N1 nascia sem estilo nenhum. As três
+   regras abaixo são o que deveria estar aqui desde então. ---- */
+.barra-marca-n1 {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: var(--bg-elevado);
+  border-bottom: 1px solid var(--borda);
+}
+.barra-marca-n1-nome {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--azul);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- Varredura de órfãos (G44 regra 11c: "toda classe usada em className tem
+   definição"). `.linha-completa-wrapper` era usada no drill-in da Carteira
+   (`Carteira.tsx`) e NÃO tinha nenhuma definição — a borda que ela tinha foi
+   removida numa rodada de 01/09, a regra ficou vazia e depois sumiu; a classe
+   seguiu no JSX sem fazer nada. Definida com o que ela precisa de fato ser: o
+   mesmo respiro vertical das outras linhas de lançamento. ---- */
+.linha-completa-wrapper {
+  padding: 5px 0;
+}
+
+/* ---- Campo que parece input mas abre uma folha de escolha (10/09/2026) —
+   usado pela categoria com ícone no formulário de lançamento
+   (`SeletorCategoriaComIcone.tsx`) e pelo ícone da carteira
+   (`SeletorInstituicao.tsx`). Existe porque `<option>` só aceita texto: nenhum
+   navegador desenha ícone dentro de um `<select>`, e o menu que ele abre é do
+   sistema, então também não respeita o tema do app. Todas as cores aqui saem
+   das variáveis do produto, que já viram claro/escuro sozinhas. ---- */
+.campo-como-botao {
+  width: 100%;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+  margin-top: 6px;
+  padding: 10px 12px;
+  min-height: 44px;
+  border-radius: 10px;
+  border: 1px solid var(--borda);
+  background: var(--bg);
+  color: var(--texto);
+  font: inherit;
+  cursor: pointer;
+}
+
+.campo-como-botao-icone {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.campo-como-botao-texto {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.campo-como-botao-sub {
+  font-size: 12px;
+  color: var(--texto-fraco);
+  flex-shrink: 0;
+}
+
+.campo-como-botao-seta {
+  color: var(--texto-fraco);
+  flex-shrink: 0;
+}
+
+/* "×" pra limpar o campo depois de preenchido (10/09/2026, pedido do
+   Rafael). Fica DENTRO do campo, à esquerda da seta; só aparece quando há
+   algo escolhido. É um <span role="button"> e não um <button>, porque o
+   próprio campo já é um <button> — botão dentro de botão é HTML inválido e
+   o clique de dentro não chega a ser tratado de forma confiável. */
+.campo-como-botao-limpar {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--texto-fraco);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.campo-como-botao-limpar:hover {
+  background: var(--bg-elevado);
+  color: var(--texto);
+}
+
+.folha-escolha {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.folha-escolha-fundo {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.folha-escolha-painel {
+  position: relative;
+  width: 100%;
+  max-width: 430px;
+  max-height: 78vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-elevado);
+  border-top-left-radius: 16px;
+  border-top-right-radius: 16px;
+  padding: 14px 16px 18px;
+  box-sizing: border-box;
+}
+
+.folha-escolha-topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.folha-escolha-topo button {
+  margin-top: 0;
+  background: none;
+  border: none;
+  color: var(--texto-fraco);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 4px 8px;
+}
+
+.folha-escolha-lista {
+  overflow-y: auto;
+  margin-top: 10px;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Espaçamento enxugado em 10/09/2026 (Rafael: "lista as opções muito
+   espaçadas ... tem muito espaço vazio"). Medido antes: rótulo de grupo com
+   12px de margem acima e linhas de 44px de altura mínima com 9px de padding.
+   Agora: 8px de margem no rótulo e linha de 38px com 5px de padding — cabem
+   ~3 categorias a mais na mesma tela, e a linha continua acima do mínimo
+   confortável de toque quando somada ao ícone de 22px. */
+.folha-escolha-grupo {
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--texto-fraco);
+  margin: 8px 2px 2px;
+}
+
+.folha-escolha-item {
+  width: 100%;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  text-align: left;
+  margin-top: 0;
+  padding: 5px 8px;
+  min-height: 38px;
+  border: none;
+  border-radius: 9px;
+  background: none;
+  color: var(--texto);
+  font: inherit;
+  cursor: pointer;
+}
+
+.folha-escolha-item.ativo {
+  background: rgba(124, 92, 255, 0.16);
+}
+
+.folha-escolha-item-icone {
+  width: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.folha-escolha-item-nome {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- Sugestão do campo "O que foi" (10/09/2026) — memória das descrições já
+   usadas nos últimos N dias (parâmetro do ambiente, padrão 60). Lista ancorada
+   ao campo, nunca um `<datalist>`: o datalist nativo não deixa mostrar a
+   categoria/conta de cada sugestão nem preencher os dois ao escolher. ---- */
+.memoria-descricao-wrap {
+  position: relative;
+}
+
+.memoria-descricao-lista {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  z-index: 60;
+  margin-top: 4px;
+  max-height: 232px;
+  overflow-y: auto;
+  background: var(--bg-elevado);
+  border: 1px solid var(--borda);
+  border-radius: 10px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+}
+
+.memoria-descricao-item {
+  width: 100%;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  text-align: left;
+  margin-top: 0;
+  padding: 8px 10px;
+  min-height: 44px;
+  border: none;
+  border-radius: 0;
+  background: none;
+  color: var(--texto);
+  font: inherit;
+  cursor: pointer;
+}
+
+.memoria-descricao-item + .memoria-descricao-item {
+  border-top: 1px solid var(--borda);
+}
+
+.memoria-descricao-item-texto {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.memoria-descricao-item-titulo {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.memoria-descricao-item-sub {
+  font-size: 11.5px;
+  color: var(--texto-fraco);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- Seleção múltipla + totalizadores das listas completas (10/09/2026) —
+   ver `src/components/SelecaoETotais.tsx`. ---- */
+.barra-selecao {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.barra-selecao-acoes {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+/* Faixa de totais — enxugada em 10/09/2026 a pedido do Rafael ("estreite mais
+   o rodapé com os números totais"): rótulo e chave menores, respiro vertical
+   de 8px→5px, `gap` de 10px→8px. */
+.totais-faixa {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 5px 10px;
+  border-radius: 10px;
+  background: var(--bg);
+  border: 1px solid var(--borda);
+  font-size: 12.5px;
+}
+
+.totais-faixa-destaque {
+  border-color: var(--azul);
+}
+
+.totais-faixa-topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+}
+
+.totais-faixa-rotulo {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--texto-fraco);
+  line-height: 1.2;
+}
+
+/* Estado RECOLHIDO (padrão do rodapé fixo): uma linha só — rótulo à esquerda,
+   Total à direita, seta indicando que abre. */
+.totais-faixa-recolhida {
+  width: 100%;
+  margin-top: 0;
+  justify-content: space-between;
+  flex-wrap: nowrap;
+  cursor: pointer;
+  color: var(--texto);
+  text-align: left;
+  padding: 6px 10px;
+}
+
+.totais-faixa-rotulo-inline {
+  font-size: 10.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--texto-fraco);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.totais-faixa-recolhida strong {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  margin-left: auto;
+}
+
+.totais-faixa-seta,
+.totais-faixa-seta-botao {
+  font-size: 13px;
+  line-height: 1;
+  color: var(--texto-fraco);
+  flex-shrink: 0;
+}
+
+.totais-faixa-seta-botao {
+  margin-top: 0;
+  padding: 0 4px;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.totais-faixa-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  flex: 1;
+  min-width: 84px;
+}
+
+.totais-faixa-chave {
+  font-size: 10px;
+  color: var(--texto-fraco);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  line-height: 1.2;
+}
+
+.totais-faixa-item strong {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Cabeçalho de bloco "Até hoje" × "Dias futuros" — separador da lista, no
+   mesmo tom do `.sessao-data`, só que mais forte porque é um nível acima. */
+.bloco-corte-titulo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 2px 3px;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--texto-fraco);
+}
+
+.bloco-corte-titulo::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--borda);
+}
+
+.marcador-linha {
+  display: flex;
+  align-items: center;
+  padding: 0 8px 0 2px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.marcador-linha input {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  cursor: pointer;
+  accent-color: var(--azul);
+}
+
+.linha-selecionavel {
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.linha-selecionavel > *:last-child {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ---- Rodapé fixo com o totalizador da lista (10/09/2026, pedido do Rafael:
+   "fica no rodapé o card de total que está no fim da lista"). Mesma técnica
+   do `.chat-composer-fixo`: `position: sticky; bottom: 0` dentro de `<main>`,
+   que é o ÚNICO contêiner com rolagem do app — nada de `position: fixed`, que
+   já foi bug real duas vezes aqui (banner cobrindo o "‹ Voltar", relógio de
+   teste cobrindo o "+"). `margin: 0 -16px` cancela o padding horizontal de
+   `<main>` e o `padding` reaplica a medida, igual ao cabeçalho. ---- */
+.rodape-totais-fixo {
+  position: sticky;
+  /* `-88px` cancela exatamente o `padding-bottom: 88px` de `<main>` (a folga
+     que existe pro botão flutuante e pro rodapé de abas não cobrirem o fim da
+     lista) — sem isso a faixa "grudaria" 88px acima da borda, deixando um
+     vão de fundo embaixo dela. O mesmo padding é devolvido dentro da faixa,
+     como espaço interno, pra ela não ficar por baixo das abas. */
+  bottom: -88px;
+  z-index: 6;
+  /* A margem inferior NEGATIVA de 88px faz a faixa avançar por dentro do
+     `padding-bottom` de `<main>` também quando a rolagem chega ao FIM (aí o
+     elemento assume a posição natural dele no fluxo, e o `bottom: -88px` de
+     sticky já não vale) — sem ela, no fim da lista a faixa parava 88px acima
+     da borda, com um vão de fundo embaixo. O padding devolve a medida como
+     espaço interno, pra o texto não ficar por baixo da barra de abas. */
+  /* A margem inferior negativa de 88px cancela o `padding-bottom` de
+     `<main>` (a folga reservada pro botão flutuante e pra barra de abas),
+     fazendo a faixa terminar EXATAMENTE onde a barra de abas começa — medido:
+     749 = 749. Como ela não fica mais por baixo das abas, o padding interno
+     de baixo voltou a ser só respiro (10px): os 92px de antes viravam 92px de
+     fundo vazio dentro da própria faixa. */
+  margin: 4px -16px -88px;
+  padding: 8px 16px 10px;
+  background: var(--bg);
+  border-top: 1px solid var(--borda);
+}
+
+/* Dentro do cabeçalho fixo, a busca e a linha de contagem/seleção não
+   repetem o respiro que tinham quando eram blocos soltos do corpo. */
+.cabecalho-fixo .barra-busca-filtros {
+  margin: 10px 0 0;
+}
+
+.cabecalho-fixo > .linha {
+  margin-top: 8px;
 }

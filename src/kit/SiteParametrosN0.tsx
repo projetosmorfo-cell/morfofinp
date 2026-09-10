@@ -202,7 +202,7 @@ export default function SiteParametrosN0() {
         </div>
       </Field>
       <Field label="Posição da frase de apresentação" dark>
-        <Segmented value={h.frasePos} onChange={(v) => setH({ frasePos: v })} options={[{ value: 'acima', label: 'Acima' }, { value: 'abaixo', label: 'Abaixo' }, { value: 'esquerda', label: 'À esquerda' }, { value: 'centro', label: 'Centro (na linha)' }, { value: 'direita', label: 'À direita' }]} />
+        <Segmented value={h.frasePos} onChange={(v) => setH({ frasePos: v })} options={[{ value: 'acima', label: 'Acima' }, { value: 'abaixo', label: 'Abaixo' }, { value: 'esquerda', label: 'À esquerda' }, { value: 'centro', label: 'Centro (na linha)' }, { value: 'direita', label: 'À direita' }, { value: 'ocultar', label: 'Ocultar' }]} />
       </Field>
       <Field label="Prévia do cabeçalho" dark>
         <div style={{ borderRadius: 12, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)', background: scAtual.cor1 && scAtual.cor2 ? `linear-gradient(160deg, ${scAtual.cor1}, ${scAtual.cor2})` : `linear-gradient(160deg, ${CORAL}, ${PURPLE} 40%, ${PURPLE_DEEP})` }}>

@@ -195,15 +195,15 @@ export default function GuidedTour({
 
 // Roteiro real do MFinp (não genérico como o do Kit) — as 5 abas do rodapé
 // + "Novo lançamento" + engrenagem, essa ordem por ser a mesma do rodapé
-// (esquerda pra direita). "Situação" pode não existir se o Rafael estiver
+
 // em visão Light — o tour não trava nesse caso (ver comentário no topo do
 // arquivo), só mostra um cartão centralizado sem recorte pra esse passo.
 export const TOUR_STEPS_N1: PassoTour[] = [
   { dataTour: 'nav-tab-resumo', tela: 'resumo', titulo: 'Resumo', texto: 'Visão geral do mês selecionado: quanto entrou, quanto saiu e o resultado até agora.' },
-  { dataTour: 'nav-tab-situacao', tela: 'situacao', titulo: 'Situação', texto: 'Margem comprometida e sobra real do mês — a visão mais técnica, some se você estiver na visão Light.' },
+  { dataTour: 'nav-tab-situacao', tela: 'situacao', titulo: 'Situação', texto: 'Margem comprometida e sobra real do mês — a visão mais técnica do app.' },
   { dataTour: 'nav-tab-lancamentos', tela: 'lancamentos', titulo: 'Lançamentos', texto: 'A tela principal do app — todos os seus lançamentos do mês, com busca e filtros.' },
   { dataTour: 'lancamentos-incluir', tela: 'lancamentos', titulo: 'Novo lançamento', texto: 'Toque no + pra cadastrar um novo lançamento.' },
   { dataTour: 'nav-tab-carteira', tela: 'carteira', titulo: 'Carteira', texto: 'Seus cofrinhos e contas — saldo e histórico de cada um.' },
   { dataTour: 'nav-tab-planejamento', tela: 'planejamento', titulo: 'Planejamento', texto: 'Planejado × Realizado × Previsto — pra isso que este app existe.' },
-  { dataTour: 'botao-engrenagem', titulo: 'Configurações', texto: 'Aqui você encontra Categorias e Grupos, Contas e carteiras, e Manutenção — inclusive este mesmo tour, sempre que quiser rever.' },
+  { dataTour: 'n1-mais-opcoes', titulo: 'Mais opções', texto: 'Aqui ficam quatro coisas: Configuração (a tela única com todos os parâmetros — Categorias e Grupos, Contas e carteiras, Usuários, Layout e Menus e o resto), Suporte / Chat, Atualizar e Sair.' },
 ]

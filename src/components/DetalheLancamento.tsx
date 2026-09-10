@@ -3,6 +3,8 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { db, type Periodicidade, type RegraRecorrencia, type Lancamento } from '../db'
 import { gerarIdSerie, gerarParcelas, ROTULOS_PERIODICIDADE, NOMES_DIA_SEMANA } from '../recorrencia'
 import { fmtBRL, formatarMoeda, aplicarMascaraValor, paraNumero } from '../formatoMoeda'
+import SeletorCategoriaComIcone from './SeletorCategoriaComIcone'
+import MemoriaDescricao from './MemoriaDescricao'
 
 function hoje() {
   return new Date().toISOString().slice(0, 10)
@@ -94,7 +96,14 @@ export default function DetalheLancamento({
     [original?.transferenciaId],
   )
 
-  const editando = alvoId != null
+  /* Clonar (10/09/2026, pedido do Rafael: "ter opção de clonar e já abrir o
+     clone pra edição e salvar, permitindo cancelar a clonagem"). Não abre
+     outro modal nem duplica nada no banco na hora: o MESMO formulário deixa
+     de estar editando o original e passa a estar criando um lançamento novo,
+     com todos os campos já preenchidos. "Cancelar clonagem" volta a editar o
+     original, sem ter gravado coisa nenhuma. */
+  const [clonando, setClonando] = useState(false)
+  const editando = alvoId != null && !clonando
   const ehTransferenciaExistente = !!original?.transferenciaId
   const [carregado, setCarregado] = useState(false)
 
@@ -188,6 +197,20 @@ export default function DetalheLancamento({
   function erroCampo(campo: string, mensagem: string) {
     setCampoComErro(campo)
     setErro(mensagem)
+    /* 10/09/2026 — Rafael reportou "inclusão de registro não está salvando".
+       Reproduzido: o que trava o salvamento é sempre a validação (na prática,
+       categoria vazia — o campo virou um botão "Escolha…" nesta rodada e é
+       fácil passar batido). A mensagem existia, mas ficava lá embaixo, perto
+       do "Salvar", e num formulário rolado ela podia estar fora da vista —
+       dava a impressão exata de "cliquei e não aconteceu nada". Agora o campo
+       culpado é trazido pra vista e recebe o foco, além do texto e da borda
+       vermelha que já existiam. */
+    window.setTimeout(() => {
+      const el = document.getElementById(`dl-${campo === 'contaOrigem' ? 'conta-origem' : campo === 'contaDestino' ? 'conta-destino' : campo === 'categoriaOrigem' ? 'categoria-origem' : campo === 'categoriaDestino' ? 'categoria-destino' : campo}`)
+      if (!el) return
+      el.scrollIntoView({ block: 'center' })
+      ;(el as HTMLElement).focus?.()
+    }, 0)
   }
 
   async function salvar(e: FormEvent) {
@@ -538,7 +561,7 @@ export default function DetalheLancamento({
     <div className="modal-fundo" onClick={onFechar}>
       <div className="modal-conteudo" onClick={(e) => e.stopPropagation()}>
         <div className="linha" style={{ border: 'none', padding: 0, marginBottom: 8 }}>
-          <h2 style={{ margin: 0 }}>{editando ? 'Editar lançamento' : 'Novo lançamento'}</h2>
+          <h2 style={{ margin: 0 }}>{clonando ? 'Clonar lançamento' : editando ? 'Editar lançamento' : 'Novo lançamento'}</h2>
           <button
             type="button"
             onClick={onFechar}
@@ -548,6 +571,19 @@ export default function DetalheLancamento({
             ✕
           </button>
         </div>
+
+        {clonando && (
+          <div style={{ background: 'rgba(59,130,246,0.14)', border: '1px solid var(--azul)', borderRadius: 10, padding: '8px 10px', marginBottom: 10, fontSize: 12.5, lineHeight: 1.45 }}>
+            Você está clonando este lançamento — salvar cria um <strong>novo</strong>, sem tocar no original.
+            <button
+              type="button"
+              onClick={() => setClonando(false)}
+              style={{ marginTop: 8, background: 'none', border: '1px solid var(--borda)', borderRadius: 8, color: 'var(--texto)', padding: '6px 10px', fontSize: 12, cursor: 'pointer' }}
+            >
+              Cancelar clonagem
+            </button>
+          </div>
+        )}
 
         {jaTemSerie && (
           <p className="texto-fraco" style={{ marginTop: 0 }}>
@@ -603,22 +639,38 @@ export default function DetalheLancamento({
         )}
 
         <form onSubmit={salvar}>
-          <label htmlFor="dl-data">Data</label>
+          {/* ORDEM DOS CAMPOS (10/09/2026, pedido do Rafael, ao pé da letra):
+              valor (já com o foco) → o que → categoria (com ícones) → pago
+              com → data → o resto como já era. Antes desta rodada a ordem era
+              data → o que → categoria → pago com → valor: o campo que a pessoa
+              mais digita ficava por último, e o que ela quase nunca muda (a
+              data, que já nasce em hoje) ficava em primeiro. Nenhum campo foi
+              adicionado nem removido aqui — só a sequência mudou. */}
+          <label htmlFor="dl-valor">Valor (R$)</label>
           <input
-            id="dl-data"
-            type="date"
-            value={data}
-            onChange={(e) => setData(e.target.value)}
-            className={campoComErro === 'data' ? 'campo-com-erro' : undefined}
+            id="dl-valor"
+            type="text"
+            inputMode="numeric"
+            autoFocus
+            placeholder="0,00"
+            value={valor}
+            onChange={(e) => setValor(aplicarMascaraValor(e.target.value))}
+            className={campoComErro === 'valor' ? 'campo-com-erro' : undefined}
           />
 
           <label htmlFor="dl-descricao">O que foi</label>
-          <input
+          <MemoriaDescricao
             id="dl-descricao"
-            type="text"
             placeholder="Ex.: Mercado do mês"
-            value={descricao}
-            onChange={(e) => setDescricao(e.target.value)}
+            valor={descricao}
+            onMudar={setDescricao}
+            onEscolher={(s) => {
+              setDescricao(s.descricao)
+              /* Preenche categoria e "pago com" junto — o pedido. Só preenche
+                 o que a sugestão de fato tem, e nunca sobrescreve com vazio. */
+              if (s.categoriaId != null) setCategoriaId(s.categoriaId)
+              if (s.contaId != null) setContaId(s.contaId)
+            }}
           />
 
           {tipo === 'transferencia' ? (
@@ -698,21 +750,19 @@ export default function DetalheLancamento({
           ) : (
             <>
               <label htmlFor="dl-categoria">Categoria</label>
-              <select
+              {/* Deixou de ser `<select>` nativo (10/09/2026): `<option>` só
+                  aceita texto, então ícone não aparecia, e o menu que ele abre
+                  é do sistema — não respeitava claro/escuro. Ver
+                  `SeletorCategoriaComIcone.tsx`. Mesmo filtro de antes: só
+                  categorias ativas, mais a já escolhida ainda que inativa. */}
+              <SeletorCategoriaComIcone
                 id="dl-categoria"
-                value={categoriaId}
-                onChange={(e) => setCategoriaId(e.target.value ? Number(e.target.value) : '')}
-                className={campoComErro === 'categoria' ? 'campo-com-erro' : undefined}
-              >
-                <option value="">Escolha…</option>
-                {(categorias ?? [])
-                  .filter((c) => c.ativa || c.id === categoriaAtual?.id)
-                  .map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.nome}
-                    </option>
-                  ))}
-              </select>
+                categorias={(categorias ?? []).filter((c) => c.ativa || c.id === categoriaAtual?.id)}
+                valor={categoriaId}
+                onEscolher={(id) => setCategoriaId(id)}
+                onLimpar={() => setCategoriaId('')}
+                comErro={campoComErro === 'categoria'}
+              />
 
               <label htmlFor="dl-conta">Pago com</label>
               <select
@@ -732,15 +782,14 @@ export default function DetalheLancamento({
             </>
           )}
 
-          <label htmlFor="dl-valor">Valor (R$)</label>
+
+          <label htmlFor="dl-data">Data</label>
           <input
-            id="dl-valor"
-            type="text"
-            inputMode="numeric"
-            placeholder="0,00"
-            value={valor}
-            onChange={(e) => setValor(aplicarMascaraValor(e.target.value))}
-            className={campoComErro === 'valor' ? 'campo-com-erro' : undefined}
+            id="dl-data"
+            type="date"
+            value={data}
+            onChange={(e) => setData(e.target.value)}
+            className={campoComErro === 'data' ? 'campo-com-erro' : undefined}
           />
 
           <label htmlFor="dl-pago" style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 14 }}>
@@ -873,6 +922,24 @@ export default function DetalheLancamento({
             </button>
           </div>
         </form>
+
+        {/* Clonar — só faz sentido num lançamento que já existe e enquanto
+            não se está clonando. Não grava nada: só troca o formulário pro
+            modo "criar", com os campos já preenchidos (ver `clonando`). */}
+        {editando && !ehTransferenciaExistente && (
+          <div style={{ marginTop: 14, borderTop: '1px solid var(--borda)', paddingTop: 12 }}>
+            <button
+              type="button"
+              style={{ background: 'none', border: '1px solid var(--borda)', borderRadius: 10, color: 'var(--texto)', padding: '10px 14px', cursor: 'pointer', fontWeight: 600 }}
+              onClick={() => { setErro(null); setCampoComErro(null); setConfirmandoExclusao(false); setClonando(true) }}
+            >
+              Clonar este lançamento
+            </button>
+            <p className="texto-fraco" style={{ margin: '6px 0 0', fontSize: 12 }}>
+              Abre uma cópia já preenchida pra editar e salvar como lançamento novo.
+            </p>
+          </div>
+        )}
 
         {editando && (
           <div style={{ marginTop: 16, borderTop: '1px solid var(--borda)', paddingTop: 12 }}>

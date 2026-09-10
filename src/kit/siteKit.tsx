@@ -72,7 +72,10 @@ export function SiteHeaderWeb({ platform, cfg }: { platform: KitPlatform; cfg: R
     if (imgMorfo && h.posicaoMorfo === h.posicaoProduto) zonas[h.posicaoProduto!].push(<span key="dv" style={{ width: 1, height: Math.round(logoH * 0.7), background: 'rgba(255,255,255,0.35)', flexShrink: 0 }} />)
     zonas[h.posicaoProduto!].push(imgProduto)
   }
-  const fraseEl = frase ? <div style={{ fontSize: 12.5, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', ...fraseCorStyle(sc) }}>{frase}</div> : null
+  /* 'ocultar' (Kit item 186): a frase some por completo e as zonas de logo
+     ficam com o espaço dela — por isso é aqui, no elemento, e não em cada um
+     dos cinco pontos de posição abaixo. */
+  const fraseEl = frase && h.frasePos !== 'ocultar' ? <div style={{ fontSize: 12.5, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', ...fraseCorStyle(sc) }}>{frase}</div> : null
   if (h.frasePos === 'centro' && fraseEl) zonas.centro.push(<div key="frc">{fraseEl}</div>)
   const linhaLogos = <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
     {h.frasePos === 'esquerda' && fraseEl}

@@ -4,11 +4,18 @@ import { db, type Categoria, type Conta, type Lancamento } from '../db'
 import type { TelaProps } from '../mes'
 import SeletorMes from '../components/SeletorMes'
 import LinhaLancamentoCompleta from '../components/LinhaLancamentoCompleta'
-import BarraBuscaFiltros, { FILTROS_VAZIOS, aplicarFiltros, type FiltrosAvancados } from '../components/BuscaEFiltros'
+import SeloInstituicao from '../components/SeloInstituicao'
+import {
+  useSelecao, BarraSelecao, TotaisEntradaSaida, MarcadorLinha, separarPorHoje, RodapeTotais,
+} from '../components/SelecaoETotais'
+import { CampoBusca, FolhaFiltros, FILTROS_VAZIOS, aplicarFiltros, contarFiltrosAtivos, type FiltrosAvancados } from '../components/BuscaEFiltros'
 import { obterOuCriarCategoriaPagamentoFatura } from '../categoriasSistema'
 import { formatarCabecalhoData } from '../formatoData'
 import { fmtBRL, formatarMoeda, aplicarMascaraValor, paraNumero } from '../formatoMoeda'
 import { useHojeSimuladoISO } from '../hojeSimulado'
+import TituloTelaN1 from '../kit/CabecalhoN1'
+import { ExportSheet, type ExportRow } from '../kit/ExportSheet'
+import { DismissibleTip, ESPACO_LINHA } from '../kit/PadraoUI'
 
 function fmtBRLComSinal(v: number) {
   return `${v < 0 ? '-' : ''}${fmtBRL(v)}`
@@ -81,6 +88,9 @@ export default function Carteira({ mes, aoMudarMes, aoAbrirLancamento }: TelaPro
   useHojeSimuladoISO()
 
   const [selecionado, setSelecionado] = useState<number | 'cofrinho' | null>(null)
+  /* G44 regra 11b — declarado aqui, ANTES do guard de carregamento abaixo:
+     hook nunca pode ficar depois de um `return` condicional. */
+  const [exportOpen, setExportOpen] = useState(false)
 
   if (!todasContas || !categorias || !todosLancamentos) return null
 
@@ -142,14 +152,54 @@ export default function Carteira({ mes, aoMudarMes, aoAbrirLancamento }: TelaPro
     .reduce((s, l) => s + Math.abs(l.valor), 0)
   const saldoCofrinho = totalAportes - totalGastosCofrinho
 
+  /* G44 regra 11b. `valorDoCard` é a MESMA conta que cada card faz logo
+     abaixo — extraída pra função pra a exportação nunca divergir do que está
+     na tela (o Kit exporta "o que está sendo exibido agora"). */
+  function valorDoCard(conta: Conta): { rotulo: string; valor: number } {
+    /* `todosLancamentos!`: mesmo caso já documentado acima pra `categorias!`
+       — o guard de carregamento garante, mas o TS não propaga o narrowing
+       pra dentro de função aninhada. */
+    const daConta = todosLancamentos!.filter((l) => l.contaId === conta.id)
+    if (conta.tipo === 'cartao') {
+      const { inicio, fim } = janelaFaturaEmAberto(conta.diaFechamento ?? 9)
+      return { rotulo: 'Fatura até o momento', valor: daConta.filter((l) => l.dataCompetencia >= inicio && l.dataCompetencia <= fim).reduce((s, l) => s - l.valor, 0) }
+    }
+    if (conta.tipo === 'cofre') return { rotulo: 'Total acumulado', valor: daConta.reduce((s, l) => s + l.valor, 0) }
+    return { rotulo: 'Total do mês', valor: daConta.filter((l) => l.dataCompetencia.startsWith(mes)).reduce((s, l) => s + l.valor, 0) }
+  }
+  const linhasCarteira: ExportRow[] = [
+    ...contas.map((c) => {
+      const v = valorDoCard(c)
+      return { nome: c.nome, tipo: c.tipo, rotulo: v.rotulo, valor: fmtBRL(v.valor), lancamentos: todosLancamentos.filter((l) => l.contaId === c.id).length }
+    }),
+    { nome: 'Cofrinho', tipo: 'cofrinho (virtual)', rotulo: 'Saldo acumulado', valor: fmtBRL(saldoCofrinho), lancamentos: '' },
+  ]
+
   return (
     <>
       <div className="cabecalho-fixo">
-        <h1>Carteira</h1>
+        <TituloTelaN1 titulo="Carteira" onExportar={() => setExportOpen(true)} />
       </div>
-      <p className="texto-fraco" style={{ marginTop: -8 }}>
+      {exportOpen && <ExportSheet title="Carteira" filenameBase={`morfofinp-carteira-${mes}`}
+        screenColumns={[
+          { key: 'nome', label: 'Lugar' },
+          { key: 'rotulo', label: 'O que é o valor' },
+          { key: 'valor', label: 'Valor' },
+        ]}
+        screenRows={linhasCarteira}
+        detailColumns={[
+          { key: 'nome', label: 'Lugar' },
+          { key: 'tipo', label: 'Tipo' },
+          { key: 'rotulo', label: 'O que é o valor' },
+          { key: 'valor', label: 'Valor' },
+          { key: 'lancamentos', label: 'Lançamentos' },
+        ]}
+        detailRows={linhasCarteira}
+        onClose={() => setExportOpen(false)} />}
+      {/* Padrão de Interface Morfo (UI), seção 6 — ver nota em `Situacao.tsx`. */}
+      <DismissibleTip screenKey="carteira" style={{ marginBottom: ESPACO_LINHA }}>
         Onde o dinheiro está agora — toque num card pra ver e mexer nos lançamentos dele.
-      </p>
+      </DismissibleTip>
 
       {contas.map((conta) => {
         const lancamentosDaConta = todosLancamentos.filter((l) => l.contaId === conta.id)
@@ -189,7 +239,18 @@ export default function Carteira({ mes, aoMudarMes, aoAbrirLancamento }: TelaPro
             onClick={() => setSelecionado(conta.id!)}
           >
             <div className="linha-destaque" style={{ marginTop: 0 }}>
-              <strong>{conta.nome}</strong>
+              {/* Ícone da carteira (10/09/2026) — o mesmo selo redondo
+                  cadastrado em "Contas e carteiras". */}
+              <strong style={{ display: 'flex', alignItems: 'center', gap: 9, minWidth: 0 }}>
+                <SeloInstituicao
+                  instituicao={conta.iconeInstituicao}
+                  cor={conta.iconeCor}
+                  imagemUri={conta.iconeImagemUri}
+                  nome={conta.nome}
+                  tamanho={30}
+                />
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{conta.nome}</span>
+              </strong>
               <strong className={conta.tipo === 'cartao' ? 'valor-neg' : valorNumero < 0 ? 'valor-neg' : 'valor-pos'}>
                 {fmtBRL(valorNumero)}
               </strong>
@@ -350,6 +411,8 @@ function DetalheConta({
 
   const [ordemDesc, setOrdemDesc] = useState(true)
   const [busca, setBusca] = useState('')
+  const [buscaAberta, setBuscaAberta] = useState(false)
+  const [filtrosAbertos, setFiltrosAbertos] = useState(false)
   const [filtros, setFiltros] = useState<FiltrosAvancados>(FILTROS_VAZIOS)
 
   const doPeriodoBruto = lancamentosDoLugar.filter((l) => l.dataCompetencia >= janela.inicio && l.dataCompetencia <= janela.fim)
@@ -366,24 +429,47 @@ function DetalheConta({
     ordemDesc ? b.dataCompetencia.localeCompare(a.dataCompetencia) : a.dataCompetencia.localeCompare(b.dataCompetencia),
   )
 
-  const sessoes: { data: string; itens: Lancamento[] }[] = []
-  for (const l of doPeriodo) {
-    const ultima = sessoes[sessoes.length - 1]
-    if (ultima && ultima.data === l.dataCompetencia) ultima.itens.push(l)
-    else sessoes.push({ data: l.dataCompetencia, itens: [l] })
+  function agrupar(itens: Lancamento[]) {
+    const out: { data: string; itens: Lancamento[] }[] = []
+    for (const l of itens) {
+      const ultima = out[out.length - 1]
+      if (ultima && ultima.data === l.dataCompetencia) ultima.itens.push(l)
+      else out.push({ data: l.dataCompetencia, itens: [l] })
+    }
+    return out
   }
+
+  /* Seleção múltipla e corte "até Hoje" × "dias futuros" (10/09/2026, pedido
+     do Rafael) — as MESMAS peças da tela de Lançamentos
+     (`src/components/SelecaoETotais.tsx`), nada duplicado aqui. O corte só
+     aparece quando de fato existe registro dos dois lados. */
+  const selecao = useSelecao(doPeriodo.map((l) => l.id!).filter(Boolean))
+  const { ateHoje, futuros } = separarPorHoje(doPeriodo)
+  const blocos = (futuros.length > 0 && ateHoje.length > 0
+    ? [
+        { chave: 'ate-hoje', titulo: 'Até hoje', itens: ateHoje },
+        { chave: 'futuros', titulo: 'Dias futuros', itens: futuros },
+      ]
+    : [{ chave: 'tudo', titulo: futuros.length > 0 ? 'Dias futuros' : 'Até hoje', itens: doPeriodo }]
+  ).map((b) => ({ ...b, sessoes: agrupar(b.itens) }))
+  const sessoes = blocos.flatMap((b) => b.sessoes)
 
   function linhaDe(l: Lancamento) {
     // Wrapper só pra carregar a borda entre lançamentos (01/09/2026) — mesmo
     // padrão visual de `.item-lancamento` em Lançamentos.tsx, ver index.css.
     return (
-      <div key={l.id} className="linha-completa-wrapper">
-        <LinhaLancamentoCompleta
-          lancamento={l}
-          categoria={categoriaPorId.get(l.categoriaId)}
-          origemLabel={conta && l.contaId === conta.id ? undefined : `via ${contaPorId.get(l.contaId)?.nome ?? '—'}`}
-          onAbrir={() => aoAbrirLancamento({ id: l.id })}
-        />
+      <div key={l.id} className="linha-selecionavel">
+        {selecao.ativa && (
+          <MarcadorLinha marcado={selecao.estaMarcado(l.id!)} onAlternar={() => selecao.alternar(l.id!)} />
+        )}
+        <div className="linha-completa-wrapper">
+          <LinhaLancamentoCompleta
+            lancamento={l}
+            categoria={categoriaPorId.get(l.categoriaId)}
+            origemLabel={conta && l.contaId === conta.id ? undefined : `via ${contaPorId.get(l.contaId)?.nome ?? '—'}`}
+            onAbrir={() => (selecao.ativa ? selecao.alternar(l.id!) : aoAbrirLancamento({ id: l.id }))}
+          />
+        </div>
       </div>
     )
   }
@@ -456,14 +542,46 @@ function DetalheConta({
   return (
     <>
       <div className="cabecalho-fixo">
-        <div className="linha" style={{ border: 'none', padding: '0 0 8px', justifyContent: 'flex-start', gap: 12 }}>
-          <button type="button" className="botao-voltar-circular" onClick={aoVoltar} aria-label="Voltar">
-            ‹
-          </button>
-          <h1 style={{ margin: 0 }}>{titulo}</h1>
-        </div>
+        {/* Mesma fileira de ícones de Lançamentos (10/09/2026): Selecionar ·
+            Buscar · Filtro, agora dentro da linha do título, com o "‹ Voltar"
+            à esquerda. Ordenação foi pra dentro da folha de filtros e a
+            contagem só aparece com a seleção ativa. */}
+        <TituloTelaN1
+          titulo={titulo}
+          antes={
+            <button type="button" className="botao-voltar-circular" onClick={aoVoltar} aria-label="Voltar">
+              ‹
+            </button>
+          }
+          acoesLista={{
+            onSelecionar: () => (selecao.ativa ? selecao.sair() : selecao.ativar()),
+            selecaoAtiva: selecao.ativa,
+            onBuscar: () => setBuscaAberta((v) => !v),
+            buscaAtiva: busca !== '',
+            onFiltrar: () => setFiltrosAbertos(true),
+            filtrosAtivos: contarFiltrosAtivos(filtros),
+          }}
+        />
         <SeletorMes mes={mes} onMudar={aoMudarMes} />
+        {(buscaAberta || busca !== '') && (
+          <CampoBusca busca={busca} onBuscaChange={setBusca} onFechar={() => setBuscaAberta(false)} />
+        )}
+        {selecao.ativa && (
+          <div className="linha" style={{ border: 'none', padding: 0, alignItems: 'flex-start', gap: 8 }}>
+            <BarraSelecao selecao={selecao} total={doPeriodo.length} />
+          </div>
+        )}
       </div>
+      {filtrosAbertos && (
+        <FolhaFiltros
+          filtros={filtros}
+          categorias={categorias}
+          contas={contasDisponiveis}
+          ordemDesc={ordemDesc}
+          onFechar={() => setFiltrosAbertos(false)}
+          onAplicar={(f, ordem) => { setFiltros(f); setOrdemDesc(ordem); setFiltrosAbertos(false) }}
+        />
+      )}
       {isCartao && (
         <p className="texto-fraco" style={{ marginTop: -10, marginBottom: 14 }}>
           Fatura de {formatarDataCurta(janela.inicio)} a {formatarDataCurta(janela.fim)}
@@ -492,24 +610,6 @@ function DetalheConta({
           )}
         </div>
       )}
-
-      <BarraBuscaFiltros
-        busca={busca}
-        onBuscaChange={setBusca}
-        filtros={filtros}
-        onFiltrosChange={setFiltros}
-        categorias={categorias}
-        contas={contasDisponiveis}
-      />
-
-      <div className="linha" style={{ border: 'none', padding: '0 0 8px' }}>
-        <span className="texto-fraco">
-          {doPeriodo.length} lançamento(s){doPeriodo.length !== doPeriodoBruto.length ? ` de ${doPeriodoBruto.length}` : ''}
-        </span>
-        <button type="button" className="botao-ordem" onClick={() => setOrdemDesc((v) => !v)}>
-          {ordemDesc ? 'Mais recente ↓' : 'Mais antigo ↑'}
-        </button>
-      </div>
 
       {/* Duplo totalizador (só cartão, ponto 6) — topo E rodapé. */}
       {isCartao && <BlocoTotais {...totaisProps} />}
@@ -593,10 +693,20 @@ function DetalheConta({
             Nenhum lançamento encontrado {isCartao ? 'neste ciclo' : 'neste mês'}.
           </p>
         )}
-        {sessoes.map((sessao) => (
-          <div key={sessao.data}>
-            <div className="sessao-data">{formatarCabecalhoData(sessao.data)}</div>
-            {sessao.itens.map((l) => linhaDe(l))}
+        {blocos.map((b) => (
+          <div key={b.chave}>
+            {blocos.length > 1 && !selecao.ativa && <div className="bloco-corte-titulo">{b.titulo}</div>}
+            {b.sessoes.map((sessao) => (
+              <div key={sessao.data}>
+                <div className="sessao-data">{formatarCabecalhoData(sessao.data)}</div>
+                {sessao.itens.map((l) => linhaDe(l))}
+              </div>
+            ))}
+            {!selecao.ativa && blocos.length > 1 && b.itens.length > 0 && (
+              <div style={{ padding: '8px 0 12px' }}>
+                <TotaisEntradaSaida itens={b.itens} rotulo={b.titulo} />
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -606,6 +716,21 @@ function DetalheConta({
       <div style={{ marginTop: 12 }}>
         <BlocoTotais {...totaisProps} />
       </div>
+
+      {/* Entrada · Saída · Total da lista, FIXO no rodapé (10/09/2026). Vem
+          por ÚLTIMO de propósito: um elemento `sticky` com fundo opaco esconde
+          o que vier depois dele quando a rolagem passa — o bloco de saldo do
+          período (`BlocoTotais`, acima) ficaria inalcançável. */}
+      {doPeriodo.length > 0 && (
+        <RodapeTotais>
+          <TotaisEntradaSaida
+            recolhivel
+            destaque={selecao.ativa}
+            rotulo={selecao.ativa ? `Selecionados (${selecao.qtd})` : 'Total da lista'}
+            itens={selecao.ativa ? doPeriodo.filter((l) => selecao.marcados.has(l.id!)) : doPeriodo}
+          />
+        </RodapeTotais>
+      )}
 
       <button
         type="button"

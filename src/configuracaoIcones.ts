@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, type ConfiguracaoIcones } from './db'
 
@@ -55,7 +56,10 @@ export function tamanhoIconePx(tipo: 'completa' | 'categoria' | 'grupo', pct: nu
 // (05/09/2026) idem, gerenciado por `src/hojeSimulado.ts`. `credencialEmail`/
 // `credencialSenha`/`sessaoAtiva` (05/09/2026, Etapa 8) idem, gerenciados
 // por `src/kit/auth.ts`/`AppRoot.tsx` — nenhum lugar que usa este hook
-// precisa saber de credencial/sessão.
+// precisa saber de credencial/sessão. `loggedDevUserId`/`loggedUserIdN1`
+// (10/09/2026, Decisão 54 Parte B — login multiusuário) pelo mesmo motivo:
+// gerenciados por `src/kit/authN0.ts`/`src/kit/auth.ts`, nunca lidos por
+// quem só precisa do percentual de ícone/modo de visão.
 export function useConfiguracaoIcones(): Required<
   Omit<
     ConfiguracaoIcones,
@@ -69,6 +73,8 @@ export function useConfiguracaoIcones(): Required<
     | 'credencialEmailN0'
     | 'credencialSenhaN0'
     | 'sessaoAtivaN0'
+    | 'loggedDevUserId'
+    | 'loggedUserIdN1'
     | 'marcaSeloEcossistema'
     | 'marcaWhatsappNumero'
     | 'marcaWhatsappMensagemPadrao'
@@ -77,6 +83,10 @@ export function useConfiguracaoIcones(): Required<
     | 'siteConfig'
     | 'sitePages'
     | 'siteMenu'
+    | 'platformN0'
+    | 'temaPreferido'
+    | 'memoriaDescricaoDias'
+    | 'logosInstituicoes'
   >
 > {
   const config = useLiveQuery(() => db.configuracoes.get(1), [])
@@ -212,4 +222,72 @@ export function useSimulacaoResolucao(): 'web' | undefined {
 
 export async function salvarSimulacaoResolucao(modo: 'web' | undefined) {
   await salvarConfiguracaoIcones({ simulacaoResolucao: modo })
+}
+
+// Tema das telas do N1 (10/09/2026, Decisão 55 — Parte B: "Aparência" do
+// Kit, L4739-L4780). Ausente/undefined = 'escuro', o comportamento de
+// sempre — nunca vira claro sozinho por causa da configuração do celular
+// (só quando o Rafael escolhe 'auto' de propósito). O CSS correspondente
+// está em `src/index.css` (`[data-mloc-tema]`); quem aplica o atributo no
+// <html> é `aplicarTema()`, chamado por `useTema()` em `ConfigN1.tsx`.
+export type TemaPreferido = 'claro' | 'escuro' | 'auto'
+export function useTemaPreferido(): TemaPreferido {
+  const config = useLiveQuery(() => db.configuracoes.get(1), [])
+  return config?.temaPreferido ?? 'escuro'
+}
+export async function salvarTemaPreferido(tema: TemaPreferido) {
+  await salvarConfiguracaoIcones({ temaPreferido: tema })
+}
+
+// Tema EFETIVO ('claro' | 'escuro') — o preferido já resolvido: 'auto' vira
+// o que o aparelho está usando neste momento (e acompanha se ele mudar).
+// Existe porque as peças transcritas do Kit (`MenuGroup`, `Sheet`,
+// `MenuRowCompact`…) recebem um prop booleano `dark` em vez de lerem as
+// variáveis CSS do produto — 10/09/2026, tela única de Configurações.
+export function useTemaEfetivo(): 'claro' | 'escuro' {
+  const preferido = useTemaPreferido()
+  const [doAparelho, setDoAparelho] = useState<'claro' | 'escuro'>(() =>
+    typeof window !== 'undefined' && window.matchMedia?.('(prefers-color-scheme: light)').matches ? 'claro' : 'escuro'
+  )
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return
+    const mq = window.matchMedia('(prefers-color-scheme: light)')
+    const ouvir = () => setDoAparelho(mq.matches ? 'claro' : 'escuro')
+    ouvir()
+    mq.addEventListener('change', ouvir)
+    return () => mq.removeEventListener('change', ouvir)
+  }, [])
+  return preferido === 'auto' ? doAparelho : preferido
+}
+
+// Memória do campo "O que foi" — quantos DIAS pra trás o formulário de
+// lançamento procura descrições já usadas pra sugerir enquanto se digita
+// (10/09/2026, pedido do Rafael). Parâmetro de nível 1 (ambiente do cliente),
+// editável em Configurações → Meu Ambiente. 0 desliga a sugestão.
+export const MEMORIA_DESCRICAO_DIAS_PADRAO = 60
+export function useMemoriaDescricaoDias(): number {
+  const config = useLiveQuery(() => db.configuracoes.get(1), [])
+  const v = config?.memoriaDescricaoDias
+  return v === undefined || v === null ? MEMORIA_DESCRICAO_DIAS_PADRAO : v
+}
+export async function salvarMemoriaDescricaoDias(dias: number) {
+  await salvarConfiguracaoIcones({ memoriaDescricaoDias: Math.max(0, Math.round(dias)) })
+}
+
+// Biblioteca de logos reais das instituições, trazidas pelo próprio usuário
+// (10/09/2026) — ver `logosInstituicoes` em `db.ts` pro porquê. Chave = nome
+// exato da instituição em `src/dados/instituicoes.ts`.
+export function useLogosInstituicoes(): Record<string, string> {
+  const config = useLiveQuery(() => db.configuracoes.get(1), [])
+  return config?.logosInstituicoes ?? {}
+}
+export async function salvarLogosInstituicoes(patch: Record<string, string | undefined>) {
+  const atual = (await db.configuracoes.get(1))?.logosInstituicoes ?? {}
+  const novo: Record<string, string> = { ...atual }
+  for (const [k, v] of Object.entries(patch)) {
+    if (v === undefined) delete novo[k]
+    else novo[k] = v
+  }
+  await salvarConfiguracaoIcones({ logosInstituicoes: novo })
+  return novo
 }

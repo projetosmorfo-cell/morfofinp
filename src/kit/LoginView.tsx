@@ -9,10 +9,11 @@ import {
   type Endereco, type KitPlan, type KitPlatform, type KitUser, type SitePage,
 } from './kitBase'
 import { NOME_PRODUTO, SITE_LOGIN_PAGE_ID, SITE_PLANOS_PAGE_ID, BlocoLogosLogin, SiteHeaderWeb, SiteNavHorizontalWeb, SiteNavVerticalWeb, loginPageCfgDe, montarPlatformSite, paginasSiteComLogin, sitePagesDe, siteWebLayoutDe } from './siteKit'
-import { criarAcesso, entrarDemo } from './auth'
-import { entrarDemoN0, N0_PADRAO_KIT } from './authN0'
+import { criarAcesso, entrarComoTenantUser } from './auth'
+import { entrarComoDevUser, N0_PADRAO_KIT } from './authN0'
+import { usePlatformN0, devUsersComMigracao, tenantUsersComMigracao, TENANT_N1_ID } from './kitPlatform'
 import { useSimulacaoResolucao } from '../configuracaoIcones'
-import { usePlanos } from './planos'
+import { usePlanos, recursosAutomaticos } from './planos'
 import { salvarPlanoId } from './planoAtual'
 import { CARIMBO_BUILD } from '../buildInfo'
 
@@ -394,28 +395,34 @@ export default function LoginView() {
   const config = useLiveQuery(() => db.configuracoes.get(1), [], CARREGANDO)
   const planosDexie = usePlanos()
   const areaWeb = useSimulacaoResolucao() === 'web'
+  const platformN0Persistida = usePlatformN0()
 
   // Aguardando a 1ª leitura do Dexie — `config === undefined` NÃO entra aqui
   // (é o caso real de banco sem credencial nenhuma); só o sentinela distingue
   // "carregando" de "vazio de verdade" (bug real da Etapa 8, ver histórico).
   if (config === CARREGANDO) return null
 
-  // --- platform.devUsers: administrador Morfo (N0). Sem credencial N0 gravada
-  // ainda, vale o usuário padrão do Kit (`generatePlatform`, L646:
-  // login "morfomod", senha "306583", e-mail projetos.morfo@gmail.com — G55,
-  // mesmo dado do MorfoLoc); com credencial gravada, ela manda.
-  const devUsers: KitUser[] = config?.credencialEmailN0 && config?.credencialSenhaN0
-    ? [{ id: 'n0', name: 'Admin Morfo', login: config.credencialEmailN0, senha: config.credencialSenhaN0, email: config.credencialEmailN0 }]
-    : [{ id: 'n0', name: N0_PADRAO_KIT.nome, login: N0_PADRAO_KIT.login, senha: N0_PADRAO_KIT.senha, email: N0_PADRAO_KIT.email }]
+  // --- platform.devUsers: lista REAL de administradores Morfo (N0),
+  // `platformN0.devUsers` (10/09/2026, Decisão 54 Parte B — login virou
+  // multiusuário "pra perfis valerem de verdade"). Aqui é só a VISÃO usada
+  // pelo `LoginViewKit`/`submit()` (nunca grava nada) — migra a credencial
+  // única antiga (`credencialEmailN0`/`credencialSenhaN0`) se existir, ou cai
+  // no admin padrão do Kit (G55) se a lista real ainda estiver vazia. A
+  // migração de verdade (persistida) só acontece quando alguém efetivamente
+  // loga, em `authN0.ts` (`garantirDevUsersMigrados`).
+  const devUsers: KitUser[] = devUsersComMigracao(platformN0Persistida.devUsers, config, N0_PADRAO_KIT)
+    .map(u => ({ id: u.id, name: u.name, login: u.login, senha: u.senha, email: u.email, status: u.status }))
   // --- platform.tenants: a empresa cliente (N1) é o próprio usuário do app
   // (1 tenant, `t0` — mesmo id usado por DevApp → "Entrar como este tenant").
-  // O usuário só existe depois de "Contratar um plano" (ou do atalho demo).
-  const tenantUsers: KitUser[] = config?.credencialEmail && config?.credencialSenha
-    ? [{ id: 'u0', name: config.credencialEmail, login: config.credencialEmail, senha: config.credencialSenha, email: config.credencialEmail, status: 'ativo' }]
-    : []
+  // Lista REAL de usuários, `t0.users` (Decisão 54 Parte B), com a mesma
+  // migração da credencial única antiga. Continua vazia até "Contratar um
+  // plano" (ou o atalho demo) criar o 1º usuário.
+  const t0Persistido = platformN0Persistida.tenants.find(t => t.id === TENANT_N1_ID)
+  const tenantUsers: KitUser[] = tenantUsersComMigracao(t0Persistido?.users, config)
+    .map(u => ({ id: u.id, name: u.name, login: u.login, senha: u.senha, email: u.email, status: u.status }))
   // --- platform.plans: catálogo real do N0 (Gerenciar Planos, Dexie), na
   // forma que o Kit lê (`name`/`monthlyValue`/`features`).
-  const plans: KitPlan[] = planosDexie.map(p => ({ id: String(p.id), name: p.nome, monthlyValue: p.valorMensal, destaque: p.destaque, features: p.funcionalidades }))
+  const plans: KitPlan[] = planosDexie.map(p => ({ id: String(p.id), name: p.nome, monthlyValue: p.valorMensal, destaque: p.destaque, features: recursosAutomaticos(p) }))
   const platform: KitPlatform = {
     devUsers,
     tenants: [{ id: 't0', companyName: NOME_PRODUTO, users: tenantUsers }],
@@ -434,11 +441,14 @@ export default function LoginView() {
 
   // onLogin do Kit → sessões do produto (persistidas no Dexie; `AppRoot.tsx`
   // troca de tela sozinho via useLiveQuery). 'dev' = N0, 'tenant' = N1.
-  // Sem credencial gravada ainda (1º uso / atalho demo), `entrarDemo*()` cria
-  // a credencial — N0 nasce com os valores padrão do Kit (G55).
-  const onLogin = (level: LoginLevel) => {
-    if (level === 'dev') void entrarDemoN0()
-    else void entrarDemo()
+  // `LoginViewKit`'s `submit()` já resolveu QUAL usuário bateu (`userId`) —
+  // os botões de atalho demo chamam sem `userId`, e `entrarComoDevUser`/
+  // `entrarComoTenantUser` caem no 1º usuário da lista (migrando a
+  // credencial antiga ou criando o admin padrão do Kit se a lista ainda
+  // estiver vazia — mesmo efeito que `entrarDemoN0()`/`entrarDemo()` tinham).
+  const onLogin = (level: LoginLevel, _tenantId: string | null, userId?: string) => {
+    if (level === 'dev') void entrarComoDevUser(userId)
+    else void entrarComoTenantUser(userId)
   }
   // onSelfRegister do Kit → "Contratar um plano" vira a credencial N1 do
   // produto (login/senha escolhidos no passo 2) + plano contratado (Minha

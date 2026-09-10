@@ -20,6 +20,12 @@ export interface AbaRodape<K extends string> {
   // opcional, o N0 não usa.
   extra?: ReactNode
   dataTour?: string
+  /* Conteúdo que SUBSTITUI o botão desta posição, ocupando o mesmo espaço
+     (10/09/2026, Decisão 58): é assim que o botão "⋮" entra na barra quando
+     o parâmetro "Posição do botão ⋮" manda ele pro rodapé — nunca flutuando
+     por cima do conteúdo, exatamente como o Kit descreve as três opções de
+     rodapé. */
+  custom?: ReactNode
 }
 
 export default function RodapeAbas<K extends string>({ abas, ativa, onTrocar, className }: { abas: AbaRodape<K>[]; ativa: K; onTrocar: (k: K) => void; className?: string }) {
@@ -55,8 +61,15 @@ export default function RodapeAbas<K extends string>({ abas, ativa, onTrocar, cl
         flexShrink: 0,
       }}
     >
-      {abas.map(({ key, label, Icone, extra, dataTour }) => {
+      {abas.map(({ key, label, Icone, extra, dataTour, custom }) => {
         const ativo = ativa === key
+        if (custom) {
+          return (
+            <div key={key} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '7px 2px' }}>
+              {custom}
+            </div>
+          )
+        }
         return (
           <button
             key={key}

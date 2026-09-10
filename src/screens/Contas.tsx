@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, type Conta, type TipoConta } from '../db'
+import SeletorInstituicao, { type IconeCarteira } from '../components/SeletorInstituicao'
+import SeloInstituicao from '../components/SeloInstituicao'
 
 const ROTULO_TIPO: Record<TipoConta, string> = {
   corrente: 'Conta corrente',
@@ -13,10 +15,12 @@ interface RascunhoConta {
   tipo: TipoConta
   diaFechamento: string
   diaVencimento: string
+  /* Ícone da carteira (10/09/2026) — ver `SeletorInstituicao.tsx`. */
+  icone: IconeCarteira
 }
 
 function rascunhoVazio(): RascunhoConta {
-  return { nome: '', tipo: 'corrente', diaFechamento: '9', diaVencimento: '16' }
+  return { nome: '', tipo: 'corrente', diaFechamento: '9', diaVencimento: '16', icone: {} }
 }
 
 function diaValido(v: string, padrao: number): number {
@@ -64,6 +68,7 @@ export default function Contas({ aoVoltar }: { aoVoltar: () => void }) {
       tipo: c.tipo,
       diaFechamento: String(c.diaFechamento ?? 9),
       diaVencimento: String(c.diaVencimento ?? 16),
+      icone: { instituicao: c.iconeInstituicao, cor: c.iconeCor, imagemUri: c.iconeImagemUri },
     })
     setConfirmandoExclusaoId(null)
   }
@@ -73,6 +78,9 @@ export default function Contas({ aoVoltar }: { aoVoltar: () => void }) {
     await db.contas.update(editandoId, {
       nome: rascunho.nome.trim(),
       tipo: rascunho.tipo,
+      iconeInstituicao: rascunho.icone.instituicao,
+      iconeCor: rascunho.icone.cor,
+      iconeImagemUri: rascunho.icone.imagemUri,
       diaFechamento: rascunho.tipo === 'cartao' ? diaValido(rascunho.diaFechamento, 1) : undefined,
       diaVencimento: rascunho.tipo === 'cartao' ? diaValido(rascunho.diaVencimento, 10) : undefined,
     })
@@ -93,7 +101,10 @@ export default function Contas({ aoVoltar }: { aoVoltar: () => void }) {
     await db.contas.add({
       nome: novaConta.nome.trim(),
       tipo: novaConta.tipo,
-      instituicao: novaConta.nome.trim(),
+      instituicao: novaConta.icone.instituicao || novaConta.nome.trim(),
+      iconeInstituicao: novaConta.icone.instituicao,
+      iconeCor: novaConta.icone.cor,
+      iconeImagemUri: novaConta.icone.imagemUri,
       saldoInicial: 0,
       dataSaldoInicial: hoje(),
       importavel: false,
@@ -133,6 +144,12 @@ export default function Contas({ aoVoltar }: { aoVoltar: () => void }) {
                   type="text"
                   value={rascunho.nome}
                   onChange={(e) => setRascunho((r) => ({ ...r, nome: e.target.value }))}
+                />
+                <label>Ícone</label>
+                <SeletorInstituicao
+                  nome={rascunho.nome}
+                  valor={rascunho.icone}
+                  onEscolher={(icone) => setRascunho((r) => ({ ...r, icone }))}
                 />
                 <label>Tipo</label>
                 <select
@@ -192,7 +209,15 @@ export default function Contas({ aoVoltar }: { aoVoltar: () => void }) {
           return (
             <div key={c.id} style={{ padding: '10px 0', borderBottom: '1px solid var(--borda)' }}>
               <div className="linha" style={{ border: 'none', padding: 0 }}>
-                <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                  <SeloInstituicao
+                    instituicao={c.iconeInstituicao}
+                    cor={c.iconeCor}
+                    imagemUri={c.iconeImagemUri}
+                    nome={c.nome}
+                    tamanho={36}
+                  />
+                  <div style={{ minWidth: 0 }}>
                   <div style={{ opacity: c.ativa ? 1 : 0.5 }}>
                     {c.nome}
                     {!c.ativa && <span className="texto-fraco"> · inativa</span>}
@@ -201,6 +226,7 @@ export default function Contas({ aoVoltar }: { aoVoltar: () => void }) {
                     {ROTULO_TIPO[c.tipo]}
                     {c.tipo === 'cartao' && c.diaFechamento ? ` · fecha dia ${c.diaFechamento}` : ''}
                     {c.tipo === 'cartao' && c.diaVencimento ? ` · vence dia ${c.diaVencimento}` : ''}
+                  </div>
                   </div>
                 </div>
               </div>
@@ -262,6 +288,12 @@ export default function Contas({ aoVoltar }: { aoVoltar: () => void }) {
               placeholder="Ex.: Nubank, Cofrinho Viagem…"
               value={novaConta.nome}
               onChange={(e) => setNovaConta((r) => ({ ...r, nome: e.target.value }))}
+            />
+            <label>Ícone</label>
+            <SeletorInstituicao
+              nome={novaConta.nome}
+              valor={novaConta.icone}
+              onEscolher={(icone) => setNovaConta((r) => ({ ...r, icone }))}
             />
             <label>Tipo</label>
             <select

@@ -103,20 +103,27 @@ const ROTULO_RECORRENCIA: Record<RecorrenciaFiltro, string> = {
 }
 const TODOS_STATUS: StatusPagamento[] = ['pago', 'recebido', 'atrasado', 'a_pagar', 'a_receber']
 
-function ModalFiltros({
+export function FolhaFiltros({
   filtros,
   categorias,
   contas,
+  ordemDesc,
   onFechar,
   onAplicar,
 }: {
   filtros: FiltrosAvancados
   categorias: Categoria[]
   contas: Conta[]
+  /* Ordenação (10/09/2026, pedido do Rafael: "pra dentro dessa tela de filtro
+     deve ir a funcionalidade de ordenar") — era um botão de texto solto na
+     barra acima da lista. Entra no mesmo rascunho dos filtros e é aplicada
+     junto, no mesmo botão. */
+  ordemDesc: boolean
   onFechar: () => void
-  onAplicar: (f: FiltrosAvancados) => void
+  onAplicar: (f: FiltrosAvancados, ordemDesc: boolean) => void
 }) {
   const [rascunho, setRascunho] = useState<FiltrosAvancados>(filtros)
+  const [ordemRascunho, setOrdemRascunho] = useState(ordemDesc)
 
   function ChipMulti({
     valor,
@@ -150,7 +157,7 @@ function ModalFiltros({
     <div className="modal-fundo" onClick={onFechar}>
       <div className="modal-conteudo" onClick={(e) => e.stopPropagation()}>
         <div className="linha" style={{ border: 'none', padding: 0, marginBottom: 8 }}>
-          <h2 style={{ margin: 0 }}>Filtros avançados</h2>
+          <h2 style={{ margin: 0 }}>Filtros e ordenação</h2>
           <button
             type="button"
             onClick={onFechar}
@@ -159,6 +166,12 @@ function ModalFiltros({
           >
             ✕
           </button>
+        </div>
+
+        <label>Ordenar por data</label>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          <ChipMulti valor="Mais recente ↓" ativo={ordemRascunho} onClick={() => setOrdemRascunho(true)} />
+          <ChipMulti valor="Mais antigo ↑" ativo={!ordemRascunho} onClick={() => setOrdemRascunho(false)} />
         </div>
 
         <label>Tipo</label>
@@ -276,8 +289,8 @@ function ModalFiltros({
         </div>
 
         <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
-          <button type="button" className="primario" style={{ marginTop: 0 }} onClick={() => onAplicar(rascunho)}>
-            Aplicar filtros
+          <button type="button" className="primario" style={{ marginTop: 0 }} onClick={() => onAplicar(rascunho, ordemRascunho)}>
+            Aplicar
           </button>
           <button
             type="button"
@@ -299,104 +312,49 @@ function ModalFiltros({
   )
 }
 
-export default function BarraBuscaFiltros({
-  busca,
-  onBuscaChange,
-  filtros,
-  onFiltrosChange,
-  categorias,
-  contas,
-}: {
+/* Campo de busca RECOLHÍVEL (10/09/2026, pedido do Rafael: "o campo busca deve
+   sair e virar um ícone de busca"). O ícone vive na fileira do título (ver
+   `IconesDeTela`); este campo só existe no DOM quando ele está aberto — ou
+   quando há texto digitado, porque um recorte ativo nunca pode ficar
+   invisível (mesmo princípio da tarja de filtro ativo que existia antes).
+   O "×" limpa a busca e fecha. */
+export function CampoBusca({ busca, onBuscaChange, onFechar }: {
   busca: string
   onBuscaChange: (v: string) => void
-  filtros: FiltrosAvancados
-  onFiltrosChange: (f: FiltrosAvancados) => void
-  categorias: Categoria[]
-  contas: Conta[]
+  onFechar: () => void
 }) {
-  const [modalAberto, setModalAberto] = useState(false)
-  const qtdAtiva = contarFiltrosAtivos(filtros)
-
   return (
-    <div style={{ marginBottom: 10 }}>
-      <div style={{ display: 'flex', gap: 8 }}>
-        <div style={{ position: 'relative', flex: 1 }}>
-          <input
-            type="text"
-            placeholder="Buscar por descrição, categoria ou conta…"
-            value={busca}
-            onChange={(e) => onBuscaChange(e.target.value)}
-            style={{ paddingRight: busca ? 32 : undefined }}
-          />
-          {busca && (
-            <button
-              type="button"
-              aria-label="Limpar busca"
-              onClick={() => onBuscaChange('')}
-              style={{
-                position: 'absolute',
-                right: 8,
-                top: '50%',
-                transform: 'translateY(-50%)',
-                background: 'none',
-                border: 'none',
-                color: 'var(--texto-fraco)',
-                fontSize: 18,
-                lineHeight: 1,
-                cursor: 'pointer',
-                padding: 0,
-              }}
-            >
-              ×
-            </button>
-          )}
-        </div>
-        <button type="button" className="botao-ordem" onClick={() => setModalAberto(true)}>
-          Filtros{qtdAtiva > 0 ? ` (${qtdAtiva})` : ''}
-        </button>
-      </div>
-
-      {qtdAtiva > 0 && (
-        <div
-          onClick={() => setModalAberto(true)}
+    <div className="barra-busca-filtros" style={{ marginBottom: 10 }}>
+      <div style={{ position: 'relative' }}>
+        <input
+          type="text"
+          autoFocus
+          placeholder="Buscar por descrição, categoria ou conta…"
+          value={busca}
+          onChange={(e) => onBuscaChange(e.target.value)}
+          style={{ paddingRight: 32 }}
+        />
+        <button
+          type="button"
+          aria-label={busca ? 'Limpar busca' : 'Fechar busca'}
+          onClick={() => { onBuscaChange(''); onFechar() }}
           style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            marginTop: 6,
-            padding: '5px 10px',
-            background: 'rgba(59,130,246,0.14)',
-            borderRadius: 999,
-            fontSize: 12,
+            position: 'absolute',
+            right: 8,
+            top: '50%',
+            transform: 'translateY(-50%)',
+            background: 'none',
+            border: 'none',
+            color: 'var(--texto-fraco)',
+            fontSize: 18,
+            lineHeight: 1,
             cursor: 'pointer',
+            padding: 0,
           }}
         >
-          <span>{qtdAtiva} filtro(s) ativo(s)</span>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation()
-              onFiltrosChange(FILTROS_VAZIOS)
-            }}
-            style={{ background: 'none', border: 'none', color: 'var(--texto)', cursor: 'pointer', fontSize: 14, padding: 0 }}
-          >
-            ×
-          </button>
-        </div>
-      )}
-
-      {modalAberto && (
-        <ModalFiltros
-          filtros={filtros}
-          categorias={categorias}
-          contas={contas}
-          onFechar={() => setModalAberto(false)}
-          onAplicar={(f) => {
-            onFiltrosChange(f)
-            setModalAberto(false)
-          }}
-        />
-      )}
+          ×
+        </button>
+      </div>
     </div>
   )
 }

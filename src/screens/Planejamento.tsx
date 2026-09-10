@@ -9,6 +9,9 @@ import SeletorMes from '../components/SeletorMes'
 import ListaLancamentosCategoria from '../components/ListaLancamentosCategoria'
 import { Icone } from '../icones'
 import { useConfiguracaoIcones, tamanhoIconePx } from '../configuracaoIcones'
+import TituloTelaN1 from '../kit/CabecalhoN1'
+import { ExportSheet, type ExportRow } from '../kit/ExportSheet'
+import { DismissibleTip, ESPACO_LINHA } from '../kit/PadraoUI'
 
 type Classe = 'entrada' | 'saida'
 
@@ -53,6 +56,7 @@ export default function Planejamento({ mes, aoMudarMes, aoAbrirLancamento }: Tel
   const lancamentosTodos = useLiveQuery(() => db.lancamentos.toArray(), [])
 
   const [grupoAberto, setGrupoAberto] = useState<string | null>(null)
+  const [exportOpen, setExportOpen] = useState(false) /* G44 regra 11b */
   const [categoriaAberta, setCategoriaAberta] = useState<number | null>(null)
   // Terceira seção (sem orçamento e sem movimento) vem recolhida por padrão
   // em cada grupo — pouco relevante no dia a dia, mas ainda acessível (30/08/2026,
@@ -226,14 +230,42 @@ export default function Planejamento({ mes, aoMudarMes, aoAbrirLancamento }: Tel
   return (
     <>
       <div className="cabecalho-fixo">
-        <h1>Planejamento</h1>
+        <TituloTelaN1 titulo="Planejamento" onExportar={() => setExportOpen(true)} />
         <SeletorMes mes={mes} onMudar={aoMudarMes} />
       </div>
-      <p className="texto-fraco">
+      {exportOpen && <ExportSheet title="Planejamento" filenameBase={`morfofinp-planejamento-${mes}`}
+        screenColumns={[
+          { key: 'item', label: 'Item' },
+          { key: 'planejado', label: 'Planejado' },
+          { key: 'realizado', label: 'Realizado' },
+          { key: 'previsto', label: 'Previsto' },
+        ]}
+        screenRows={[
+          { item: 'Entradas', planejado: fmt(totalEntradas.planejado), realizado: fmt(totalEntradas.realizado), previsto: fmt(totalEntradas.previsto) },
+          { item: 'Saídas', planejado: fmt(totalSaidas.planejado), realizado: fmt(totalSaidas.realizado), previsto: fmt(totalSaidas.previsto) },
+          { item: 'Sobra planejada', planejado: fmt(sobraPlanejada), realizado: '', previsto: '' },
+          { item: 'Sobra até agora', planejado: '', realizado: fmt(sobraAteAgora), previsto: '' },
+          { item: 'Sobra projetada', planejado: '', realizado: '', previsto: fmt(sobraProjetada) },
+        ]}
+        detailColumns={[
+          { key: 'item', label: 'Categoria' },
+          { key: 'grupo', label: 'Grupo' },
+          { key: 'classe', label: 'Entrada/Saída' },
+          { key: 'planejado', label: 'Planejado' },
+          { key: 'realizado', label: 'Realizado' },
+          { key: 'previsto', label: 'Previsto' },
+        ]}
+        detailRows={classificadas.map((x): ExportRow => ({
+          item: x.cat.nome, grupo: x.cat.grupo ?? '—', classe: x.classe,
+          planejado: fmt(x.totais.planejado), realizado: fmt(x.totais.realizado), previsto: fmt(x.totais.previsto),
+        }))}
+        onClose={() => setExportOpen(false)} />}
+      {/* Padrão de Interface Morfo (UI), seção 6 — ver nota em `Situacao.tsx`. */}
+      <DismissibleTip screenKey="planejamento" style={{ marginBottom: ESPACO_LINHA }}>
         Planejado (o que era esperado) × Realizado (o que já aconteceu) × Previsto (o que ainda vai
         acontecer) — em 4 níveis: Geral, Grupo, Categoria e Lançamento. Toque num grupo pra descer de
         nível.
-      </p>
+      </DismissibleTip>
 
       <h2>Nível Geral</h2>
       <div className="cartao">

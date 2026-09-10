@@ -1,6 +1,7 @@
 import { useEffect, type ReactNode } from 'react'
 import { useSimulacaoResolucao, salvarSimulacaoResolucao } from '../configuracaoIcones'
 import { useHojeSimuladoISO } from '../hojeSimulado'
+import { FLUT_SIZE } from './PadraoUI'
 
 // Ferramenta de teste do MVP — REESCRITA em 08/09/2026 (Roteiro de
 // Parametrização Morfo, G60: "achado real — o MorfoFinP reconstruiu a tela
@@ -94,9 +95,16 @@ export function SimulacaoResolucaoFrame({ children }: { children: ReactNode }) {
   )
 }
 
-// Par de botões flutuantes 📱/🖥️ + 🕐 — porte exato do Kit (fonte
-// L11077/L11081): `position: fixed`, `bottom: 8`, 30×30, círculo, fundo
-// translúcido escuro (âmbar quando o modo está ativo), cantos opostos.
+// Par de botões flutuantes 📱/🖥️ + 🕐 — porte exato do Kit (L7826/L7834):
+// `position: fixed`, círculo, fundo translúcido escuro (âmbar quando o modo
+// está ativo), cantos opostos.
+//
+// TAMANHO ATUALIZADO NESTA RODADA (Padrão de Interface Morfo (UI), seção 15,
+// que o Kit passou a seguir em 10/09): eram 30×30 — abaixo do alvo mínimo de
+// toque de 44px, e cobrindo boa parte da altura da barra de abas. Agora
+// FLUT_SIZE = 44. A distância do rodapé continua sendo a adaptação já
+// registrada abaixo (medida real da barra) em vez do FLUT_BOTTOM = 74 fixo do
+// Kit — mesmo efeito, sem depender da altura da barra ser sempre a mesma.
 // Renderizado no componente RAIZ (`AppRoot.tsx`), nunca replicado tela por
 // tela (G60, sub-regra b) — fica visível em Login, N0 e N1 igualmente,
 // porque `AppRoot` é o único lugar comum aos três.
@@ -115,12 +123,16 @@ export function FerramentasTesteFlutuantes({ onAbrirFerramentaData }: { onAbrirF
   // própria altura e publica `--rodape-altura` (ver `RodapeAbas.tsx`); no
   // Login (sem barra) a variável é 0 e o botão fica nos mesmos 8px do Kit.
   // ADAPTAÇÃO registrada — único valor que muda em relação ao Kit.
+  // 10/09/2026: soma também `--totais-altura` (a faixa de totais fixa das
+  // listas, ver `RodapeTotais` em `SelecaoETotais.tsx`) — sem isso estes
+  // botões cobriam o rótulo da faixa assim que ela ficou mais baixa. Mesma
+  // conta que o `.botao-flutuante` já fazia.
   const base: React.CSSProperties = {
     position: 'fixed',
-    bottom: 'calc(8px + var(--rodape-altura, 0px))',
+    bottom: 'calc(8px + var(--rodape-altura, 0px) + var(--totais-altura, 0px))',
     zIndex: 90,
-    width: 30,
-    height: 30,
+    width: FLUT_SIZE,
+    height: FLUT_SIZE,
     borderRadius: 999,
     border: 'none',
     color: '#fff',
@@ -128,7 +140,7 @@ export function FerramentasTesteFlutuantes({ onAbrirFerramentaData }: { onAbrirF
     alignItems: 'center',
     justifyContent: 'center',
     cursor: 'pointer',
-    fontSize: 14,
+    fontSize: 18,
   }
 
   return (
@@ -149,7 +161,16 @@ export function FerramentasTesteFlutuantes({ onAbrirFerramentaData }: { onAbrirF
         type="button"
         onClick={onAbrirFerramentaData}
         title="Ferramenta de teste MVP: manipular data de hoje"
-        style={{ ...base, right: 12, background: dataSimulada ? '#f59e0b' : 'rgba(0,0,0,0.35)' }}
+        /* BUG REAL achado por teste em 10/09/2026 (não reportado pelo Rafael):
+           este botão ficava em `right: 12` e cobria o "+" de novo lançamento
+           (`.botao-flutuante`, mesmo canto, 56px, `bottom: 84px`) — o
+           Playwright travou com "🕐 intercepts pointer events" ao tentar
+           abrir o formulário, ou seja, no aparelho o toque no "+" caía no
+           relógio. As duas ferramentas de teste passam a ficar juntas no
+           canto ESQUERDO (12 + 44 + 8 = 64), longe de qualquer botão do
+           produto. Mesma classe do bug de 09/09 com a engrenagem flutuante
+           interceptando o "Ver" do banner de notificação. */
+        style={{ ...base, left: 12 + FLUT_SIZE + 8, background: dataSimulada ? '#f59e0b' : 'rgba(0,0,0,0.35)' }}
       >
         🕐
       </button>

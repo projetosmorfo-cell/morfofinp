@@ -10,12 +10,15 @@ import ListaLancamentosCategoria from '../components/ListaLancamentosCategoria'
 import { fmtBRL as fmt } from '../formatoMoeda'
 import { Icone } from '../icones'
 import { useConfiguracaoIcones, tamanhoIconePx } from '../configuracaoIcones'
+import TituloTelaN1 from '../kit/CabecalhoN1'
+import { ExportSheet, type ExportRow } from '../kit/ExportSheet'
 
 // Resumo do Mês = "o que já aconteceu de verdade este mês + o que ainda vai
 // acontecer antes dele fechar" (visão de caixa) — diferente da Situação, que
 // é teto × gasto por categoria/grupo. As duas telas de propósito não repetem
 // a mesma pergunta (ver nota em Situacao.tsx).
 export default function ResumoDoMes({ mes, aoMudarMes, aoAbrirLancamento, aoAbrirPlanejamento }: TelaProps) {
+  const [exportOpen, setExportOpen] = useState(false) /* G44 regra 11b */
   const categorias = useLiveQuery(() => db.categorias.toArray(), [])
   const grupos = useLiveQuery(() => db.grupos.toArray(), [])
   const lancamentosDoMes = useLiveQuery(
@@ -195,12 +198,32 @@ export default function ResumoDoMes({ mes, aoMudarMes, aoAbrirLancamento, aoAbri
     }))
     .sort((a, b) => a.valor - b.valor)
 
+  /* G44 regra 11b: "Visão da tela" = os números do card do topo, que é o que
+     a pessoa está vendo; "Versão detalhada" desce pra categoria. */
+  const linhasResumoTela: ExportRow[] = [
+    { item: 'Entrou', valor: fmt(entrou) },
+    { item: 'Saiu', valor: `-${fmt(saiu)}` },
+    { item: 'Vai entrar (previsto)', valor: fmt(vaiEntrar) },
+    { item: 'Vai sair (comprometido)', valor: `-${fmt(vaiSair)}` },
+    { item: 'Resultado até agora', valor: fmt(resultado) },
+    { item: 'Resultado projetado', valor: fmt(resultadoProjetado) },
+  ]
+  const linhasResumoDetalhe: ExportRow[] = categoriasComMovimento.map((c) => ({
+    item: c.cat.nome, valor: fmt(c.valor), grupo: c.cat.grupo ?? '—', natureza: c.cat.natureza ?? '—',
+  }))
+
   return (
     <>
       <div className="cabecalho-fixo">
-        <h1>Resumo do mês</h1>
+        <TituloTelaN1 titulo="Resumo do mês" onExportar={() => setExportOpen(true)} />
         <SeletorMes mes={mes} onMudar={aoMudarMes} />
       </div>
+      {exportOpen && <ExportSheet title="Resumo do mês" filenameBase={`morfofinp-resumo-${mes}`}
+        screenColumns={[{ key: 'item', label: 'Item' }, { key: 'valor', label: 'Valor' }]}
+        screenRows={linhasResumoTela}
+        detailColumns={[{ key: 'item', label: 'Categoria' }, { key: 'grupo', label: 'Grupo' }, { key: 'natureza', label: 'Natureza' }, { key: 'valor', label: 'Valor' }]}
+        detailRows={linhasResumoDetalhe}
+        onClose={() => setExportOpen(false)} />}
 
       <div className="cartao">
         <div className="linha">

@@ -1,7 +1,13 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../db'
 import { exportarConfiguracaoIcones } from '../iconesPadrao'
+import {
+  montarBackup, nomeArquivoBackup, lerArquivoBackup, restaurarBackup, apagarTudo,
+  totalDeRegistros, tabelasForaDoBackup, ROTULO_TABELA, type ResumoBackup,
+} from '../backup'
+import { salvarArquivoTexto, escolherArquivoTexto } from '../arquivoLocal'
+import { BUILD_NUMBER } from '../buildInfo'
 import {
   useModoVisao,
   salvarModoVisao,
@@ -29,16 +35,29 @@ const ORDEM_ABAS_PADRAO = ['resumo', 'situacao', 'lancamentos', 'carteira', 'pla
 // chaves/rótulos de `ITENS_MENU_ENGRENAGEM_PADRAO`/`ROTULO_MENU_ENGRENAGEM`
 // em `App.tsx` (não importado daqui, mesmo motivo do bloco acima: rótulo
 // de texto não merece acoplar os dois arquivos).
+// 10/09/2026: esta lista estava DESATUALIZADA (7 itens, "Suporte
+// (WhatsApp)") desde que o menu cresceu pra 13 — a tela de reordenação
+// mostrava menos itens do que o menu tinha de verdade. Agora é a mesma lista
+// da tela única de Configurações (`ITENS_MENU_ENGRENAGEM_PADRAO`/
+// `ROTULO_MENU_ENGRENAGEM` em `App.tsx`), e a ordem salva aqui reordena cada
+// item DENTRO da sua sessão do Kit ("Do dia a dia" / "Ajustes do sistema" /
+// "Dados e saída") — nunca esconde nenhum, como sempre.
 const ROTULO_MENU_ENGRENAGEM: Record<string, string> = {
+  meusDados: 'Meus Dados',
   categorias: 'Categorias e Grupos',
   contas: 'Contas e carteiras',
   notificacoes: 'Notificações bancárias',
+  usuarios: 'Usuários',
+  ajuda: 'Ajuda',
+  permissoes: 'Permissões',
+  meuAmbiente: 'Meu Ambiente',
   assinatura: 'Minha Assinatura',
-  manutencao: 'Manutenção',
-  suporte: 'Suporte (WhatsApp)',
+  layout: 'Layout e Menus',
+  manutencao: 'Manutenção e dados',
+  limpar: 'Limpar todos os dados',
   sair: 'Sair',
 }
-const ORDEM_MENU_ENGRENAGEM_PADRAO = ['categorias', 'contas', 'notificacoes', 'assinatura', 'manutencao', 'suporte', 'sair']
+const ORDEM_MENU_ENGRENAGEM_PADRAO = ['meusDados', 'categorias', 'contas', 'notificacoes', 'usuarios', 'ajuda', 'permissoes', 'meuAmbiente', 'assinatura', 'layout', 'manutencao', 'limpar', 'sair']
 
 // Tela "Manutenção" (01/09/2026, rodada seguinte) — pedido direto do Rafael
 // depois de um susto real: pra conseguir ver a versão mais nova do app, ele
@@ -70,8 +89,23 @@ export default function Manutencao({
   aoVoltar,
   onAbrirTour,
   onAbrirFerramentasTeste,
+  secao,
+  focarLimparDados,
 }: {
   aoVoltar: () => void
+  /* 10/09/2026 (tela única de Configurações, pedido do Rafael): esta tela
+     passou a ser alcançada por DOIS itens diferentes da tela de
+     Configurações, cada um mostrando só a parte que lhe cabe na sessão do
+     Kit — 'layout' ("Ajustes do sistema" → Layout e Menus: Visão do app,
+     ordem do rodapé e ordem dos itens de configuração) e 'dados' ("Dados e
+     saída" → Manutenção e dados: tour, ferramentas de teste, limpar dados,
+     exportar ícones e o diagnóstico de cache). Sem o prop, a tela continua
+     mostrando TUDO, como sempre mostrou — nenhuma seção foi removida. */
+  secao?: 'layout' | 'dados'
+  /* Chegou por "Limpar todos os dados" (sessão "Dados e saída" da tela de
+     Configurações): rola até o bloco, em vez de abrir a tela no topo e
+     deixar a pessoa procurando. */
+  focarLimparDados?: boolean
   // Roteiro de Parametrização Morfo, Etapa 6 (05/09/2026) — abre o tour
   // guiado (spotlight), ver `src/kit/GuidedTour.tsx`.
   onAbrirTour: () => void
@@ -149,6 +183,79 @@ export default function Manutencao({
       `${total} lançamento(s) apagado(s), incluindo os de séries fixas e parcelas. Categorias, contas, grupos e configurações continuam intactos.`,
     )
     setConfirmandoLimpeza(false)
+  }
+
+  /* ---- Backup / Restaurar / Apagar tudo (10/09/2026, pedido do Rafael) ----
+     O app guarda tudo só no aparelho. Sem estes três botões, desinstalar,
+     limpar o armazenamento pelo Android ou trocar de celular apaga os
+     lançamentos reais sem nenhuma recuperação possível. O arquivo é um
+     retrato do banco INTEIRO (ver `src/backup.ts`) — não uma seleção. */
+  const [ocupadoBackup, setOcupadoBackup] = useState<'' | 'gerando' | 'lendo' | 'restaurando' | 'apagando'>('')
+  const [avisoBackup, setAvisoBackup] = useState<string | null>(null)
+  const [erroBackup, setErroBackup] = useState<string | null>(null)
+  const [backupNaTela, setBackupNaTela] = useState<string | null>(null)
+  const [pendenteRestauro, setPendenteRestauro] = useState<{ nome: string; resumo: ResumoBackup; arquivo: Parameters<typeof restaurarBackup>[0] } | null>(null)
+  const [confirmandoApagarTudo, setConfirmandoApagarTudo] = useState(0)
+  const foraDoBackup = tabelasForaDoBackup()
+
+  async function gerarBackup() {
+    setErroBackup(null); setAvisoBackup(null); setBackupNaTela(null); setOcupadoBackup('gerando')
+    try {
+      const arquivo = await montarBackup(BUILD_NUMBER)
+      const nome = nomeArquivoBackup()
+      const conteudo = JSON.stringify(arquivo)
+      const total = totalDeRegistros(arquivo.contagens)
+      const r = await salvarArquivoTexto(nome, conteudo)
+      if (r.via === 'app') setAvisoBackup(`Backup de ${total} registro(s) salvo no aparelho, em ${r.caminho}. Se a folha de compartilhamento abriu, dá pra mandar também pro Drive, e-mail ou WhatsApp.`)
+      else if (r.via === 'compartilhar') setAvisoBackup(`Backup de ${total} registro(s) gerado e enviado pro app que você escolheu (${nome}).`)
+      else if (r.via === 'download') setAvisoBackup(`Backup de ${total} registro(s) baixado como ${nome}. Guarde esse arquivo fora do aparelho.`)
+      else {
+        setBackupNaTela(conteudo)
+        setAvisoBackup(`Não deu pra salvar o arquivo aqui (${r.motivo}). O conteúdo está abaixo: copie e salve num arquivo .json — ele restaura igual.`)
+      }
+    } catch (e) {
+      setErroBackup('Não consegui gerar o backup: ' + ((e as Error)?.message || 'erro desconhecido'))
+    }
+    setOcupadoBackup('')
+  }
+
+  async function escolherBackupParaRestaurar() {
+    setErroBackup(null); setAvisoBackup(null); setBackupNaTela(null); setOcupadoBackup('lendo')
+    try {
+      const arq = await escolherArquivoTexto()
+      if (!arq) { setOcupadoBackup(''); return }
+      const lido = lerArquivoBackup(arq.texto)
+      if (!lido.ok) { setErroBackup(lido.erro); setOcupadoBackup(''); return }
+      setPendenteRestauro({ nome: arq.nome, resumo: lido.resumo, arquivo: lido.arquivo })
+    } catch (e) {
+      setErroBackup('Não consegui ler o arquivo: ' + ((e as Error)?.message || 'erro desconhecido'))
+    }
+    setOcupadoBackup('')
+  }
+
+  async function confirmarRestauro() {
+    if (!pendenteRestauro) return
+    setOcupadoBackup('restaurando'); setErroBackup(null)
+    try {
+      const aplicados = await restaurarBackup(pendenteRestauro.arquivo)
+      setAvisoBackup(`Backup restaurado: ${totalDeRegistros(aplicados)} registro(s) no lugar do que havia antes. Pode conferir nas telas.`)
+      setPendenteRestauro(null)
+    } catch (e) {
+      setErroBackup('A restauração FALHOU e nada foi alterado: ' + ((e as Error)?.message || 'erro desconhecido'))
+    }
+    setOcupadoBackup('')
+  }
+
+  async function executarApagarTudo() {
+    setOcupadoBackup('apagando'); setErroBackup(null); setAvisoBackup(null)
+    try {
+      const apagados = await apagarTudo()
+      setAvisoBackup(`App limpo: ${totalDeRegistros(apagados)} registro(s) apagados de todas as tabelas. Feche e abra o app pra ele começar do zero.`)
+    } catch (e) {
+      setErroBackup('Não consegui apagar: ' + ((e as Error)?.message || 'erro desconhecido'))
+    }
+    setConfirmandoApagarTudo(0)
+    setOcupadoBackup('')
   }
 
   // 04/09/2026, pedido do Rafael: ele queria travar como "padrão do
@@ -245,15 +352,25 @@ export default function Manutencao({
     setRodando(false)
   }
 
+  const refLimpar = useRef<HTMLHeadingElement>(null)
+  useEffect(() => {
+    if (focarLimparDados) refLimpar.current?.scrollIntoView({ block: 'start' })
+  }, [focarLimparDados])
+
+  const mostraLayout = secao !== 'dados'
+  const mostraDados = secao !== 'layout'
+
   return (
     <>
       <div className="cabecalho-fixo">
         <button type="button" className="botao-voltar-config" onClick={aoVoltar}>
           ‹ Voltar
         </button>
-        <h1>Manutenção</h1>
+        <h1>{secao === 'layout' ? 'Layout e Menus' : secao === 'dados' ? 'Manutenção e dados' : 'Manutenção'}</h1>
       </div>
 
+      {mostraLayout && (
+      <>
       <h2 style={{ marginTop: 0 }}>Visão do app</h2>
       <div className="cartao">
         <p className="texto-fraco" style={{ marginTop: 0 }}>
@@ -324,7 +441,7 @@ export default function Manutencao({
         </div>
       </div>
 
-      <h2>Layout do menu de configurações</h2>
+      <h2>Ordem da tela de Configurações</h2>
       <div className="cartao">
         {/* 08/09/2026, correção pós-G59 — Rafael: "o menu sair tem que ser
             menu sem permitir retirar ele, só reposicionar". Mesmo mecanismo
@@ -337,9 +454,10 @@ export default function Manutencao({
             verdade, só a ordem muda. Ver `ITENS_MENU_ENGRENAGEM_PADRAO`
             em `App.tsx`. */}
         <p className="texto-fraco" style={{ marginTop: 0 }}>
-          Ordem dos itens do menu de configurações (ícone de engrenagem, no topo do app) — todo
-          item listado abaixo, incluindo "Sair", está sempre presente no menu; só é possível mudar
-          a posição de cada um, nunca escondê-lo ou removê-lo.
+          Ordem dos itens da tela de Configurações — todo item listado abaixo, incluindo "Sair",
+          está sempre presente na tela; só é possível mudar a posição de cada um dentro da sua
+          sessão ("Do dia a dia", "Ajustes do sistema" ou "Dados e saída"), nunca escondê-lo ou
+          removê-lo.
         </p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {ordemMenuEngrenagem.map((chave, i) => (
@@ -375,8 +493,12 @@ export default function Manutencao({
           ))}
         </div>
       </div>
+      </>
+      )}
 
-      <h2>Conta</h2>
+      {mostraDados && (
+      <>
+      <h2 style={secao === 'dados' ? { marginTop: 0 } : undefined}>Conta</h2>
       <div className="cartao">
         <p className="texto-fraco" style={{ marginTop: 0 }}>
           "Minha Assinatura" agora vive no menu de engrenagem principal (Roteiro de Parametrização
@@ -442,7 +564,137 @@ export default function Manutencao({
         )}
       </div>
 
-      <h2>Limpar dados</h2>
+      {/* ---- Backup, restauração e apagar tudo (10/09/2026) ---- */}
+      <h2>Backup de tudo</h2>
+      <div className="cartao">
+        <p className="texto-fraco" style={{ marginTop: 0 }}>
+          Gera <strong>um arquivo</strong> com o app inteiro: lançamentos (com as séries fixas e
+          parceladas), categorias, grupos, contas e carteiras, metas, planos, notificações e todas as
+          configurações — ícones, tema, visão do app, ordem dos menus e o painel N0. Guarde esse
+          arquivo fora do celular: hoje ele é a <strong>única</strong> forma de recuperar seus dados
+          se o aparelho for perdido, trocado ou o app for desinstalado.
+        </p>
+        {foraDoBackup.length > 0 && (
+          <p className="valor-neg" style={{ fontSize: 12.5, fontWeight: 600 }}>
+            Atenção: {foraDoBackup.length} tabela(s) do banco não estão na lista do backup ({foraDoBackup.join(', ')}). Avise, porque isso é erro de código.
+          </p>
+        )}
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button type="button" className="primario" disabled={ocupadoBackup !== ''} onClick={() => void gerarBackup()}>
+            {ocupadoBackup === 'gerando' ? 'Gerando…' : 'Fazer backup de tudo'}
+          </button>
+          <button type="button" disabled={ocupadoBackup !== ''} onClick={() => void escolherBackupParaRestaurar()}>
+            {ocupadoBackup === 'lendo' ? 'Abrindo…' : 'Restaurar backup'}
+          </button>
+        </div>
+
+        {erroBackup && <p className="valor-neg" style={{ fontSize: 13, fontWeight: 600 }}>{erroBackup}</p>}
+        {avisoBackup && <p className="texto-fraco" style={{ marginTop: 12 }}>{avisoBackup}</p>}
+
+        {backupNaTela && (
+          <>
+            <textarea
+              readOnly
+              aria-label="Conteúdo do backup"
+              value={backupNaTela}
+              onFocus={(e) => e.currentTarget.select()}
+              style={{ width: '100%', minHeight: 120, marginTop: 10, fontFamily: 'monospace', fontSize: 11 }}
+            />
+            <button type="button" onClick={() => { void navigator.clipboard?.writeText(backupNaTela).then(() => setAvisoBackup('Copiado. Cole num arquivo .json e guarde.')) }}>
+              Copiar
+            </button>
+          </>
+        )}
+
+        {/* Confirmação da restauração: só depois de LER o arquivo e mostrar o
+            que tem dentro dele — restaurar substitui tudo o que está no app. */}
+        {pendenteRestauro && (
+          <div className="cartao" style={{ marginTop: 12, borderColor: 'var(--vermelho)' }}>
+            <div style={{ fontWeight: 700, fontSize: 13.5 }}>Restaurar “{pendenteRestauro.nome}”?</div>
+            <p className="texto-fraco" style={{ fontSize: 12.5, marginTop: 6 }}>
+              Backup gerado em{' '}
+              {pendenteRestauro.resumo.geradoEm ? new Date(pendenteRestauro.resumo.geradoEm).toLocaleString('pt-BR') : 'data desconhecida'}
+              {pendenteRestauro.resumo.build ? ` · build ${String(pendenteRestauro.resumo.build).padStart(3, '0')}` : ''}.
+              Ele tem {totalDeRegistros(pendenteRestauro.resumo.contagens)} registro(s):
+            </p>
+            <ul style={{ margin: '0 0 10px', paddingLeft: 18 }}>
+              {Object.entries(pendenteRestauro.resumo.contagens)
+                .filter(([, n]) => n > 0)
+                .map(([t, n]) => (
+                  <li key={t} className="texto-fraco" style={{ fontSize: 12 }}>
+                    {n} — {ROTULO_TABELA[t] ?? t}
+                  </li>
+                ))}
+            </ul>
+            <p className="valor-neg" style={{ fontSize: 12.5, fontWeight: 600, marginTop: 0 }}>
+              Tudo o que está no app agora será substituído por isso. Não tem como desfazer — se o que
+              está aqui hoje importa, faça um backup antes.
+            </p>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                disabled={ocupadoBackup !== ''}
+                style={{ marginTop: 0, background: 'var(--vermelho)', borderColor: 'var(--vermelho)' }}
+                onClick={() => void confirmarRestauro()}
+              >
+                {ocupadoBackup === 'restaurando' ? 'Restaurando…' : 'Sim, substituir tudo'}
+              </button>
+              <button type="button" style={{ marginTop: 0 }} onClick={() => setPendenteRestauro(null)}>
+                Cancelar
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <h2>Apagar tudo (limpar o app)</h2>
+      <div className="cartao">
+        <p className="texto-fraco" style={{ marginTop: 0 }}>
+          Apaga <strong>tudo</strong>, não só os lançamentos: categorias, grupos, contas, metas,
+          planos, usuários, notificações e todas as configurações. Como a sua senha de entrada também
+          mora aí, o app <strong>sai da conta na hora e volta pra tela de entrada</strong>, no estado
+          de recém instalado — pra restaurar um backup depois, entre de novo e volte aqui.
+          Diferente de “Limpar dados” logo abaixo, que apaga só os lançamentos e preserva os
+          cadastros. <strong>Faça um backup antes: não tem como desfazer.</strong>
+        </p>
+        {confirmandoApagarTudo === 0 && (
+          <button type="button" style={{ color: 'var(--vermelho)', borderColor: 'var(--vermelho)' }} onClick={() => setConfirmandoApagarTudo(1)}>
+            Apagar tudo
+          </button>
+        )}
+        {confirmandoApagarTudo === 1 && (
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button type="button" style={{ marginTop: 0 }} onClick={() => setConfirmandoApagarTudo(2)}>
+              Entendi, continuar
+            </button>
+            <button type="button" style={{ marginTop: 0 }} onClick={() => setConfirmandoApagarTudo(0)}>
+              Cancelar
+            </button>
+          </div>
+        )}
+        {confirmandoApagarTudo === 2 && (
+          <>
+            <p className="valor-neg" style={{ fontSize: 13, fontWeight: 700 }}>
+              Última checagem: isto apaga os seus lançamentos reais e todos os cadastros, agora.
+            </p>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                disabled={ocupadoBackup !== ''}
+                style={{ marginTop: 0, background: 'var(--vermelho)', borderColor: 'var(--vermelho)' }}
+                onClick={() => void executarApagarTudo()}
+              >
+                {ocupadoBackup === 'apagando' ? 'Apagando…' : 'Apagar tudo de vez'}
+              </button>
+              <button type="button" style={{ marginTop: 0 }} onClick={() => setConfirmandoApagarTudo(0)}>
+                Cancelar
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+
+      <h2 ref={refLimpar}>Limpar dados</h2>
       <div className="cartao">
         <p className="texto-fraco" style={{ marginTop: 0 }}>
           Apaga TODOS os lançamentos ({totalLancamentos ?? 0} hoje) — inclusive os gerados por série
@@ -561,6 +813,8 @@ export default function Manutencao({
           </>
         )}
       </div>
+      </>
+      )}
     </>
   )
 }

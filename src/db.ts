@@ -1,5 +1,6 @@
 import Dexie, { type EntityTable } from 'dexie'
 import type { SiteConfig, SitePage } from './kit/kitBase'
+import type { PlatformN0 } from './kit/kitPlatform'
 
 // Modelo de dados — baseado em claude/mfip-modelo-de-dados.md
 // MVP inicial: modo "Lite" (input manual, sem importação/conciliação).
@@ -13,6 +14,19 @@ export interface Conta {
   nome: string
   tipo: TipoConta
   instituicao: string
+  /* Ícone da carteira (10/09/2026, pedido do Rafael) — selo redondo de
+     tamanho padronizado. Três campos, todos opcionais e mutuamente
+     exclusivos na prática (ver `SeloInstituicao.tsx` pra ordem de
+     precedência): `iconeInstituicao` é o NOME de um item de
+     `src/dados/instituicoes.ts` (o selo com sigla sobre a cor oficial),
+     `iconeCor` é o círculo liso ("caso ele não ache" a instituição) e
+     `iconeImagemUri` é uma imagem enviada pelo próprio usuário, em data URI.
+     Campos aditivos, não indexados: `contas` é tabela pequena e sempre lida
+     inteira via `.toArray()` — mesmo motivo já registrado em
+     `Categoria.icone` de não precisar de bump de schema. */
+  iconeInstituicao?: string
+  iconeCor?: string
+  iconeImagemUri?: string
   saldoInicial: number
   dataSaldoInicial: string // ISO yyyy-mm-dd
   importavel: boolean
@@ -152,6 +166,16 @@ export interface Lancamento {
   // parcela (ex.: parcelaI=2, parcelaN=5 exibido como "2/5").
   parcelaI?: number
   parcelaN?: number
+  // Marca de lançamento gerado pela MASSA DE TESTE (10/09/2026, Decisão 55 —
+  // Parte B, grupo "Gerar Teste no Cliente" do Kit). Campo aditivo, não
+  // indexado, sem bump de schema. Nenhum caminho normal do app grava isto —
+  // só `gerarLancamentosFicticios()` (`src/kit/massaTeste.ts`). É o que
+  // permite "Limpar Dados Testes Cliente" apagar EXATAMENTE os lançamentos
+  // de teste sem tocar em nenhum lançamento real do Rafael. Diferença
+  // deliberada em relação ao Kit (mais seguro que ele): lá a massa gerada
+  // dentro do ambiente de um cliente nasce sem marca nenhuma, e a única
+  // proteção é a trava de "só ambiente vazio" (que aqui também foi mantida).
+  ficticio?: boolean
   // Id do lançamento de "Pagamento de fatura" que quitou este lançamento de
   // cartão (30/08/2026, rodada seguinte — campo existia no schema desde o
   // início, sem uso até agora). Setado em massa por `pagarFatura` (Carteira.tsx)
@@ -245,6 +269,25 @@ export interface ConfiguracaoIcones {
   // de dado porque nenhum tenant real tinha plano contratado ainda além do
   // padrão implícito.
   planoId?: number
+  // Tema das telas do N1 (10/09/2026, Decisão 55 — Parte B, "Aparência" do
+  // Kit). Campo aditivo, não indexado, sem bump de schema.
+  // Ausente/undefined = 'escuro' (o app como sempre foi, Etapa 4).
+  temaPreferido?: 'claro' | 'escuro' | 'auto'
+  // Memória do campo "O que foi" (10/09/2026, pedido do Rafael: "sugere lista
+  // dos últimos registros conforme digita; essa memória é parâmetro de nível 1
+  // do ambiente do cliente, em DIAS PRA TRÁS, padrão 60 dias"). Quantos dias
+  // pra trás o formulário de lançamento olha ao montar as sugestões de
+  // descrição. Campo aditivo, não indexado, sem bump de schema.
+  // Ausente/undefined = `MEMORIA_DESCRICAO_DIAS_PADRAO` (60). 0 desliga a
+  // sugestão por completo — o campo continua funcionando como texto livre.
+  memoriaDescricaoDias?: number
+  // Logos reais das instituições financeiras, trazidas pelo PRÓPRIO usuário
+  // (10/09/2026). Mapa `nome da instituição` → imagem em data URI. Existe
+  // porque eu não reproduzo logotipo de marca de terceiro: o app recorta,
+  // padroniza o tamanho e deixa tudo redondo, mas a IMAGEM é do Rafael. Vale
+  // pro app inteiro (biblioteca), diferente de `Conta.iconeImagemUri`, que é
+  // uma imagem avulsa de UMA carteira. Campo aditivo, não indexado.
+  logosInstituicoes?: Record<string, string>
   // Data "de hoje" SIMULADA (05/09/2026, Roteiro de Parametrização Morfo,
   // Etapa 7 — Ferramentas de teste), formato ISO (yyyy-mm-dd). FERRAMENTA DE
   // TESTE — pedido explícito do Rafael: "a cada mudança de data, deve
@@ -295,6 +338,21 @@ export interface ConfiguracaoIcones {
   credencialEmailN0?: string
   credencialSenhaN0?: string
   sessaoAtivaN0?: boolean
+  // Usuário logado de fato, por nível (10/09/2026, Decisão 54 Parte B —
+  // "login multiusuário também, pra perfis valerem de verdade"). Antes desta
+  // rodada, `sessaoAtiva`/`sessaoAtivaN0` bastavam porque só existia 1
+  // credencial por nível (`credencialEmail(N0)`/`credencialSenha(N0)` acima).
+  // Com o Gerenciador de Perfis (`platformN0.devUsers`/`tenant.users`, ver
+  // `src/kit/kitPlatform.ts`), pode existir mais de um usuário por nível —
+  // este campo diz QUAL deles está logado, pra resolver o perfil de acesso
+  // certo (`perfilDoUsuario`). `loggedDevUserId` referencia um id de
+  // `platformN0.devUsers`; `loggedUserIdN1` referencia um id de
+  // `tenant.users` do tenant real (`t0`). Ausente com a sessão ativa =
+  // trata como o 1º usuário da lista (compatibilidade com a migração de
+  // `credencialEmail(N0)` — ver `devUsersComMigracao`/`tenantUsersComMigracao`
+  // em `kitPlatform.ts`). Nunca lido/escrito fora de `auth.ts`/`authN0.ts`.
+  loggedDevUserId?: string
+  loggedUserIdN1?: string
   // "Marca do site institucional" (08/09/2026, G59 — item aprovado pro N0,
   // categorização Rafael/Claude de 08/09). Editável só pelo painel N0
   // (`DevApp` → Parâmetros → Marca) — nunca pelo N1. Escopo deliberadamente
@@ -348,6 +406,13 @@ export interface ConfiguracaoIcones {
   siteConfig?: SiteConfig
   sitePages?: SitePage[]
   siteMenu?: { tipo?: 'fixo' | 'cortina' }
+  // Plataforma do N0 no formato do Kit (10/09/2026, Decisão 53): tenants com
+  // cobrança/trial/chat, do jeito que `makeTenant` do Kit produz — é o que as
+  // telas de Indicadores, Financeiro e Central de Suporte do Kit CALCULAM.
+  // No Kit isso vive numa chave de localStorage (`savePlatform`); aqui, neste
+  // campo do mesmo singleton. Ausente = massa de demonstração do próprio Kit
+  // (`gerarPlatformN0()`, valores do MorfoMod — G55).
+  platformN0?: PlatformN0
 }
 
 // "Gerenciar Planos" (08/09/2026, G59 — item aprovado pro N0). Antes
@@ -366,6 +431,37 @@ export interface PlanoRegistro {
   destaque?: boolean
   funcionalidades: string[]
   ativo: boolean
+  // Marca de "registro de teste" (10/09/2026, Decisão 55 — Parte B, grupo
+  // "Gerar Teste Morfo" do Kit). Campo aditivo, não indexado, sem bump de
+  // schema (mesmo padrão de `planoId`/`hojeSimuladoISO`). Tudo que sai da
+  // massa de dados nasce com isto `true` e só pode ser removido pela tela
+  // "Limpar Dados Testes Morfo" — que, por construção, NUNCA enxerga um
+  // registro real (é a garantia que o Kit dá pra massa poder ser gerada
+  // mesmo com a base populada).
+  ficticio?: boolean
+  // --- Campos portados do Kit (`EditPlanoSheet`, L1370) em 10/09/2026, a
+  // pedido do Rafael: "quero todos os parâmetros iguais com todos os recursos
+  // de preenchimento igual ao kit". Todos aditivos, não indexados, sem bump
+  // de schema — plano antigo sem eles cai no padrão via `planoComPadroes()`
+  // (`src/kit/planos.ts`), mesmo recurso da Lição 39.
+  //
+  // Porte comercial do plano (Kit: Segmented Pequeno/Médio/Grande).
+  porte?: 'Pequeno' | 'Médio' | 'Grande'
+  // Plano gratuito COM VALIDADE (Kit, item 212): sem cobrança, o ambiente
+  // expira sozinho depois de `validadeDias` — mesma mecânica de um teste,
+  // mas amarrada a um plano de verdade (com nome e limites próprios).
+  gratuito?: boolean
+  validadeDias?: number | null
+  // Limite de usuários do ambiente que contrata este plano.
+  limiteUsuarios?: number
+  // Frase curta de venda ("pra quem é esse plano").
+  descricaoCurta?: string
+  // "Acesso liberado neste plano" (Kit: `restrictions`). O nome do Kit é
+  // `restrictions` mas o significado é LIBERAÇÃO: `true` = liberado.
+  restricoes?: {
+    exportacaoDetalhada?: boolean
+    layoutPersonalizado?: boolean
+  }
 }
 
 // "Usuários Morfo (administradores)" (08/09/2026, G59 — item aprovado pro
@@ -434,6 +530,17 @@ export interface NotificacaoPendente {
 // pro usuário) os lançamentos reais dele, não só a semente. Nesse momento vai
 // precisar de uma migração de verdade (copiar os dados reais pro banco novo),
 // não mais um banco descartável.
+//
+// ============================ CONGELADO EM 4 ============================
+// 10/09/2026: o Rafael passou a usar o app com LANÇAMENTOS REAIS no celular
+// (build instalada por cima, dados preservados). A partir daqui esta
+// constante NÃO PODE mais ser incrementada em nenhuma rodada — trocar o
+// número troca o NOME do banco, e o app abriria vazio no aparelho dele, sem
+// aviso e sem desfazer. Se algum dia uma semente nova for mesmo necessária,
+// o caminho é: (1) ele faz o backup por Configurações → Manutenção e dados →
+// "Fazer backup de tudo"; (2) o app muda; (3) ele restaura o arquivo. Nunca
+// mais um banco descartável.
+// =======================================================================
 const VERSAO_SEMENTE_DEMO = 4
 
 class MFinpDB extends Dexie {

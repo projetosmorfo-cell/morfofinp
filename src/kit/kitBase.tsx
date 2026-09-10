@@ -39,6 +39,8 @@ export const TOGGLE_OFF = 'var(--mloc-toggle-off, #D8D3C8)'
 export const DEV_BG = 'var(--mloc-dev-bg, #141319)'
 export const DEV_CARD = 'var(--mloc-dev-card, #201E28)'
 export const DEV_ACCENT = 'var(--mloc-dev-accent, #6C3FFF)'
+/* Kit L42 — faltava neste produto; usado pelo EnvioCanais da folha de exportação. */
+export const ACCENT = 'var(--mloc-accent, #6C3FFF)'
 
 /* ---- Kit L121: uid ---- */
 export const uid = () => Math.random().toString(36).slice(2, 9)
@@ -52,6 +54,11 @@ export const fmtBRL = (v: unknown) => `R$ ${Number(v).toLocaleString('pt-BR', { 
 
 /* ---- Kit L210: versão do esqueleto Morfo (mostrada no rodapé do Login) ---- */
 export const KIT_BUILD = '2.0'
+/* Padrão de Interface Morfo (UI), seção 2 (Kit L238/L1051): ritmo único de
+   10px acima/abaixo entre blocos. O `SectionLabel` deste produto ainda estava
+   com o valor antigo "18px 0 10px" (assimétrico, acima do ritmo). Fica aqui
+   pra evitar import circular com `PadraoUI.tsx`, que importa deste arquivo. */
+export const ESPACO_LINHA_KIT = 10
 
 /* ---- Kit L226: TELA_CHEIA_BASE ---- */
 export const TELA_CHEIA_BASE: CSSProperties = { position: 'fixed', top: 'var(--mloc-tela-top, 0px)', bottom: 'var(--mloc-tela-bottom, 0px)', left: 0, right: 0, margin: '0 auto', width: '100%', maxWidth: 'var(--mloc-tela-maxw, var(--mloc-maxw, 430px))', borderRadius: 'var(--mloc-tela-radius, 0px)', border: 'var(--mloc-tela-border, none)', boxShadow: 'var(--mloc-tela-shadow, none)' }
@@ -76,10 +83,15 @@ export function Toggle({ value, onChange, label }: { value: boolean; onChange: (
 export function EmptyState({ icon: Icon, title, hint, dark }: { icon: LucideIcon; title: ReactNode; hint: ReactNode; dark?: boolean }) { return <div style={{ textAlign: 'center', padding: '48px 24px', color: dark ? '#9B96A8' : TXT3 }}><Icon size={30} style={{ marginBottom: 10, opacity: 0.6 }} /><div style={{ fontWeight: 700, color: dark ? '#fff' : INK, fontSize: 15 }}>{title}</div><div style={{ fontSize: 13.5, marginTop: 4 }}>{hint}</div></div> }
 
 /* ---- Kit L995-L999: Sheet ---- */
-export function Sheet({ title, onClose, children, resetScrollKey }: { title: ReactNode; onClose: () => void; children: ReactNode; resetScrollKey?: unknown }) {
+/* `dark` (Kit L1033) faltava na transcrição anterior deste produto — achado no
+   diff literal desta rodada. Sem ele, toda folha aberta de dentro do N0 saía
+   clara. Atenção à armadilha registrada no Kit: campo movido de tela escura
+   pra folha clara (ou vice-versa) tem que receber `dark` um por um — herdar a
+   folha não repinta o filho. */
+export function Sheet({ title, onClose, children, resetScrollKey, dark }: { title: ReactNode; onClose: () => void; children: ReactNode; resetScrollKey?: unknown; dark?: boolean }) {
   const bodyRef = useRef<HTMLDivElement>(null)
   useEffect(() => { if (bodyRef.current) bodyRef.current.scrollTop = 0 }, [resetScrollKey])
-  return <div style={{ position: 'fixed', inset: 0, background: 'rgba(28,27,34,0.5)', zIndex: 40, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }} onClick={onClose}><div ref={bodyRef} onClick={e => e.stopPropagation()} style={{ background: PAPER, width: '100%', maxWidth: 'var(--mloc-sheet-maxw, var(--mloc-maxw, 430px))', maxHeight: 'calc(100% - 40px)', overflowY: 'auto', WebkitOverflowScrolling: 'touch', borderRadius: '20px 20px 0 0', padding: '18px 16px 28px' }}><div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}><h2 style={{ fontSize: 17, fontWeight: 800, color: INK, margin: 0 }}>{title}</h2><button onClick={onClose} style={iconBtnStyle}><X size={18} color={INK} /></button></div>{children}</div></div>
+  return <div style={{ position: 'fixed', inset: 0, background: 'rgba(28,27,34,0.5)', zIndex: 40, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }} onClick={onClose}><div ref={bodyRef} onClick={e => e.stopPropagation()} style={{ background: dark ? DEV_CARD : PAPER, width: '100%', maxWidth: 'var(--mloc-sheet-maxw, var(--mloc-maxw, 430px))', maxHeight: 'calc(100% - 40px)', overflowY: 'auto', WebkitOverflowScrolling: 'touch', borderRadius: '20px 20px 0 0', padding: '18px 16px 28px' }}><div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}><h2 style={{ fontSize: 17, fontWeight: 800, color: dark ? '#fff' : INK, margin: 0 }}>{title}</h2><button onClick={onClose} style={{ ...iconBtnStyle, background: dark ? 'rgba(255,255,255,0.08)' : SOFT }}><X size={18} color={dark ? '#fff' : INK} /></button></div>{children}</div></div>
 }
 
 /* ---- Kit L1000-L1008: botões ---- */
@@ -89,7 +101,7 @@ export const dangerBtn: CSSProperties = { ...primaryBtn, background: BRANCO, col
 export const linkBtnSmall: CSSProperties = { background: 'none', border: 'none', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', minHeight: 24, padding: '0 2px' }
 
 /* ---- Kit L1011: SectionLabel ---- */
-export function SectionLabel({ children, right, dark }: { children: ReactNode; right?: ReactNode; dark?: boolean }) { return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '18px 0 10px' }}><div style={{ fontSize: 12.5, fontWeight: 800, color: dark ? '#9B96A8' : TXT3, textTransform: 'uppercase', letterSpacing: 0.4 }}>{children}</div>{right}</div> }
+export function SectionLabel({ children, right, dark }: { children: ReactNode; right?: ReactNode; dark?: boolean }) { return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: `${ESPACO_LINHA_KIT}px 0` }}><div style={{ fontSize: 12.5, fontWeight: 800, color: dark ? '#9B96A8' : TXT3, textTransform: 'uppercase', letterSpacing: 0.4 }}>{children}</div>{right}</div> }
 
 /* ---- Kit L1015-L1027: SecaoLayout ---- */
 export function SecaoLayout({ titulo, dark, children, badge }: { titulo: ReactNode; dark?: boolean; children: ReactNode; badge?: ReactNode }) {
@@ -121,22 +133,36 @@ export function PhoneComWhats({ phone, setPhone, hasWhatsapp, setHasWhatsapp, la
 export function validaTelefone(v: string) { if (!v || !v.trim()) return true; const d = v.replace(/\D/g, ''); return d.length === 10 || d.length === 11 }
 export function FieldError({ show, text }: { show: unknown; text: ReactNode }) { return show ? <div style={{ fontSize: 11, color: RED, marginTop: -10, marginBottom: 12, fontWeight: 600 }}>{text}</div> : null }
 export function validaEmailEnvio(v: unknown) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(v || '').trim()) }
+/* ---- Kit L2597 e L2614: faltavam neste produto até 10/09/2026 (Decisão 58) —
+   entraram junto com os campos CPF/E-mail/Telefone do cadastro de usuário, que
+   sem elas seriam texto livre sem validação nenhuma. Transcrição literal. ---- */
+export function validaCPF(v: string) {
+  const d = (v || '').replace(/\D/g, ''); if (d.length !== 11 || /^(\d)\1{10}$/.test(d)) return false
+  let soma = 0; for (let i = 0; i < 9; i++) soma += Number(d[i]) * (10 - i)
+  let resto = (soma * 10) % 11; if (resto === 10 || resto === 11) resto = 0; if (resto !== Number(d[9])) return false
+  soma = 0; for (let i = 0; i < 10; i++) soma += Number(d[i]) * (11 - i)
+  resto = (soma * 10) % 11; if (resto === 10 || resto === 11) resto = 0; return resto === Number(d[10])
+}
+export function FieldOk({ show, text }: { show: unknown; text: ReactNode }) { return show ? <div style={{ fontSize: 11, color: GREEN, marginTop: -10, marginBottom: 12, fontWeight: 600 }}>✓ {text}</div> : null }
 
 /* ---- Kit L2854-L2870: AddressFieldsBasic ---- */
-export function AddressFieldsBasic({ value, onChange }: { value: Partial<Endereco> | string | null; onChange: (v: Endereco) => void }) {
+export function AddressFieldsBasic({ value, onChange, dark }: { value: Partial<Endereco> | string | null; onChange: (v: Endereco) => void; dark?: boolean }) {
   const a = normalizeAddress(value)
   const setA = (patch: Partial<Endereco>) => onChange({ ...a, ...patch })
+  /* `dark` (Kit L3076): faltava nesta transcrição — sem ele, o endereço dentro
+     de uma tela do N0 saía com campo claro no painel escuro. */
+  const darkInput = dark ? { background: DEV_CARD, color: '#fff', border: 'none' } : {}
   return <>
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-      <Field label="CEP"><input style={inputStyle} value={a.cep} onChange={e => setA({ cep: e.target.value })} placeholder="00000-000" /></Field>
-      <Field label="Número"><input style={inputStyle} value={a.numero} onChange={e => setA({ numero: e.target.value })} /></Field>
+      <Field dark={dark} label="CEP"><input style={{ ...inputStyle, ...darkInput }} value={a.cep} onChange={e => setA({ cep: e.target.value })} placeholder="00000-000" /></Field>
+      <Field dark={dark} label="Número"><input style={{ ...inputStyle, ...darkInput }} value={a.numero} onChange={e => setA({ numero: e.target.value })} /></Field>
     </div>
-    <Field label="Logradouro"><input style={inputStyle} value={a.logradouro} onChange={e => setA({ logradouro: e.target.value })} placeholder="Rua, avenida, estrada..." /></Field>
-    <Field label="Complemento"><input style={inputStyle} value={a.complemento} onChange={e => setA({ complemento: e.target.value })} /></Field>
-    <Field label="Bairro"><input style={inputStyle} value={a.bairro} onChange={e => setA({ bairro: e.target.value })} /></Field>
+    <Field dark={dark} label="Logradouro"><input style={{ ...inputStyle, ...darkInput }} value={a.logradouro} onChange={e => setA({ logradouro: e.target.value })} placeholder="Rua, avenida, estrada..." /></Field>
+    <Field dark={dark} label="Complemento"><input style={{ ...inputStyle, ...darkInput }} value={a.complemento} onChange={e => setA({ complemento: e.target.value })} /></Field>
+    <Field dark={dark} label="Bairro"><input style={{ ...inputStyle, ...darkInput }} value={a.bairro} onChange={e => setA({ bairro: e.target.value })} /></Field>
     <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 10 }}>
-      <Field label="Cidade"><input style={inputStyle} value={a.cidade} onChange={e => setA({ cidade: e.target.value })} /></Field>
-      <Field label="UF"><input style={inputStyle} maxLength={2} value={a.uf} onChange={e => setA({ uf: e.target.value.toUpperCase() })} /></Field>
+      <Field dark={dark} label="Cidade"><input style={{ ...inputStyle, ...darkInput }} value={a.cidade} onChange={e => setA({ cidade: e.target.value })} /></Field>
+      <Field dark={dark} label="UF"><input style={{ ...inputStyle, ...darkInput }} maxLength={2} value={a.uf} onChange={e => setA({ uf: e.target.value.toUpperCase() })} /></Field>
     </div>
   </>
 }
@@ -200,7 +226,7 @@ export interface KitUser { id: string; name?: string; login: string; senha: stri
 export interface KitTenant { id: string; companyName: string; users: KitUser[] }
 export interface KitPlan { id: string; name: string; monthlyValue: number; destaque?: boolean; description?: string; features?: string[]; porte?: string; userLimit?: number; itemLimit?: number | null; restrictions?: { exportacaoDetalhada?: boolean; layoutPersonalizado?: boolean }; gratuito?: boolean; validadeDias?: number; ficticio?: boolean }
 export interface SiteWebLayout { modo?: 'horizontal' | 'vertical'; fixagemVertical?: 'usuario_escolhe' | 'sempre_fixo' | 'sempre_recolhido'; header?: Partial<SiteHeaderCfg> }
-export interface SiteHeaderCfg { composicao: 'morfo' | 'produto' | 'morfo_produto'; logoMorfo: 'quadrada' | 'horizontal'; logoProduto: 'quadrada' | 'horizontal'; logoMorfoUri: string | null; logoProdutoUri: string | null; posicao: 'esquerda' | 'centro' | 'direita'; posicaoMorfo?: 'esquerda' | 'centro' | 'direita'; posicaoProduto?: 'esquerda' | 'centro' | 'direita'; altura: 'estreita' | 'larga'; espaco: 'nenhum' | 'cima' | 'baixo' | 'ambos'; frasePos: 'acima' | 'abaixo' | 'centro' | 'esquerda' | 'direita' }
+export interface SiteHeaderCfg { composicao: 'morfo' | 'produto' | 'morfo_produto'; logoMorfo: 'quadrada' | 'horizontal'; logoProduto: 'quadrada' | 'horizontal'; logoMorfoUri: string | null; logoProdutoUri: string | null; posicao: 'esquerda' | 'centro' | 'direita'; posicaoMorfo?: 'esquerda' | 'centro' | 'direita'; posicaoProduto?: 'esquerda' | 'centro' | 'direita'; altura: 'estreita' | 'larga'; espaco: 'nenhum' | 'cima' | 'baixo' | 'ambos'; /* 'ocultar' (Kit item 186, L2336): a frase some e as logos ganham o espaço. Faltava aqui até 10/09/2026. */ frasePos: 'acima' | 'abaixo' | 'centro' | 'esquerda' | 'direita' | 'ocultar' }
 export interface LoginPageCfg { composicao: 'ambos' | 'morfo' | 'produto'; posicao: 'esquerda' | 'centro' | 'direita'; logoMorfo: 'quadrada' | 'horizontal'; logoProduto: 'quadrada' | 'horizontal'; frase: string | null; frasePos: 'acima' | 'abaixo' | 'centro' | 'esquerda' | 'direita' | 'ocultar' }
 export interface SiteConfig { cor1?: string; cor2?: string; subtitulo?: string; rodape?: string; fraseCor?: 'fundo_escuro' | 'fundo_claro' | 'destaque'; webLayout?: SiteWebLayout; loginPage?: Partial<LoginPageCfg>; loginPageMobile?: Partial<LoginPageCfg>; loginPageIndex?: number; planosPageIndex?: number }
 export interface KitPlatform {

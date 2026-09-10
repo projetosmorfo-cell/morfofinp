@@ -4,10 +4,16 @@ import { db, type Categoria, type Lancamento } from '../db'
 import type { TelaProps } from '../mes'
 import SeletorMes from '../components/SeletorMes'
 import LinhaLancamentoCompleta from '../components/LinhaLancamentoCompleta'
-import BarraBuscaFiltros, { FILTROS_VAZIOS, aplicarFiltros, type FiltrosAvancados } from '../components/BuscaEFiltros'
+import { CampoBusca, FolhaFiltros, FILTROS_VAZIOS, aplicarFiltros, contarFiltrosAtivos, type FiltrosAvancados } from '../components/BuscaEFiltros'
 import { formatarCabecalhoData } from '../formatoData'
+import { fmtBRL } from '../formatoMoeda'
 import { statusDoLancamento, FUNDO_STATUS } from '../statusPagamento'
 import { useHojeSimuladoISO } from '../hojeSimulado'
+import TituloTelaN1 from '../kit/CabecalhoN1'
+import { ExportSheet, type ExportRow } from '../kit/ExportSheet'
+import {
+  useSelecao, BarraSelecao, TotaisEntradaSaida, MarcadorLinha, separarPorHoje, RodapeTotais,
+} from '../components/SelecaoETotais'
 
 // Tela "Lançamentos" (antes "Lançar") — 30/08/2026: lista-primeiro, agrupada
 // por data (sessão), em vez de formulário-primeiro. Obedece as mesmas setas
@@ -36,7 +42,19 @@ export default function Lancamentos({ mes, aoMudarMes, aoAbrirLancamento }: Tela
   useHojeSimuladoISO()
   const [ordemDesc, setOrdemDesc] = useState(true)
   const [busca, setBusca] = useState('')
+  const [buscaAberta, setBuscaAberta] = useState(false)
+  const [filtrosAbertos, setFiltrosAbertos] = useState(false)
   const [filtros, setFiltros] = useState<FiltrosAvancados>(FILTROS_VAZIOS)
+  /* G44 regra 11b — hook ANTES do guard de carregamento logo abaixo. Ficou
+     depois dele na 1ª versão e derrubou a tela inteira (React #310, "mais
+     hooks que no render anterior"): a tela renderiza uma vez com os dados
+     ainda vindo do Dexie (sai pelo `return null`, sem passar por este
+     useState) e outra com eles prontos. Achado no Playwright, não na
+     leitura do código. */
+  const [exportOpen, setExportOpen] = useState(false)
+  /* Seleção múltipla (10/09/2026) — hook também ANTES do guard, pelo mesmo
+     motivo do `exportOpen` logo acima (React #310). */
+  const selecao = useSelecao((lancamentosDoMes ?? []).map((l) => l.id!).filter(Boolean))
 
   if (!lancamentosDoMes || !categorias || !contas) return null
 
@@ -44,65 +62,164 @@ export default function Lancamentos({ mes, aoMudarMes, aoAbrirLancamento }: Tela
   const contaPorId = new Map(contas.map((c) => [c.id!, c]))
 
   const filtrados = aplicarFiltros(lancamentosDoMes, busca, filtros, categoriaPorId, contaPorId)
+  const linhasExport: ExportRow[] = filtrados.map((l) => ({
+    data: l.dataCompetencia,
+    descricao: l.descricao,
+    categoria: categoriaPorId.get(l.categoriaId)?.nome ?? '—',
+    conta: l.contaId ? (contaPorId.get(l.contaId)?.nome ?? '—') : '—',
+    valor: fmtBRL(l.valor),
+    situacao: statusDoLancamento(l),
+    recorrencia: l.recorrencia ?? 'único',
+    descricaoOriginal: l.descricaoOriginal ?? '',
+  }))
   const ordenados = [...filtrados].sort((a, b) =>
     ordemDesc ? b.dataCompetencia.localeCompare(a.dataCompetencia) : a.dataCompetencia.localeCompare(b.dataCompetencia),
   )
 
   // Agrupa em sessões por data, mantendo a ordem já escolhida.
-  const sessoes: { data: string; itens: Lancamento[] }[] = []
-  for (const l of ordenados) {
-    const ultima = sessoes[sessoes.length - 1]
-    if (ultima && ultima.data === l.dataCompetencia) ultima.itens.push(l)
-    else sessoes.push({ data: l.dataCompetencia, itens: [l] })
+  function agrupar(itens: Lancamento[]) {
+    const out: { data: string; itens: Lancamento[] }[] = []
+    for (const l of itens) {
+      const ultima = out[out.length - 1]
+      if (ultima && ultima.data === l.dataCompetencia) ultima.itens.push(l)
+      else out.push({ data: l.dataCompetencia, itens: [l] })
+    }
+    return out
   }
+
+  /* Corte "até Hoje" × "dias futuros" (10/09/2026) — só existe quando de fato
+     há registro futuro na lista; num mês passado inteiro, a lista continua
+     exatamente como sempre foi, num bloco só. */
+  const { ateHoje, futuros } = separarPorHoje(ordenados)
+  const blocos = (futuros.length > 0 && ateHoje.length > 0
+    ? [
+        { chave: 'ate-hoje', titulo: 'Até hoje', itens: ateHoje },
+        { chave: 'futuros', titulo: 'Dias futuros', itens: futuros },
+      ]
+    : [{ chave: 'tudo', titulo: futuros.length > 0 ? 'Dias futuros' : 'Até hoje', itens: ordenados }]
+  ).map((b) => ({ ...b, sessoes: agrupar(b.itens) }))
 
   return (
     <>
       <div className="cabecalho-fixo">
-        <h1>Lançamentos</h1>
+        {/* 10/09/2026, pedido do Rafael: Selecionar · Buscar · Filtro viraram
+            ÍCONES nesta mesma fileira, à esquerda do Exportar; a ordenação foi
+            pra dentro da folha de filtros; e a contagem de registros só
+            aparece com a seleção ativa. O campo de busca e a linha de
+            contagem/ordem que ficavam aqui deixaram de existir como barra
+            fixa — nada sumiu de função, só de lugar. */}
+        <TituloTelaN1
+          titulo="Lançamentos"
+          onExportar={() => setExportOpen(true)}
+          acoesLista={{
+            onSelecionar: () => (selecao.ativa ? selecao.sair() : selecao.ativar()),
+            selecaoAtiva: selecao.ativa,
+            onBuscar: () => setBuscaAberta((v) => !v),
+            buscaAtiva: busca !== '',
+            onFiltrar: () => setFiltrosAbertos(true),
+            filtrosAtivos: contarFiltrosAtivos(filtros),
+          }}
+        />
         <SeletorMes mes={mes} onMudar={aoMudarMes} />
+        {(buscaAberta || busca !== '') && (
+          <CampoBusca busca={busca} onBuscaChange={setBusca} onFechar={() => setBuscaAberta(false)} />
+        )}
+        {selecao.ativa && (
+          <div className="linha" style={{ border: 'none', padding: '0', alignItems: 'flex-start', gap: 8 }}>
+            <BarraSelecao selecao={selecao} total={filtrados.length} />
+          </div>
+        )}
       </div>
+      {filtrosAbertos && (
+        <FolhaFiltros
+          filtros={filtros}
+          categorias={categorias}
+          contas={contas}
+          ordemDesc={ordemDesc}
+          onFechar={() => setFiltrosAbertos(false)}
+          onAplicar={(f, ordem) => { setFiltros(f); setOrdemDesc(ordem); setFiltrosAbertos(false) }}
+        />
+      )}
+      {/* G44 regra 11b: exporta exatamente o que está na tela — ou seja, o
+          mês selecionado JÁ com a busca e os filtros aplicados (`filtrados`),
+          nunca a tabela inteira. É a promessa que a própria folha faz. */}
+      {exportOpen && <ExportSheet title="Lançamentos" filenameBase={`morfofinp-lancamentos-${mes}`}
+        screenColumns={[
+          { key: 'data', label: 'Data' },
+          { key: 'descricao', label: 'Descrição' },
+          { key: 'valor', label: 'Valor' },
+          { key: 'situacao', label: 'Situação' },
+        ]}
+        screenRows={linhasExport}
+        detailColumns={[
+          { key: 'data', label: 'Data' },
+          { key: 'descricao', label: 'Descrição' },
+          { key: 'categoria', label: 'Categoria' },
+          { key: 'conta', label: 'Pago com' },
+          { key: 'valor', label: 'Valor' },
+          { key: 'situacao', label: 'Situação' },
+          { key: 'recorrencia', label: 'Recorrência' },
+          { key: 'descricaoOriginal', label: 'Descrição original' },
+        ]}
+        detailRows={linhasExport}
+        onClose={() => setExportOpen(false)} />}
 
-      <BarraBuscaFiltros
-        busca={busca}
-        onBuscaChange={setBusca}
-        filtros={filtros}
-        onFiltrosChange={setFiltros}
-        categorias={categorias}
-        contas={contas}
-      />
-
-      <div className="linha" style={{ border: 'none', padding: '0 0 8px' }}>
-        <span className="texto-fraco">
-          {filtrados.length} lançamento(s){filtrados.length !== lancamentosDoMes.length ? ` de ${lancamentosDoMes.length}` : ''}
-        </span>
-        <button type="button" className="botao-ordem" onClick={() => setOrdemDesc((v) => !v)}>
-          {ordemDesc ? 'Mais recente ↓' : 'Mais antigo ↑'}
-        </button>
-      </div>
-
+      {/* Com a seleção ATIVA o totalizador do rodapé é o da seleção; sem
+          seleção, a lista se parte em "Até hoje" × "Dias futuros" e cada
+          bloco carrega o SEU totalizador (pedido do Rafael, 10/09/2026). */}
       <div className="cartao" style={{ padding: '0 12px' }}>
         {ordenados.length === 0 && (
           <p className="texto-fraco" style={{ padding: '14px 4px' }}>
             Nenhum lançamento encontrado.
           </p>
         )}
-        {sessoes.map((sessao) => (
-          <div key={sessao.data}>
-            <div className="sessao-data">{formatarCabecalhoData(sessao.data)}</div>
-            {sessao.itens.map((l) => (
-              <ItemLancamento
-                key={l.id}
-                lancamento={l}
-                categoria={categoriaPorId.get(l.categoriaId)}
-                contaNome={contaPorId.get(l.contaId)?.nome}
-                onAbrir={() => aoAbrirLancamento({ id: l.id })}
-                onExcluir={() => db.lancamentos.delete(l.id!)}
+        {selecao.ativa
+          ? blocos.map((b) => (
+              <SessoesDeData
+                key={b.chave}
+                sessoes={b.sessoes}
+                categoriaPorId={categoriaPorId}
+                contaPorId={contaPorId}
+                aoAbrirLancamento={aoAbrirLancamento}
+                selecao={selecao}
               />
+            ))
+          : blocos.map((b) => (
+              <div key={b.chave}>
+                {blocos.length > 1 && <div className="bloco-corte-titulo">{b.titulo}</div>}
+                <SessoesDeData
+                  sessoes={b.sessoes}
+                  categoriaPorId={categoriaPorId}
+                  contaPorId={contaPorId}
+                  aoAbrirLancamento={aoAbrirLancamento}
+                  selecao={selecao}
+                />
+                {/* Só quando a lista está PARTIDA em dois blocos: aí cada um
+                    precisa do seu total. Com um bloco só, o total é o do
+                    rodapé fixo logo abaixo — não se repete. */}
+                {blocos.length > 1 && (
+                  <div style={{ padding: '8px 0 12px' }}>
+                    <TotaisEntradaSaida itens={b.itens} rotulo={b.titulo} />
+                  </div>
+                )}
+              </div>
             ))}
-          </div>
-        ))}
       </div>
+
+      {/* Rodapé fixo com o total (pedido do Rafael): antes este card ficava no
+          FIM da lista e só aparecia depois de rolar tudo. Agora é
+          `position: sticky; bottom: 0` — acompanha a rolagem. Com a seleção
+          ativa, mostra o total do que está marcado. */}
+      {ordenados.length > 0 && (
+        <RodapeTotais>
+          <TotaisEntradaSaida
+            recolhivel
+            destaque={selecao.ativa}
+            rotulo={selecao.ativa ? `Selecionados (${selecao.qtd})` : 'Total da lista'}
+            itens={selecao.ativa ? filtrados.filter((l) => selecao.marcados.has(l.id!)) : ordenados}
+          />
+        </RodapeTotais>
+      )}
 
       <button
         type="button"
@@ -115,6 +232,41 @@ export default function Lancamentos({ mes, aoMudarMes, aoAbrirLancamento }: Tela
       >
         +
       </button>
+    </>
+  )
+}
+
+/* As sessões por data de UM bloco. Extraído porque a lista agora é
+   renderizada em até dois blocos (até hoje × dias futuros) e repetir o mapa
+   inteiro nos dois lugares seria cópia de código. */
+function SessoesDeData({ sessoes, categoriaPorId, contaPorId, aoAbrirLancamento, selecao }: {
+  sessoes: { data: string; itens: Lancamento[] }[]
+  categoriaPorId: Map<number, Categoria>
+  contaPorId: Map<number, { nome: string }>
+  aoAbrirLancamento: (o?: { id?: number }) => void
+  selecao: ReturnType<typeof useSelecao>
+}) {
+  return (
+    <>
+      {sessoes.map((sessao) => (
+        <div key={sessao.data}>
+          <div className="sessao-data">{formatarCabecalhoData(sessao.data)}</div>
+          {sessao.itens.map((l) => (
+            <div className="linha-selecionavel" key={l.id}>
+              {selecao.ativa && (
+                <MarcadorLinha marcado={selecao.estaMarcado(l.id!)} onAlternar={() => selecao.alternar(l.id!)} />
+              )}
+              <ItemLancamento
+                lancamento={l}
+                categoria={categoriaPorId.get(l.categoriaId)}
+                contaNome={contaPorId.get(l.contaId)?.nome}
+                onAbrir={() => (selecao.ativa ? selecao.alternar(l.id!) : aoAbrirLancamento({ id: l.id }))}
+                onExcluir={() => db.lancamentos.delete(l.id!)}
+              />
+            </div>
+          ))}
+        </div>
+      ))}
     </>
   )
 }

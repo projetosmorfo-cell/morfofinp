@@ -9,6 +9,9 @@ import SeletorMes from '../components/SeletorMes'
 import ListaLancamentosCategoria from '../components/ListaLancamentosCategoria'
 import { Icone } from '../icones'
 import { useConfiguracaoIcones, tamanhoIconePx } from '../configuracaoIcones'
+import TituloTelaN1 from '../kit/CabecalhoN1'
+import { ExportSheet, type ExportRow } from '../kit/ExportSheet'
+import { DismissibleTip, ESPACO_LINHA } from '../kit/PadraoUI'
 
 interface LinhaCategoria {
   cat: Categoria
@@ -39,6 +42,7 @@ export default function Situacao({ mes, aoMudarMes, aoAbrirLancamento, aoAbrirPl
   // único toggle "O que significa isso?", fechado por padrão, cobrindo as
   // três de uma vez (elas formam um raciocínio só, em cascata).
   const [explicacoesAbertas, setExplicacoesAbertas] = useState(false)
+  const [exportOpen, setExportOpen] = useState(false) /* G44 regra 11b */
   const { pctCategoria } = useConfiguracaoIcones()
 
   if (!categorias || !grupos || !lancamentosDoMes || !lancamentosTodos) return null
@@ -201,13 +205,39 @@ export default function Situacao({ mes, aoMudarMes, aoAbrirLancamento, aoAbrirPl
   return (
     <>
       <div className="cabecalho-fixo">
-        <h1>Situação do orçamento</h1>
+        <TituloTelaN1 titulo="Situação do orçamento" onExportar={() => setExportOpen(true)} />
         <SeletorMes mes={mes} onMudar={aoMudarMes} />
       </div>
-      <p className="texto-fraco">
+      {exportOpen && <ExportSheet title="Situação do orçamento" filenameBase={`morfofinp-situacao-${mes}`}
+        screenColumns={[{ key: 'item', label: 'Item' }, { key: 'valor', label: 'Valor' }]}
+        screenRows={[
+          { item: 'Aceitável (total)', valor: fmt(totalGeralGrupos.aceitavel) },
+          { item: 'Gasto (total)', valor: fmt(totalGeralGrupos.gasto) },
+          { item: 'Total estourado', valor: fmt(totalEstourado) },
+          { item: 'Total com sobra', valor: fmt(totalComSobra) },
+          { item: 'Total aportado', valor: fmt(totalAportado) },
+          { item: 'Sobra real este mês', valor: fmt(sobraReal) },
+        ]}
+        detailColumns={[
+          { key: 'categoria', label: 'Categoria' },
+          { key: 'grupo', label: 'Grupo' },
+          { key: 'aceitavel', label: 'Aceitável' },
+          { key: 'gasto', label: 'Gasto' },
+          { key: 'diferenca', label: 'Diferença' },
+        ]}
+        detailRows={linhas.map((l): ExportRow => ({
+          categoria: l.cat.nome, grupo: l.cat.grupo ?? '—',
+          aceitavel: fmt(l.cat.aceitavelMensal), gasto: fmt(l.gasto), diferenca: fmt(l.diferenca),
+        }))}
+        onClose={() => setExportOpen(false)} />}
+      {/* Padrão de Interface Morfo (UI), seção 6: instrução que ocupava uma
+          linha inteira EM TODA VISITA, pra sempre, competindo com o dado.
+          Vira dica dispensável — "X" dispensa de vez, some sozinha depois de
+          3 exibições. Nada de conteúdo se perdeu: é o mesmo texto. */}
+      <DismissibleTip screenKey="situacao" style={{ marginBottom: ESPACO_LINHA }}>
         Aceitável de cada categoria contra o que já foi gasto neste mês — pra você ver de cara onde
         estourou e onde ainda sobra espaço. Toque numa categoria pra ver os lançamentos dela.
-      </p>
+      </DismissibleTip>
 
       <div className="cartao" style={{ marginTop: 16 }}>
         <div className="linha" style={{ border: 'none', padding: 0 }}>
