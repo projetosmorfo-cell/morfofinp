@@ -137,6 +137,15 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleDebug --no-daemon
 
+      - name: Qual chave o Gradle usou (evidência no log)
+        # `signingReport` imprime, por variante, o arquivo de keystore, o alias
+        # e a impressão digital que o Gradle REALMENTE usou. É o que diz, sem
+        # adivinhação, se o signingConfig injetado acima pegou ou se ele caiu
+        # no keystore de debug gerado na hora.
+        run: |
+          cd android
+          ./gradlew :app:signingReport --no-daemon | sed -n '/Variant: debug/,/^$/p' || true
+
       - name: Renomear .apk
         run: |
           mkdir -p saida
@@ -144,16 +153,25 @@ jobs:
           ls -la saida
 
       - name: Impressão digital do certificado (tem que ser SEMPRE a mesma)
-        # Evidência, não suposição: se esta linha mudar de um build pro outro, o
-        # celular vai recusar instalar por cima. A digital esperada é a da chave
-        # versionada em android-signing/debug.keystore:
-        #   SHA1: CE:55:D4:32:27:F9:93:D5:27:FD:99:D1:38:2F:09:0A:96:4D:24:49
+        # Evidência, não suposição: se esta digital mudar de um build pro outro,
+        # o celular recusa instalar por cima ("o pacote tem conflito com um já
+        # instalado"). A esperada é a da chave versionada em
+        # android-signing/debug.keystore (SHA-1, minúsculo, sem separador).
+        #
+        # Usa `apksigner`, não `keytool -printcert -jarfile`: o keytool só lê a
+        # assinatura v1 (JAR), que o AGP nem sempre inclui — num .apk assinado
+        # só em v2/v3 ele não devolve digital nenhuma e a comparação acusaria
+        # divergência que não existe. O apksigner lê os três esquemas.
         run: |
-          keytool -printcert -jarfile "saida/MorfoFinP-build-${{ steps.build.outputs.nnn }}.apk" | grep -A3 -i "fingerprint" || true
-          ESPERADA="CE:55:D4:32:27:F9:93:D5:27:FD:99:D1:38:2F:09:0A:96:4D:24:49"
-          ATUAL=$(keytool -printcert -jarfile "saida/MorfoFinP-build-${{ steps.build.outputs.nnn }}.apk" | grep -i "SHA1:" | head -1 | sed 's/.*SHA1: *//' | tr -d ' \r')
+          APK="saida/MorfoFinP-build-${{ steps.build.outputs.nnn }}.apk"
+          APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner 2>/dev/null | tail -1)
+          echo "apksigner: $APKSIGNER"
+          "$APKSIGNER" verify --print-certs -v "$APK" || true
+          ESPERADA="ce55d43227f993d527fd99d1382f090a964d2449"
+          ATUAL=$("$APKSIGNER" verify --print-certs "$APK" | grep -i "SHA-1 digest" | head -1 | sed 's/.*: *//' | tr 'A-F' 'a-f' | tr -d ' :\r')
           echo "esperada: $ESPERADA"
           echo "atual:    $ATUAL"
+          test -n "$ATUAL" || { echo "::error::Não consegui ler a assinatura do .apk (apksigner não devolveu digital)."; exit 1; }
           test "$ATUAL" = "$ESPERADA" || { echo "::error::O .apk foi assinado com uma chave DIFERENTE da versionada — ele não instalaria por cima do build anterior."; exit 1; }
           echo "Assinatura confere."
 
