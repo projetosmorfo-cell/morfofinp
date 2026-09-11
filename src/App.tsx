@@ -16,7 +16,7 @@ import { ArrowPathIcon, ArrowRightOnRectangleIcon, CalendarDaysIcon, ChartPieIco
 import DetalheLancamento from './components/DetalheLancamento'
 import { mesInicial } from './mes'
 import { avancarSeriesFixasPendentes } from './recorrencia'
-import { useModoVisao, useOrdemAbas, useOrdemMenuEngrenagem, useTemaEfetivo } from './configuracaoIcones'
+import { migrarPctGrupo, useModoVisao, useOrdemAbas, useOrdemMenuEngrenagem, useTemaEfetivo } from './configuracaoIcones'
 import { TopIconMenu, UserHoverIcon, ThemeToggleIcon } from './kit/TopoIcones'
 import { Settings, MessageCircle, RefreshCw, LogOut } from 'lucide-react'
 import SuporteChat from './kit/SuporteChat'
@@ -187,6 +187,9 @@ function Rodape({
   return (
     <RodapeAbas
       className="rodape"
+      /* 11/09/2026: no N1 as cores vêm do tema (claro/escuro/automático) —
+         o painel N0 continua escuro fixo. Ver `RodapeAbas.tsx`. */
+      dark={false}
       abas={entradas}
       ativa={tela}
       onTrocar={(k) => {
@@ -487,6 +490,9 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: { onVoltar: (
   // ciclo" (ver src/recorrencia.ts).
   useEffect(() => {
     avancarSeriesFixasPendentes()
+    // Correção única do percentual do ícone de grupo numa base que já existe
+    // (11/09/2026) — ver `migrarPctGrupo()` em `src/configuracaoIcones.ts`.
+    migrarPctGrupo()
   }, [])
 
   // Notificação bancária (09/09/2026): ao abrir o app, puxa o que o serviço

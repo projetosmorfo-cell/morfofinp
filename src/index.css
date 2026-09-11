@@ -8,6 +8,13 @@
   --verde: #22c55e;
   --vermelho: #ef4444;
   --amarelo: #eab308;
+  /* Barra de menus do rodapé do N1 (11/09/2026) — ver `src/kit/RodapeAbas.tsx`.
+     O painel N0 continua com a paleta escura fixa dele; estes tokens existem
+     só pro ambiente do cliente acompanhar o tema escolhido. */
+  --rodape-fundo: var(--bg-elevado);
+  --rodape-borda: var(--borda);
+  --rodape-acento: #8b7cf6;
+  --rodape-inativo: var(--texto-fraco);
   color-scheme: dark;
 }
 
@@ -30,6 +37,8 @@
   --verde: #15803d;
   --vermelho: #b91c1c;
   --amarelo: #a16207;
+  /* Roxo mais fechado no claro: o #8b7cf6 do tema escuro some sobre branco. */
+  --rodape-acento: #6c3fff;
   color-scheme: light;
 }
 /* "Automático" só vale quando o Rafael ESCOLHE automático (atributo
@@ -48,6 +57,7 @@
     --verde: #15803d;
     --vermelho: #b91c1c;
     --amarelo: #a16207;
+    --rodape-acento: #6c3fff;
     color-scheme: light;
   }
 }
@@ -712,8 +722,10 @@ nav.rodape {
    comentários acima, base de `tamanhoIconePx('grupo', pct)`. Classe própria
    (não a genérica `.linha`) pra não mudar a altura de linhas sem ícone de
    grupo no resto do app. */
+/* 11/09/2026: 32px → 40px, a MESMA régua da linha de categoria logo abaixo —
+   ver `ALTURA_REF_ICONE` em `src/configuracaoIcones.ts` pro porquê. */
 .linha-cabecalho-grupo {
-  min-height: 32px;
+  min-height: 40px;
   box-sizing: border-box;
 }
 

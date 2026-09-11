@@ -16,5 +16,5 @@
 // aqui antes de entregar é exatamente o bug que o Rafael pediu pra nunca
 // mais acontecer.
 export const VERSAO = '0.1'
-export const BUILD_NUMBER = 32
+export const BUILD_NUMBER = 33
 export const CARIMBO_BUILD = `v${VERSAO} · build ${String(BUILD_NUMBER).padStart(3, '0')}`

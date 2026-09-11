@@ -15,11 +15,24 @@ import { db, type ConfiguracaoIcones } from './db'
 // mesmos de antes — só o significado/nome mudaram, mantendo compatibilidade
 // com qualquer ajuste que o Rafael já tivesse feito (ver fallback de
 // leitura em `useConfiguracaoIcones` abaixo).
+//
+// 11/09/2026 — `pctGrupo` foi de 30 pra 60, o MESMO valor de `pctCategoria`.
+// Motivo (medido, não impressão): com 30% sobre a régua antiga de 32px o
+// ícone de grupo saía com 10×10px em todas as telas, menos da metade do
+// ícone de categoria da mesma tela (24px) — grupo é o nível ACIMA da
+// categoria e aparecia como o menor elemento da hierarquia. Junto disso, a
+// régua do grupo passou a ser a mesma da categoria (40px, abaixo), então
+// "60%" quer dizer exatamente o mesmo tamanho nos dois lugares.
 export const CONFIG_ICONES_PADRAO: Omit<ConfiguracaoIcones, 'id'> = {
   pctCategoria: 60, // linha de categoria cadastrada — tela Categorias e Grupos
   pctCompleta: 30, // listagem Completa — Lançamentos e drill-in de Carteira
-  pctGrupo: 30, // cabeçalho de grupo — Categorias, Situação, Resumo, Planejamento
+  pctGrupo: 60, // cabeçalho de grupo — Categorias, Situação, Resumo, Planejamento
 }
+
+// Valor antigo de fábrica do percentual de grupo (nunca escolhido por
+// ninguém — era só o padrão do código). É o que `migrarPctGrupo()` abaixo
+// procura pra corrigir uma instalação que já existe.
+const PCT_GRUPO_PADRAO_ANTIGO = 30
 
 // Alturas de referência (px), FIXAS por CSS (`min-height`/`height`
 // explícitos nas classes correspondentes — ver index.css), de cada tipo de
@@ -30,10 +43,18 @@ export const CONFIG_ICONES_PADRAO: Omit<ConfiguracaoIcones, 'id'> = {
 // referência: um alvo móvel, documentado como problema real numa rodada
 // anterior (ver CLAUDE.md). Fixando a altura de referência, o percentual
 // configurado por Rafael sempre produz o mesmo tamanho de ícone, previsível.
+//
+// 11/09/2026: `grupo` foi de 32 pra 40 — a MESMA régua de `categoria`. Duas
+// réguas diferentes faziam o mesmo percentual significar tamanhos diferentes
+// (30% = 10px no grupo, 30% = 12px na categoria), e o teto do grupo (100% =
+// 32px) era menor que o de categoria (40px): um grupo NUNCA conseguia ficar
+// do tamanho de uma categoria, por mais que o percentual subisse. Com a
+// régua única, o número que a pessoa digita quer dizer a mesma coisa nos
+// dois lugares. A classe `.linha-cabecalho-grupo` (index.css) acompanhou.
 export const ALTURA_REF_ICONE: Record<'completa' | 'categoria' | 'grupo', number> = {
   completa: 64,
   categoria: 40,
-  grupo: 32,
+  grupo: 40,
 }
 
 export function tamanhoIconePx(tipo: 'completa' | 'categoria' | 'grupo', pct: number): number {
@@ -87,6 +108,7 @@ export function useConfiguracaoIcones(): Required<
     | 'temaPreferido'
     | 'memoriaDescricaoDias'
     | 'logosInstituicoes'
+    | 'pctGrupoRevisado'
   >
 > {
   const config = useLiveQuery(() => db.configuracoes.get(1), [])
@@ -130,6 +152,28 @@ export async function salvarConfiguracaoIcones(patch: Partial<Omit<ConfiguracaoI
     pctGrupo: atual?.pctGrupo ?? CONFIG_ICONES_PADRAO.pctGrupo,
     modoVisao: atual?.modoVisao ?? 'premium',
     ...patch,
+  })
+}
+
+// Correção única do percentual de grupo numa instalação que JÁ EXISTE
+// (11/09/2026). Sem isto, mudar só o padrão de fábrica não resolveria nada
+// pra quem já usa o app: `salvarConfiguracaoIcones()` grava os 4 campos de
+// ícone em TODA chamada (mesmo quando o patch é de outro assunto), então o
+// 30 antigo está persistido no banco de qualquer pessoa que tenha aberto o
+// app alguma vez — e um valor persistido vence o padrão novo pra sempre.
+//
+// Regra deliberadamente estreita: só mexe quando o valor salvo é EXATAMENTE
+// o padrão antigo (30), ou seja, quando ninguém nunca escolheu nada ali. Um
+// percentual escolhido de propósito (qualquer outro número) fica intocado. E
+// roda UMA vez só — a marca `pctGrupoRevisado` garante que, se a pessoa
+// digitar 30 depois disso, o 30 dela é respeitado e nunca mais reescrito.
+export async function migrarPctGrupo() {
+  const atual = await db.configuracoes.get(1)
+  if (!atual || atual.pctGrupoRevisado) return
+  const precisa = atual.pctGrupo === PCT_GRUPO_PADRAO_ANTIGO
+  await salvarConfiguracaoIcones({
+    pctGrupoRevisado: true,
+    ...(precisa ? { pctGrupo: CONFIG_ICONES_PADRAO.pctGrupo } : {}),
   })
 }
 

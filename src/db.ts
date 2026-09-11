@@ -241,6 +241,11 @@ export interface ConfiguracaoIcones {
   pctCategoria: number
   pctCompleta: number
   pctGrupo: number
+  // Marca de que a correção única do percentual de grupo já rodou nesta
+  // instalação (11/09/2026) — ver `migrarPctGrupo()` em
+  // `src/configuracaoIcones.ts`. Campo aditivo, não indexado, sem bump de
+  // schema (mesma regra de sempre pra esta tabela singleton).
+  pctGrupoRevisado?: boolean
   // `modoVisao` (04/09/2026, pedido do Rafael): visão "Light" (simplificada —
   // só Resumo/Lançamentos/Carteira no rodapé) vs. "Premium" (todas as 5
   // abas, o app como é hoje). Mesmo raciocínio de sempre pra campo aditivo

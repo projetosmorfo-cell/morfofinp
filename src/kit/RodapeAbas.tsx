@@ -12,6 +12,21 @@ export const RODAPE_ACENTO = '#8B7CF6' // DEV_ACCENT do DevApp
 export const RODAPE_INATIVO = '#7A7686'
 export const RODAPE_FUNDO = '#141319' // DEV_BG do DevApp
 
+/* 11/09/2026 — a barra do N1 não seguia o tema claro: ficava sempre escura.
+   Causa exata: `nav.rodape` no `index.css` SEMPRE apontou pras variáveis de
+   tema (`--bg-elevado`/`--borda`), mas esta peça pinta o fundo por estilo
+   INLINE — e inline sempre vence folha de estilo, então a cor do N0 (escura,
+   fixa) valia nos dois temas. Correção: o N0 continua com os valores fixos
+   dele (é escuro por definição, `.mloc-forcar-escuro`); o N1 passa a usar
+   tokens de tema (`--rodape-*`, definidos no `index.css` junto das demais
+   variáveis de cor). Nenhum tamanho/ícone/rótulo mudou — só a cor. */
+const CORES_TEMA = {
+  fundo: 'var(--rodape-fundo, var(--bg-elevado))',
+  borda: 'var(--rodape-borda, var(--borda))',
+  acento: 'var(--rodape-acento, #8B7CF6)',
+  inativo: 'var(--rodape-inativo, var(--texto-fraco))',
+}
+
 export interface AbaRodape<K extends string> {
   key: K
   label: string
@@ -28,7 +43,18 @@ export interface AbaRodape<K extends string> {
   custom?: ReactNode
 }
 
-export default function RodapeAbas<K extends string>({ abas, ativa, onTrocar, className }: { abas: AbaRodape<K>[]; ativa: K; onTrocar: (k: K) => void; className?: string }) {
+export default function RodapeAbas<K extends string>({ abas, ativa, onTrocar, className, dark = true }: {
+  abas: AbaRodape<K>[]
+  ativa: K
+  onTrocar: (k: K) => void
+  className?: string
+  /* `true` (padrão) = paleta fixa escura do painel N0. O N1 passa `false` e
+     as cores vêm do tema escolhido pela pessoa (ver CORES_TEMA acima). */
+  dark?: boolean
+}) {
+  const cores = dark
+    ? { fundo: RODAPE_FUNDO, borda: 'rgba(255,255,255,0.08)', acento: RODAPE_ACENTO, inativo: RODAPE_INATIVO }
+    : CORES_TEMA
   const ref = useRef<HTMLElement>(null)
   // Publica a altura real da barra em `--rodape-altura` (Decisão 51): os
   // botões flutuantes de teste (`SimulacaoResolucao.tsx`) ficam logo acima
@@ -55,8 +81,8 @@ export default function RodapeAbas<K extends string>({ abas, ativa, onTrocar, cl
       style={{
         display: 'flex',
         alignItems: 'center',
-        borderTop: '1px solid rgba(255,255,255,0.08)',
-        background: RODAPE_FUNDO,
+        borderTop: `1px solid ${cores.borda}`,
+        background: cores.fundo,
         padding: '6px 4px calc(env(safe-area-inset-bottom, 6px) + 6px)',
         flexShrink: 0,
       }}
@@ -89,8 +115,8 @@ export default function RodapeAbas<K extends string>({ abas, ativa, onTrocar, cl
               padding: '7px 2px',
             }}
           >
-            <Icone width={20} height={20} color={ativo ? RODAPE_ACENTO : RODAPE_INATIVO} strokeWidth={ativo ? 2.4 : 2} />
-            <span style={{ fontSize: 9.5, fontWeight: 700, color: ativo ? RODAPE_ACENTO : RODAPE_INATIVO }}>{label}</span>
+            <Icone width={20} height={20} color={ativo ? cores.acento : cores.inativo} strokeWidth={ativo ? 2.4 : 2} />
+            <span style={{ fontSize: 9.5, fontWeight: 700, color: ativo ? cores.acento : cores.inativo }}>{label}</span>
             {extra}
           </button>
         )
