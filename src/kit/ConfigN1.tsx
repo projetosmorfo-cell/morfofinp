@@ -113,7 +113,11 @@ export function MeusDadosN1({ aoVoltar }: { aoVoltar: () => void }) {
     }
     await atualizarTenantN0(TENANT_N1_ID, (t) => ({
       ...t,
-      users: t.users.map((u) => (u.id === eu.id ? { ...u, name: nome, login, email: atual.email, phone: atual.phone, senha: senha1 ? senha1 : u.senha } : u)),
+      /* `demo: false`: editar os próprios dados aqui é o que transforma o
+         usuário de demonstração (com que o ambiente nasce) no acesso pessoal
+         de verdade — e é isso que fecha a porta do atalho "Entrar como
+         empresa cliente (demo)" no Login (11/09/2026, Decisão 67). */
+      users: t.users.map((u) => (u.id === eu.id ? { ...u, name: nome, login, email: atual.email, phone: atual.phone, senha: senha1 ? senha1 : u.senha, demo: false } : u)),
     }))
     setSenha1(''); setSenha2(''); setForm(null)
     notify(senha1 ? 'Dados e senha atualizados.' : 'Dados atualizados.')

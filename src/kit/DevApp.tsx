@@ -41,6 +41,10 @@ import {
   loginJaEmUsoGlobalmente,
   atualizarPerfisMorfo,
   atualizarDevUsersN0,
+  atualizarTenantN0,
+  lerPlatformN0Persistida,
+  salvarPlatformN0,
+  TENANT_N1_ID,
   daysUntil,
   addDays,
   normalizarMenuPosModo,
@@ -56,7 +60,7 @@ import { PerfisAcessoContent } from './PerfisAcesso'
 import { LayoutContext, TopIconMenu, UserHoverIcon, IconesDeTela, type ItemMenuTopo } from './TopoIcones'
 import { ExportSheet, type ExportRow } from './ExportSheet'
 import { RotateCcw, LogOut, AlertTriangle, Timer, ShieldAlert, UserPlus, Plus, FileBadge, Settings, MessageCircle } from 'lucide-react'
-import { alpha, GREEN, AMBER, RED, SectionLabel, DEV_BG, DEV_CARD, DEV_ACCENT, Segmented, AddressFieldsBasic, normalizeAddress, validaCPF, validaTelefone, validaEmailEnvio, type Endereco } from './kitBase'
+import { alpha, uid, GREEN, AMBER, RED, SectionLabel, DEV_BG, DEV_CARD, DEV_ACCENT, Segmented, Sheet, Field, FieldError, inputStyle, primaryBtn, Toggle, PhoneComWhats, AddressFieldsBasic, normalizeAddress, validaCPF, validaTelefone, validaEmailEnvio, type Endereco } from './kitBase'
 import { ESPACO_LINHA, InfoDot, IndicatorStrip, QuickAction, TotalRegistros, formatMoneyShort } from './PadraoUI'
 // Telas novas de Parâmetros (10/09/2026, Decisão 55 — Parte B)
 import {
@@ -473,12 +477,146 @@ function AbaInicio({ filtroDados, onIrPara }: { filtroDados: FiltroDados; onIrPa
   )
 }
 
+/* ===================== Novo cliente (N0) =====================
+   11/09/2026, Decisão 67 — pedido do Rafael: "n0 tem que conseguir cadastrar
+   novo cliente e preencher dados dele e liberar acesso". Antes disto a aba
+   Tenants era SÓ leitura: não havia botão de incluir em lugar nenhum (era o
+   bug que ele relatou, "não tem botão pra incluir").
+
+   Base: `NewTenantSheet` do Kit (L5197-L5234) — mesmos campos, mesma ordem,
+   mesmas validações (telefone/e-mail/documento) e o mesmo botão desabilitado
+   até tudo estar válido. ADAPTAÇÕES, todas por causa do que este produto é:
+   - Documento: só CPF. O Kit oferece PF/PJ porque o cliente dele é empresa;
+     o MorfoFinP é app de finanças PESSOAIS, de uso individual (Decisão 67).
+   - "Nome da empresa" virou "Nome do cliente", e é ele que vira o nome do
+     ambiente (`companyName`) — mesmo caminho que o autocadastro do site já
+     usa desde a Decisão 67.
+   - Plano: além do período de teste do Kit, dá pra já nascer num plano pago
+     escolhido entre os cadastrados em Parâmetros › Gerenciar Planos.
+   - "Liberar acesso agora": ligado = o cliente já entra com o login/senha
+     definidos aqui; desligado = fica como pré-cadastro aguardando liberação
+     (`onboarding: 'pendente_liberacao'` + usuário `pendente_aprovacao`, os
+     mesmos estados que a aba Início já lista em "Situações que precisam de
+     atenção") e é liberado depois pelo botão na ficha do cliente.
+   - Massa de dados fictícios do Kit fica FORA: aqui o dado do ambiente mora
+     no Dexie do aparelho (ver `massaTeste.ts`), não dentro do tenant — gerar
+     massa por aqui escreveria em cima do movimento real de quem estiver
+     usando o app. Massa continua onde já estava: Parâmetros › Gerar Teste. */
+function NovoClienteSheet({ diasTestePadrao, onClose }: { diasTestePadrao: number; onClose: () => void }) {
+  const planos = useTodosPlanos().filter((p) => p.ativo)
+  const [nome, setNome] = useState('')
+  const [phone, setPhone] = useState('')
+  const [hasWhatsapp, setHasWhatsapp] = useState(true)
+  const [email, setEmail] = useState('')
+  const [doc, setDoc] = useState('')
+  const [tipoPlano, setTipoPlano] = useState<'trial' | 'pagante'>('trial')
+  const [planoId, setPlanoId] = useState<string>(planos[0]?.id ? String(planos[0].id) : '')
+  const [dias, setDias] = useState(String(diasTestePadrao))
+  const [login, setLogin] = useState('')
+  const [senha, setSenha] = useState('')
+  const [liberar, setLiberar] = useState(true)
+  const [erro, setErro] = useState('')
+
+  const phoneOk = validaTelefone(phone)
+  const docOk = !doc.trim() || validaCPF(doc)
+  const emailOk = validaEmailEnvio(email)
+  const planoEscolhido = planos.find((p) => String(p.id) === planoId)
+  const podeSalvar = !!nome.trim() && phoneOk && emailOk && docOk && !!login.trim() && senha.trim().length >= 4
+    && (tipoPlano === 'trial' || !!planoEscolhido)
+
+  async function salvar() {
+    const loginN = login.trim().toLowerCase()
+    const platform = await lerPlatformN0Persistida()
+    if (loginJaEmUsoGlobalmente(platform, loginN)) { setErro('Esse login já está em uso (N0 ou N1).'); return }
+    const hoje = new Date().toISOString().slice(0, 10)
+    const mensalidade = tipoPlano === 'pagante' ? (planoEscolhido?.valorMensal ?? 0) : 0
+    const novo: TenantKit = {
+      id: `t-${uid()}`,
+      companyName: nome.trim(),
+      ownerName: nome.trim(),
+      phone: phone.trim(),
+      hasWhatsapp,
+      email: email.trim(),
+      doc: doc.trim() || undefined,
+      createdAt: hoje,
+      plan: tipoPlano,
+      planId: tipoPlano === 'pagante' && planoEscolhido ? String(planoEscolhido.id) : null,
+      manualBlock: false,
+      onboarding: liberar ? 'completo' : 'pendente_liberacao',
+      trial: tipoPlano === 'trial' ? { days: Number(dias) || diasTestePadrao, startDate: hoje } : null,
+      billing: tipoPlano === 'pagante' && mensalidade > 0
+        ? { monthlyValue: mensalidade, dueDay: platform.defaultParams?.dueDay ?? 5, toleranceDays: platform.defaultParams?.toleranceDays ?? 5, installments: [] }
+        : null,
+      supportAuthorized: false,
+      supportMessages: [],
+      chatLastReadTenant: null,
+      chatLastReadMorfo: null,
+      /* 1 usuário por ambiente (Decisão 67): o acesso do cliente é este, e é
+         o único. `demo` fica de fora de propósito — é acesso de verdade. */
+      users: [{
+        id: `u-${uid()}`,
+        name: nome.trim(), login: loginN, senha, email: email.trim(), phone: phone.trim(),
+        status: liberar ? 'ativo' : 'pendente_aprovacao', perfilId: 'admin', createdAt: hoje,
+      }],
+      userLimit: 1,
+      accessLog: [{ id: uid(), ts: new Date().toISOString().slice(0, 19), action: liberar ? 'Cliente cadastrado pela Morfo, com acesso liberado' : 'Cliente cadastrado pela Morfo, aguardando liberação' }],
+      real: true,
+    }
+    await salvarPlatformN0({ ...platform, tenants: [...platform.tenants, novo] })
+    onClose()
+  }
+
+  return <Sheet dark title="Novo cliente" onClose={onClose}>
+    <Field dark label="Nome do cliente"><input style={inputStyle} value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Ex: Maria Silva" /></Field>
+    <PhoneComWhats phone={phone} setPhone={setPhone} hasWhatsapp={hasWhatsapp} setHasWhatsapp={setHasWhatsapp} />
+    <FieldError show={phone.trim() && !phoneOk} text="Telefone inválido (use DDD + número)" />
+    <Field dark label="E-mail"><input style={inputStyle} inputMode="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="cliente@email.com" /></Field>
+    <FieldError show={email.trim() && !emailOk} text="E-mail inválido" />
+    <Field dark label="CPF (opcional)"><input style={inputStyle} inputMode="numeric" value={doc} onChange={(e) => setDoc(e.target.value)} placeholder="000.000.000-00" /></Field>
+    <FieldError show={doc.trim() && !docOk} text="CPF inválido" />
+
+    <SectionLabel dark>Plano</SectionLabel>
+    <Field dark label="Como este cliente entra"><Segmented value={tipoPlano} onChange={setTipoPlano} options={[{ value: 'trial' as const, label: 'Período de teste' }, { value: 'pagante' as const, label: 'Plano pago' }]} /></Field>
+    {tipoPlano === 'trial'
+      ? <Field dark label="Dias de teste"><input style={inputStyle} type="number" value={dias} onChange={(e) => setDias(e.target.value)} /></Field>
+      : planos.length === 0
+        ? <p style={{ fontSize: 12, color: AMBER, margin: '0 0 14px', lineHeight: 1.5 }}>Nenhum plano ativo cadastrado. Cadastre um em Parâmetros › Gerenciar Planos, ou cadastre este cliente em período de teste.</p>
+        : <Field dark label="Plano contratado"><select style={inputStyle} value={planoId} onChange={(e) => setPlanoId(e.target.value)}>
+            {planos.map((p) => <option key={p.id} value={String(p.id)}>{p.nome} — {p.gratuito ? 'gratuito' : fmtBRL(p.valorMensal)}</option>)}
+          </select></Field>}
+
+    <SectionLabel dark>Acesso do cliente</SectionLabel>
+    <Field dark label="Login"><input style={inputStyle} value={login} onChange={(e) => setLogin(e.target.value)} placeholder="ex: mariasilva" autoCapitalize="none" /></Field>
+    <Field dark label="Senha inicial"><input style={inputStyle} value={senha} onChange={(e) => setSenha(e.target.value)} placeholder="mín. 4 caracteres" /></Field>
+    <div style={{ marginBottom: 14 }} data-testid="n0-liberar-agora">
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <Toggle value={liberar} onChange={setLiberar} />
+        <span style={{ fontSize: 13, fontWeight: 700, color: '#fff' }}>Liberar acesso agora</span>
+      </div>
+      <span style={{ fontSize: 12.5, color: '#C9C4D4', display: 'block', marginTop: 6, lineHeight: 1.5 }}>
+        {liberar
+          ? 'Acesso liberado: o cliente já entra com o login e a senha acima.'
+          : 'Sem liberar agora: fica como pré-cadastro aguardando liberação — você libera depois na ficha dele.'}
+      </span>
+    </div>
+    {erro && <p style={{ fontSize: 12.5, color: RED, fontWeight: 700, margin: '0 0 10px' }}>{erro}</p>}
+    <button type="button" disabled={!podeSalvar} onClick={() => void salvar()}
+      style={{ ...primaryBtn, width: '100%', background: DEV_ACCENT, opacity: podeSalvar ? 1 : 0.5, cursor: podeSalvar ? 'pointer' : 'not-allowed' }}>
+      Cadastrar cliente
+    </button>
+    {!podeSalvar && <p style={{ fontSize: 11.5, color: DEV_TXT3, margin: '8px 0 0', lineHeight: 1.5 }}>
+      Faltando: {[!nome.trim() && 'nome', !phoneOk && 'telefone válido', !emailOk && 'e-mail válido', !docOk && 'CPF válido', !login.trim() && 'login', senha.trim().length < 4 && 'senha (mín. 4)', tipoPlano === 'pagante' && !planoEscolhido && 'plano'].filter(Boolean).join(' · ')}.
+    </p>}
+  </Sheet>
+}
+
 function AbaTenants({ onEntrarComoTenant, filtroDados }: { onEntrarComoTenant: () => void; filtroDados: FiltroDados }) {
   const { tenants: todos, defaultParams } = usePlatformN0()
   const tenants = filtrarTenantsPorDados(todos, filtroDados)
   const [selecionadoId, setSelecionadoId] = useState<string | null>(null)
   const [chatAberto, setChatAberto] = useState(false)
   const [exportOpen, setExportOpen] = useState(false) /* G44 regra 11b */
+  const [novoAberto, setNovoAberto] = useState(false) /* Decisão 67 */
   const selecionado = selecionadoId ? tenants.find((t) => t.id === selecionadoId) : undefined
 
   // Conversa de suporte deste tenant, do lado N0 (10/09/2026, Decisão 53,
@@ -500,9 +638,17 @@ function AbaTenants({ onEntrarComoTenant, filtroDados }: { onEntrarComoTenant: (
 
   if (selecionado) {
     const t = selecionado
+    /* Só o ambiente DESTE aparelho (`t0`) tem aplicativo de verdade pra
+       entrar: o dado do N1 mora no Dexie do próprio celular. Antes desta
+       rodada a condição era `t.real`, o que bastava enquanto `t0` era o único
+       tenant real que existia — com o cadastro de cliente pela Morfo
+       (Decisão 67) passaram a existir outros tenants reais, e "entrar" neles
+       abriria o app COM O DADO DO RAFAEL, o que seria errado e enganoso.
+       Depende de servidor (Backlog #028), como as demais ações desabilitadas. */
+    const ehAppDesteAparelho = t.id === TENANT_N1_ID
     return (
       <div>
-        <TopoN0 titulo={t.companyName} subtitulo={t.real ? 'Tenant real' : 'Tenant de exemplo'} onVoltarSub={() => setSelecionadoId(null)} />
+        <TopoN0 titulo={t.companyName} subtitulo={ehAppDesteAparelho ? 'Ambiente deste aparelho' : t.real ? 'Cliente cadastrado' : 'Tenant de exemplo'} onVoltarSub={() => setSelecionadoId(null)} />
         <div style={{ background: DEV_CARD, borderRadius: 14, padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: 12, color: DEV_TXT2 }}>Status</span>
@@ -520,28 +666,61 @@ function AbaTenants({ onEntrarComoTenant, filtroDados }: { onEntrarComoTenant: (
             <span style={{ fontSize: 12, color: DEV_TXT2 }}>Cobrança mensal</span>
             <span style={{ fontSize: 12.5, fontWeight: 700, color: '#fff' }}>{fmtBRL(mrrDoTenant(t))}</span>
           </div>
+          {/* Acesso do cliente (11/09/2026, Decisão 67): 1 usuário por
+              ambiente, então a ficha mostra o login dele e se já está
+              liberado — sem isso, cadastrar acesso e não conseguir conferir
+              seria meio caminho. A senha nunca é exibida. */}
+          {(t.users ?? []).map((u) => (
+            <div key={u.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
+              <span style={{ fontSize: 12, color: DEV_TXT2 }}>Acesso</span>
+              <span style={{ fontSize: 12.5, fontWeight: 700, color: u.status === 'ativo' ? '#fff' : AMBER, textAlign: 'right' }}>
+                {u.login}{u.status === 'ativo' ? '' : ' · aguardando liberação'}
+              </span>
+            </div>
+          ))}
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 14 }}>
+          {/* Liberar acesso (11/09/2026, Decisão 67 — "n0 tem que conseguir
+              cadastrar novo cliente e preencher dados dele e liberar
+              acesso"): só aparece quando existe alguém aguardando. Muda o
+              usuário pra `ativo` e o ambiente pra `completo`, exatamente os
+              dois estados que a aba Início usa pra listar a pendência. */}
+          {(t.users ?? []).some((u) => u.status !== 'ativo') && (
+            <button
+              type="button"
+              data-testid="n0-liberar-acesso"
+              onClick={() => void atualizarTenantN0(t.id, (x) => ({
+                ...x,
+                onboarding: 'completo',
+                users: x.users.map((u) => (u.status === 'ativo' ? u : { ...u, status: 'ativo' })),
+                accessLog: [...(x.accessLog ?? []), { id: uid(), ts: new Date().toISOString().slice(0, 19), action: 'Acesso liberado pela Morfo' }],
+              }))}
+              style={{ background: GREEN, border: 'none', borderRadius: 10, color: '#fff', padding: '10px 12px', textAlign: 'left', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}
+            >
+              Liberar acesso deste cliente
+            </button>
+          )}
           {/* "Entrar como este tenant" (08/09/2026, G59): REAL só pro
-              tenant `t0` (o único de verdade — mesmo banco Dexie local, sem
-              barreira de backend pra atravessar). Continua desabilitado
-              pros 3 exemplos fictícios — não existe "aplicativo" de
-              verdade pra entrar neles. É o ÚNICO caminho N0→N1 (G59). */}
+              tenant `t0`, o ambiente deste aparelho (mesmo banco Dexie
+              local, sem barreira de backend pra atravessar) — ver
+              `ehAppDesteAparelho` acima. Continua desabilitado pros exemplos
+              fictícios e, desde a Decisão 67, também pros clientes
+              cadastrados pela Morfo. É o ÚNICO caminho N0→N1 (G59). */}
           <button
             type="button"
-            disabled={!t.real}
-            title={t.real ? undefined : 'Tenant de exemplo (fictício) — não existe aplicativo de verdade pra entrar'}
-            onClick={t.real ? onEntrarComoTenant : undefined}
+            disabled={!ehAppDesteAparelho}
+            title={ehAppDesteAparelho ? undefined : 'Só o ambiente deste aparelho tem aplicativo de verdade pra entrar — os demais dependem de servidor (Backlog #028)'}
+            onClick={ehAppDesteAparelho ? onEntrarComoTenant : undefined}
             style={{
-              background: t.real ? DEV_ACCENT : 'rgba(255,255,255,0.05)',
-              border: t.real ? 'none' : '1px solid rgba(255,255,255,0.08)',
+              background: ehAppDesteAparelho ? DEV_ACCENT : 'rgba(255,255,255,0.05)',
+              border: ehAppDesteAparelho ? 'none' : '1px solid rgba(255,255,255,0.08)',
               borderRadius: 10,
-              color: t.real ? '#fff' : DEV_TXT3,
+              color: ehAppDesteAparelho ? '#fff' : DEV_TXT3,
               padding: '10px 12px',
               textAlign: 'left',
               fontSize: 12.5,
               fontWeight: 700,
-              cursor: t.real ? 'pointer' : 'not-allowed',
+              cursor: ehAppDesteAparelho ? 'pointer' : 'not-allowed',
             }}
           >
             Entrar como este tenant (impersonate)
@@ -621,7 +800,7 @@ function AbaTenants({ onEntrarComoTenant, filtroDados }: { onEntrarComoTenant: (
           ))}
         </div>
         <p style={{ fontSize: 11, color: DEV_TXT3, lineHeight: 1.6, marginTop: 14 }}>
-          {t.real
+          {ehAppDesteAparelho
             ? 'Entrar como este tenant abre o aplicativo de negócio em modo consulta, com um aviso permanente e um jeito de voltar ao painel N0 — não é uma troca de sessão, você continua logado como administrador.'
             : 'Ações acima ficam desabilitadas de propósito — exigem tenant real e servidor (Backlog #028); a tela já está pronta pra quando isso existir.'}
         </p>
@@ -634,8 +813,14 @@ function AbaTenants({ onEntrarComoTenant, filtroDados }: { onEntrarComoTenant: (
       <TopoN0
         titulo="Tenants"
         subtitulo={`${tenants.length} ambientes`}
-        acoes={<IconesDeTela dark onExportar={() => setExportOpen(true)} />}
+        acoes={<IconesDeTela dark onExportar={() => setExportOpen(true)}
+          incluir={<button type="button" title="Cadastrar novo cliente" aria-label="Cadastrar novo cliente" data-testid="n0-incluir-cliente"
+            onClick={() => setNovoAberto(true)}
+            style={{ width: 36, height: 36, borderRadius: 10, border: 'none', background: DEV_ACCENT, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+            <Plus size={18} color="#fff" />
+          </button>} />}
       />
+      {novoAberto && <NovoClienteSheet diasTestePadrao={defaultParams?.trialDays ?? 15} onClose={() => setNovoAberto(false)} />}
       {exportOpen && <ExportSheet dark title="Tenants" filenameBase="morfofinp-n0-tenants"
         screenColumns={[
           { key: 'companyName', label: 'Ambiente' },

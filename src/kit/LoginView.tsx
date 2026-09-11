@@ -4,9 +4,9 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../db'
 import {
   AMBER, BRANCO, CORAL, GREEN, INK, LINE, PAPER, PURPLE, PURPLE_DEEP, RED, TXT2, TXT3, KIT_BUILD, TELA_CHEIA_BASE,
-  AddressFieldsBasic, EmptyState, Field, FieldError, PhoneComWhats, SectionLabel, Segmented, Sheet, TopBar,
-  alpha, fmtBRL, inputStyle, linkBtnSmall, normalizeAddress, primaryBtn, renderRico, secondaryBtn, validaEmailEnvio, validaTelefone,
-  type Endereco, type KitPlan, type KitPlatform, type KitUser, type SitePage,
+  EmptyState, Field, FieldError, PhoneComWhats, SectionLabel, Segmented, Sheet, TopBar,
+  alpha, fmtBRL, inputStyle, linkBtnSmall, primaryBtn, renderRico, secondaryBtn, validaEmailEnvio, validaTelefone,
+  type KitPlan, type KitPlatform, type KitUser, type SitePage,
 } from './kitBase'
 import { NOME_PRODUTO, SITE_LOGIN_PAGE_ID, SITE_PLANOS_PAGE_ID, BlocoLogosLogin, SiteHeaderWeb, SiteNavHorizontalWeb, SiteNavVerticalWeb, loginPageCfgDe, montarPlatformSite, paginasSiteComLogin, sitePagesDe, siteWebLayoutDe } from './siteKit'
 import { criarAcesso, entrarComoTenantUser } from './auth'
@@ -157,35 +157,40 @@ function PlanoCard({ plano, selected, onSelect }: { plano: KitPlan; selected: bo
   </button>
 }
 /* Kit L7315-L7395 */
-export interface SelfRegisterPayload { companyName: string; ownerName: string; phone: string; hasWhatsapp: boolean; email: string; city: string; fiscalAddress: Endereco; login: string; senha: string; planoContratado: KitPlan | undefined; paymentMethod: string | null; primeiraCobrancaPaga: boolean; autoLiberado: boolean }
+/* ADAPTAÇÃO (11/09/2026, Decisão 67). No Kit este passo é o cadastro FISCAL
+   de uma empresa (razão social, endereço fiscal, cidade) porque lá o cliente
+   é uma empresa com equipe. Aqui o cliente é UMA pessoa e o ambiente é dela:
+   o passo pede os dados do próprio usuário — nome, login, senha, e-mail e
+   telefone —, e é esse usuário que fica como o único acesso do ambiente.
+   `companyName` continua no payload porque é o NOME DO AMBIENTE no resto do
+   app (barra do topo, painel N0); recebe o nome da pessoa. */
+export interface SelfRegisterPayload { companyName: string; ownerName: string; phone: string; hasWhatsapp: boolean; email: string; login: string; senha: string; planoContratado: KitPlan | undefined; paymentMethod: string | null; primeiraCobrancaPaga: boolean; autoLiberado: boolean }
 function ContratarPacoteFlow({ plans, onClose, onFinish }: { plans: KitPlan[]; onClose: () => void; onFinish: (payload: SelfRegisterPayload) => void }) {
   const [step, setStep] = useState(1)
   const [planId, setPlanId] = useState(plans.find(p => p.destaque)?.id || plans[0]?.id || '')
-  const [companyName, setCompanyName] = useState(''); const [ownerName, setOwnerName] = useState(''); const [phone, setPhone] = useState(''); const [hasWhatsapp, setHasWhatsapp] = useState(true); const [email, setEmail] = useState(''); const [login, setLogin] = useState(''); const [senha, setSenha] = useState('')
-  const [fiscalAddress, setFiscalAddress] = useState<Endereco>(normalizeAddress(null))
+  const [ownerName, setOwnerName] = useState(''); const [phone, setPhone] = useState(''); const [hasWhatsapp, setHasWhatsapp] = useState(true); const [email, setEmail] = useState(''); const [login, setLogin] = useState(''); const [senha, setSenha] = useState('')
   const [method, setMethod] = useState<'pix' | 'cartao_credito' | 'boleto'>('pix'); const [processando, setProcessando] = useState(false)
   const plano = plans.find(p => p.id === planId)
   const phoneOk = validaTelefone(phone)
-  const enderecoFiscalOk = fiscalAddress.cep.trim() && fiscalAddress.logradouro.trim() && fiscalAddress.cidade.trim() && fiscalAddress.uf.trim()
-  const dadosCompletos = companyName.trim() && ownerName.trim() && login.trim() && senha.trim() && phoneOk && validaEmailEnvio(email) && enderecoFiscalOk
+  const dadosCompletos = ownerName.trim() && login.trim() && senha.trim() && phoneOk && validaEmailEnvio(email)
 
   const confirmarPagamento = () => {
     setProcessando(true)
     setTimeout(() => {
       const autoLiberado = method !== 'boleto'
-      onFinish({ companyName, ownerName, phone, hasWhatsapp, email: email.trim(), city: `${fiscalAddress.cidade}/${fiscalAddress.uf}`, fiscalAddress, login, senha, planoContratado: plano, paymentMethod: method, primeiraCobrancaPaga: autoLiberado, autoLiberado })
+      onFinish({ companyName: ownerName.trim(), ownerName, phone, hasWhatsapp, email: email.trim(), login, senha, planoContratado: plano, paymentMethod: method, primeiraCobrancaPaga: autoLiberado, autoLiberado })
       setProcessando(false); setStep(4)
     }, 900)
   }
   const confirmarGratuito = () => {
     setProcessando(true)
     setTimeout(() => {
-      onFinish({ companyName, ownerName, phone, hasWhatsapp, email: email.trim(), city: `${fiscalAddress.cidade}/${fiscalAddress.uf}`, fiscalAddress, login, senha, planoContratado: plano, paymentMethod: null, primeiraCobrancaPaga: false, autoLiberado: true })
+      onFinish({ companyName: ownerName.trim(), ownerName, phone, hasWhatsapp, email: email.trim(), login, senha, planoContratado: plano, paymentMethod: null, primeiraCobrancaPaga: false, autoLiberado: true })
       setProcessando(false); setStep(4)
     }, 500)
   }
 
-  return <Sheet title={step === 1 ? 'Escolha seu plano' : step === 2 ? 'Dados da empresa' : step === 3 ? 'Pagamento' : 'Tudo certo!'} onClose={onClose} resetScrollKey={step}>
+  return <Sheet title={step === 1 ? 'Escolha seu plano' : step === 2 ? 'Seus dados' : step === 3 ? 'Pagamento' : 'Tudo certo!'} onClose={onClose} resetScrollKey={step}>
     <div style={{ display: 'flex', gap: 4, marginBottom: 16 }}>{(plano?.gratuito ? [1, 2, 4] : [1, 2, 3, 4]).map(n => <div key={n} style={{ flex: 1, height: 3, borderRadius: 999, background: n <= step ? PURPLE : LINE }} />)}</div>
 
     {step === 1 && <>
@@ -199,16 +204,17 @@ function ContratarPacoteFlow({ plans, onClose, onFinish }: { plans: KitPlan[]; o
       <div style={{ background: alpha(PURPLE, 3.9), border: `1px solid ${alpha(PURPLE, 20)}`, borderRadius: 12, padding: 12, marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span style={{ fontSize: 13, fontWeight: 700, color: INK }}>{plano?.name}</span>{plano?.gratuito ? <span style={{ fontSize: 13, fontWeight: 800, color: GREEN }}>Grátis por {plano.validadeDias} dias</span> : <span style={{ fontSize: 13, fontWeight: 800, color: PURPLE }}>{fmtBRL(plano?.monthlyValue)}/mês</span>}
       </div>
-      <Field label="Nome da empresa"><input style={inputStyle} value={companyName} onChange={e => setCompanyName(e.target.value)} /></Field>
       <Field label="Seu nome"><input style={inputStyle} value={ownerName} onChange={e => setOwnerName(e.target.value)} /></Field>
       <PhoneComWhats phone={phone} setPhone={setPhone} hasWhatsapp={hasWhatsapp} setHasWhatsapp={setHasWhatsapp} />
       <FieldError show={phone.trim() && !phoneOk} text="Telefone inválido (use DDD + número)" />
-      <Field label="E-mail"><input type="email" style={inputStyle} value={email} onChange={e => setEmail(e.target.value)} placeholder="empresa@exemplo.com" /></Field>
+      <Field label="E-mail"><input type="email" style={inputStyle} value={email} onChange={e => setEmail(e.target.value)} placeholder="voce@exemplo.com" /></Field>
       <FieldError show={email.trim() && !validaEmailEnvio(email)} text="E-mail inválido" />
-      <SectionLabel>Endereço fiscal</SectionLabel>
-      <AddressFieldsBasic value={fiscalAddress} onChange={setFiscalAddress} />
+      <SectionLabel>Acesso</SectionLabel>
       <Field label="Escolha um login"><input style={inputStyle} value={login} onChange={e => setLogin(e.target.value)} /></Field>
       <Field label="Escolha uma senha"><input style={inputStyle} type="password" value={senha} onChange={e => setSenha(e.target.value)} /></Field>
+      <p style={{ fontSize: 12, color: TXT3, lineHeight: 1.5, margin: '2px 0 12px' }}>
+        É com esse login e senha que você entra no app. O ambiente é individual: só este acesso existe.
+      </p>
       <div style={{ display: 'flex', gap: 8 }}>
         <button style={{ ...secondaryBtn, flex: 1 }} onClick={() => setStep(1)}>Voltar</button>
         <button disabled={!dadosCompletos || processando} style={{ ...primaryBtn, flex: 1, opacity: (dadosCompletos && !processando) ? 1 : 0.5 }} onClick={() => plano?.gratuito ? confirmarGratuito() : setStep(3)}>{plano?.gratuito ? (processando ? 'Ativando...' : <>Ativar plano gratuito <Check size={15} /></>) : <>Continuar <ArrowRight size={15} /></>}</button>
@@ -274,6 +280,14 @@ function LoginViewKit({ platform, setPlatform, areaWeb, onLogin, onSelfRegister 
     setError('Login ou senha inválidos')
   }
   const onEnterKey = (e: React.KeyboardEvent) => { if (e.key === 'Enter') submit() }
+  /* "Ninguém cadastrou acesso de verdade ainda" — enquanto isso for verdade,
+     o site oferece contratação e os atalhos de teste (ver bloco comentado
+     abaixo). O ambiente do app (`tenants[0]`, o `t0`) NUNCA fica com a lista
+     vazia: ele nasce com o usuário de demonstração da massa do Kit, marcado
+     `demo: true` — por isso a conta aqui é "existe algum usuário SEM a marca
+     de demonstração?", não "a lista está vazia?". */
+  const usuariosDoApp = platform.tenants[0]?.users || []
+  const acessoAberto = !usuariosDoApp.some((u) => !u.demo)
   const sc = platform.siteConfig || {}
   const gradienteSite = sc.cor1 && sc.cor2 ? `linear-gradient(160deg, ${sc.cor1}, ${sc.cor2})` : `linear-gradient(160deg, ${CORAL}, ${PURPLE} 40%, ${PURPLE_DEEP})`
   const cartaoLogin = <div style={{ background: BRANCO, borderRadius: 18, padding: 20 }}>
@@ -282,11 +296,24 @@ function LoginViewKit({ platform, setPlatform, areaWeb, onLogin, onSelfRegister 
     <button onClick={() => setForgotOpen(true)} style={{ ...linkBtnSmall, display: 'block', color: PURPLE, fontSize: 12, fontWeight: 700, padding: 0, marginBottom: 14 }}>Esqueci minha senha</button>
     {error && <div style={{ fontSize: 12.5, color: RED, marginBottom: 10, fontWeight: 600 }}>{error}</div>}
     <button style={{ ...primaryBtn, width: '100%', marginBottom: 8 }} onClick={submit}><KeyRound size={16} /> Entrar</button>
-    <button style={{ ...primaryBtn, width: '100%', marginBottom: 14, background: CORAL }} onClick={() => setSelfOpen(true)}><UserPlus size={16} /> Contratar um plano</button>
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '4px 0 14px' }}><div style={{ flex: 1, height: 1, background: LINE }} /><span style={{ fontSize: 11, color: TXT3, fontWeight: 700 }}>ACESSO RÁPIDO PARA TESTE</span><div style={{ flex: 1, height: 1, background: LINE }} /></div>
-    <button style={{ ...secondaryBtn, width: '100%', marginBottom: 8 }} onClick={() => onLogin('tenant', platform.tenants[0].id)}>Entrar como empresa cliente (demo)</button>
-    <button style={{ ...secondaryBtn, width: '100%', marginBottom: 8 }} onClick={() => onLogin('dev', null)}><Building size={16} /> Entrar como Admin Morfo (demo)</button>
-    <button style={{ ...secondaryBtn, width: '100%' }} onClick={() => setAceitarConviteOpen(true)}><Mail size={16} /> Aceitar convite de usuário (demo)</button>
+    {/* ADAPTAÇÃO (11/09/2026, Decisão 67 — pedido do Rafael: "não quero que o
+        demo consiga ver"). No Kit, "Contratar um plano" e os 3 atalhos de teste
+        aparecem SEMPRE. Aqui o app é de uso individual e os lançamentos ficam no
+        próprio aparelho, não dentro do usuário: enquanto existir um atalho que
+        entra sem senha, qualquer pessoa que abra o app vê o movimento de quem já
+        cadastrou acesso. Por isso os dois blocos só existem ENQUANTO NINGUÉM
+        cadastrou acesso ainda (`acessoAberto`) — a partir do 1º usuário do
+        ambiente, login+senha passa a ser o único caminho, inclusive pro N0
+        (login/senha do administrador Morfo, editável em N0 › Parâmetros ›
+        Usuários Morfo). Nada foi apagado: os botões voltam sozinhos se o acesso
+        for redefinido/apagado (ex.: "Apagar tudo" em Manutenção e dados). */}
+    {acessoAberto && <>
+      <button style={{ ...primaryBtn, width: '100%', marginBottom: 14, background: CORAL }} onClick={() => setSelfOpen(true)}><UserPlus size={16} /> Contratar um plano</button>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '4px 0 14px' }}><div style={{ flex: 1, height: 1, background: LINE }} /><span style={{ fontSize: 11, color: TXT3, fontWeight: 700 }}>ACESSO RÁPIDO PARA TESTE</span><div style={{ flex: 1, height: 1, background: LINE }} /></div>
+      <button style={{ ...secondaryBtn, width: '100%', marginBottom: 8 }} onClick={() => onLogin('tenant', platform.tenants[0].id)}>Entrar como empresa cliente (demo)</button>
+      <button style={{ ...secondaryBtn, width: '100%', marginBottom: 8 }} onClick={() => onLogin('dev', null)}><Building size={16} /> Entrar como Admin Morfo (demo)</button>
+      <button style={{ ...secondaryBtn, width: '100%' }} onClick={() => setAceitarConviteOpen(true)}><Mail size={16} /> Aceitar convite de usuário (demo)</button>
+    </>}
   </div>
   const rodapeInfo = <>
     <div style={{ textAlign: 'center', fontSize: 11, color: 'rgba(255,255,255,0.6)', marginTop: 18 }}>Protótipo MVP · dados de demonstração · <strong>{KIT_BUILD}</strong></div>
@@ -418,8 +445,13 @@ export default function LoginView() {
   // migração da credencial única antiga. Continua vazia até "Contratar um
   // plano" (ou o atalho demo) criar o 1º usuário.
   const t0Persistido = platformN0Persistida.tenants.find(t => t.id === TENANT_N1_ID)
+  // `demo` vai junto de propósito: é ele que diz se JÁ existe acesso de
+  // verdade neste ambiente — ver `acessoAberto` acima (Decisão 67). Sem
+  // carregar a marca aqui, o Login leria o usuário de demonstração como se
+  // fosse um acesso real e esconderia contratação/atalhos numa instalação
+  // recém-aberta, onde eles são o único caminho pra entrar.
   const tenantUsers: KitUser[] = tenantUsersComMigracao(t0Persistido?.users, config)
-    .map(u => ({ id: u.id, name: u.name, login: u.login, senha: u.senha, email: u.email, status: u.status }))
+    .map(u => ({ id: u.id, name: u.name, login: u.login, senha: u.senha, email: u.email, status: u.status, demo: u.demo }))
   // --- platform.plans: catálogo real do N0 (Gerenciar Planos, Dexie), na
   // forma que o Kit lê (`name`/`monthlyValue`/`features`).
   const plans: KitPlan[] = planosDexie.map(p => ({ id: String(p.id), name: p.nome, monthlyValue: p.valorMensal, destaque: p.destaque, features: recursosAutomaticos(p) }))
@@ -450,16 +482,21 @@ export default function LoginView() {
     if (level === 'dev') void entrarComoDevUser(userId)
     else void entrarComoTenantUser(userId)
   }
-  // onSelfRegister do Kit → "Contratar um plano" vira a credencial N1 do
-  // produto (login/senha escolhidos no passo 2) + plano contratado (Minha
-  // Assinatura). Os demais dados do passo 2 (empresa, telefone, e-mail,
-  // endereço fiscal) são coletados pelo fluxo do Kit mas, sem backend/tenant
-  // real (Backlog #028), não têm onde ficar — pendência nomeada na Decisão 48.
+  /* "Contratar um plano" cria o ÚNICO usuário do ambiente com os dados que a
+     pessoa acabou de preencher, guarda o plano contratado (Minha Assinatura)
+     e nomeia o ambiente com o nome dela. Isso encerra a pendência da Decisão
+     48 ("os dados do passo 2 não têm onde ficar"): agora todos eles moram no
+     usuário, e ele mesmo os edita depois em Configuração → Meus Dados. */
   const onSelfRegister = (payload: SelfRegisterPayload) => {
     void (async () => {
       const planoId = payload.planoContratado ? Number(payload.planoContratado.id) : NaN
       if (!Number.isNaN(planoId)) await salvarPlanoId(planoId)
-      await criarAcesso(payload.login, payload.senha)
+      await criarAcesso(payload.login, payload.senha, {
+        nome: payload.ownerName,
+        email: payload.email,
+        telefone: payload.phone,
+        nomeAmbiente: payload.companyName,
+      })
     })()
   }
 

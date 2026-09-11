@@ -222,7 +222,10 @@ export function sitePagesPadrao(): SitePage[] {
 
 /* ---- Forma do objeto `platform` que o Login do Kit consome (subconjunto
    usado por LoginView/site/sheets — só os campos lidos por esses trechos). ---- */
-export interface KitUser { id: string; name?: string; login: string; senha: string; email?: string; status?: string; token?: string; phone?: string }
+/* `demo` — ver a explicação em `UsuarioTenant` (`kitPlatform.ts`): marca o
+   usuário de demonstração que o ambiente já nasce com ele, e é o que o Login
+   usa pra saber se ainda NÃO existe acesso de verdade (Decisão 67). */
+export interface KitUser { id: string; name?: string; login: string; senha: string; email?: string; status?: string; token?: string; phone?: string; demo?: boolean }
 export interface KitTenant { id: string; companyName: string; users: KitUser[] }
 export interface KitPlan { id: string; name: string; monthlyValue: number; destaque?: boolean; description?: string; features?: string[]; porte?: string; userLimit?: number; itemLimit?: number | null; restrictions?: { exportacaoDetalhada?: boolean; layoutPersonalizado?: boolean }; gratuito?: boolean; validadeDias?: number; ficticio?: boolean }
 export interface SiteWebLayout { modo?: 'horizontal' | 'vertical'; fixagemVertical?: 'usuario_escolhe' | 'sempre_fixo' | 'sempre_recolhido'; header?: Partial<SiteHeaderCfg> }

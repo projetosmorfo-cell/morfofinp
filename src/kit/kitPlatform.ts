@@ -124,7 +124,16 @@ export function tenantBlocked(t: TenantKit) {
 /* ---- Tipos (o formato que `makeTenant` do Kit produz, L465-L489) ---- */
 export interface MensagemChat { id: string; from: 'cliente' | 'suporte'; text: string; imageUrl?: string | null; ts: string; automatica?: boolean; followUpEnviado?: boolean }
 export interface Parcela { id: string; dueDate: string; amount: number; paid: boolean; paidDate?: string | null; method?: string; cancelada?: boolean; perda?: boolean }
-export interface UsuarioTenant { id: string; name: string; login: string; senha: string; phone?: string; email?: string; status: string; role?: string; perfilId?: string; createdAt?: string }
+/* `demo: true` marca o usuário de DEMONSTRAÇÃO que o ambiente `t0` já nasce
+   com ele (login "rafael"/senha "1234", herdado da massa do Kit). Ele existe
+   só pra quem quer olhar o app sem cadastrar nada — e é justamente ele que o
+   atalho "Entrar como empresa cliente (demo)" usa. A marca serve pro Login
+   saber que AINDA NÃO existe acesso de verdade (ver `acessoAberto` em
+   `LoginView.tsx`): assim que alguém contrata um plano (o usuário novo
+   SUBSTITUI a lista, ver `auth.ts`) ou edita os próprios dados em Meus Dados
+   (a marca cai fora, ver `ConfigN1.tsx`), os atalhos sem senha somem e
+   login+senha passa a ser o único caminho — 11/09/2026, Decisão 67. */
+export interface UsuarioTenant { id: string; name: string; login: string; senha: string; phone?: string; email?: string; status: string; role?: string; perfilId?: string; createdAt?: string; demo?: boolean }
 export interface RegistroAcesso { id: string; ts: string; action: string; ator?: string }
 export interface TenantKit {
   id: string
@@ -149,6 +158,11 @@ export interface TenantKit {
   userLimit?: number
   accessLog?: RegistroAcesso[]
   real?: boolean
+  /* Documento do cliente — no Kit são dois campos (`docType` PF/PJ + `doc`,
+     ver `NewTenantSheet` L5197); aqui é só CPF, porque o MorfoFinP é app de
+     uso individual (11/09/2026, Decisão 67). Opcional: o cadastro pela Morfo
+     não exige documento pra liberar acesso. */
+  doc?: string
   /* ---- Decisão 55 (Parte B). `ficticio` é o campo do PRÓPRIO Kit (L1927:
      `platform.tenants.filter(t => t.ficticio)`) — marca empresa criada pela
      massa de teste do N0, e é o que faz "Limpar Dados Testes Morfo" nunca
@@ -443,8 +457,12 @@ export const FUNCOES_PERFIL_N1: FuncaoPerfil[] = [
     { k: 'config.ajuda', l: 'Ajuda' },
     { k: 'config.manutencao', l: 'Manutenção' },
     { k: 'config.suporte', l: 'Suporte' },
-    { k: 'config.usuarios', l: 'Usuários' },
-    { k: 'config.permissoes', l: 'Permissões' },
+    /* `config.usuarios` e `config.permissoes` existiram aqui entre 10/09 e
+       11/09/2026 (Decisão 54, Parte B). Saíram junto das telas: o ambiente do
+       cliente é de UM usuário só, com acesso total (Decisão 67) — não existe
+       mais o que gatear nem a quem dar perfil diferente dentro do N1. Os
+       perfis em si (`perfisPadraoN1`) continuam, porque o N0 ainda os usa
+       como referência de funcionalidade do produto. */
   ] },
 ]
 /* ---- Kit L542-L549 (nivelAcesso), literal ---- */
@@ -575,7 +593,7 @@ export function gerarPlatformN0(): PlatformN0 {
     id: 't0', companyName: 'MorfoFinP — Rafael', ownerName: 'Rafael', email: 'projetos.morfo@gmail.com',
     createdAt: '2026-09-05', plan: 'pagante', planId: null, manualBlock: false, onboarding: 'completo',
     trial: null, billing: null, supportAuthorized: false, supportMessages: [], chatLastReadTenant: null, chatLastReadMorfo: null,
-    users: [{ id: uid(), name: 'Rafael', login: 'rafael', senha: '1234', status: 'ativo', perfilId: 'admin', createdAt: '2026-09-05' }],
+    users: [{ id: uid(), name: 'Rafael', login: 'rafael', senha: '1234', status: 'ativo', perfilId: 'admin', createdAt: '2026-09-05', demo: true }],
     userLimit: 1, accessLog: [], real: true,
   }
   const t1: TenantKit = {

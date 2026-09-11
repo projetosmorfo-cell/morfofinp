@@ -17,9 +17,11 @@
 
    MERGE Kit × MorfoFinP, item a item (o "verificar redundâncias" do pedido):
    - Kit "Meus Dados" ................ existe aqui (`MeusDadosN1`)          → 1
-   - Kit "Usuários" .................. existe aqui (`UsuariosTenant`)       → 1
+   - Kit "Usuários" .................. NÃO se aplica (11/09/2026, Decisão 67:
+     o ambiente do cliente é de UM usuário só, o do plano contratado)
    - Kit "Ajuda" (chat + tour) ....... existe aqui (`AjudaN1`)              → 1
-   - Kit "Permissões" ................ existe aqui (`PermissoesTenant`)     → 2
+   - Kit "Permissões" ................ NÃO se aplica (11/09/2026, Decisão 67:
+     usuário único, com acesso total ao ambiente)
    - Kit "Meu Ambiente" .............. existe aqui (`MeuAmbienteN1`)        → 2
    - Kit "Minha Assinatura" .......... existe aqui (`MinhaAssinatura`)      → 2
    - Kit "Layout e Menus" ............ era a metade de cima de `Manutencao`
@@ -52,7 +54,7 @@
 import { GroupLabelCompact, MenuGroup } from './PadraoUI'
 import type { ItemMenuCompacto } from './PadraoUI'
 import {
-  User, Users, LifeBuoy, Bell, Lock, Building2, CreditCard, List, Tag, Wallet,
+  User, LifeBuoy, Bell, Building2, CreditCard, List, Tag, Wallet,
   Wrench, AlertTriangle, LogOut,
 } from 'lucide-react'
 import { useTemaEfetivo } from '../configuracaoIcones'
@@ -60,8 +62,8 @@ import { useTemaEfetivo } from '../configuracaoIcones'
 /* As chaves são exatamente as de `ItemMenuEngrenagem` em `App.tsx` — a tela
    não inventa destino nenhum, só reorganiza os que já existiam. */
 export type ChaveConfigN1 =
-  | 'meusDados' | 'categorias' | 'contas' | 'notificacoes' | 'usuarios'
-  | 'permissoes' | 'meuAmbiente' | 'assinatura' | 'ajuda' | 'layout'
+  | 'meusDados' | 'categorias' | 'contas' | 'notificacoes'
+  | 'meuAmbiente' | 'assinatura' | 'ajuda' | 'layout'
   | 'manutencao' | 'limpar' | 'sair'
 
 interface DefItem {
@@ -78,12 +80,10 @@ const SESSAO_1: DefItem[] = [
   { key: 'categorias', icon: Tag, titulo: 'Categorias e Grupos', resumo: 'Como seus lançamentos são classificados' },
   { key: 'contas', icon: Wallet, titulo: 'Contas e carteiras', resumo: 'Onde o dinheiro entra e sai — bancos, cartões e dinheiro' },
   { key: 'notificacoes', icon: Bell, titulo: 'Notificações bancárias', resumo: 'Avisos do banco lidos e transformados em lançamento' },
-  { key: 'usuarios', icon: Users, titulo: 'Usuários', resumo: 'Quem acessa este ambiente — cadastro, perfil e ativação' },
   { key: 'ajuda', icon: LifeBuoy, titulo: 'Ajuda', resumo: 'Suporte por chat e tour guiado do sistema' },
 ]
 
 const SESSAO_2: DefItem[] = [
-  { key: 'permissoes', icon: Lock, titulo: 'Permissões', resumo: 'Perfis de acesso: o que cada papel visualiza ou edita' },
   { key: 'meuAmbiente', icon: Building2, titulo: 'Meu Ambiente', resumo: 'Logotipos, recursos e preferências do ambiente' },
   { key: 'assinatura', icon: CreditCard, titulo: 'Minha Assinatura', resumo: 'Plano, pagamentos e histórico de cobrança' },
   { key: 'layout', icon: List, titulo: 'Layout e Menus', resumo: 'Visão Light × Premium, ordem do rodapé e destes itens' },

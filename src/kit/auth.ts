@@ -45,17 +45,37 @@ async function entrarComoTenantUserId(userId: string | undefined): Promise<void>
   await salvarConfiguracaoIcones({ sessaoAtiva: true, loggedUserIdN1: user?.id })
 }
 
-// Autocadastro ("Contratar um plano") — cadastra um usuário NOVO em
-// `t0.users` (perfil "admin", já que é quem está contratando o ambiente) e
-// já loga como ele.
-export async function criarAcesso(login: string, senha: string): Promise<void> {
+// Autocadastro ("Contratar um plano") — cria o ÚNICO usuário do ambiente
+// com os dados preenchidos no site e já loga como ele.
+//
+// 11/09/2026 (Decisão 67): o ambiente do cliente passou a ser de um usuário
+// só (o do plano contratado), então este cadastro SUBSTITUI a lista de
+// usuários em vez de acrescentar mais um — e o site deixa de oferecer
+// "Contratar um plano" quando já existe usuário, justamente pra este
+// caminho nunca passar por cima de um acesso em uso (ver `LoginView.tsx`).
+// Os dados pessoais (nome, e-mail, telefone) ficam no próprio usuário e são
+// editáveis depois em Configuração → Meus Dados.
+export async function criarAcesso(
+  login: string,
+  senha: string,
+  dados?: { nome?: string; email?: string; telefone?: string; nomeAmbiente?: string },
+): Promise<void> {
   const loginN = login.trim().toLowerCase()
-  const users = await garantirTenantUsersMigrados()
   const platform = await lerPlatformN0Persistida()
   if (loginJaEmUsoGlobalmente({ devUsers: platform.devUsers, tenants: platform.tenants }, loginN, { tenantId: TENANT_N1_ID })) return
-  const novo: UsuarioTenant = { id: `u-${Date.now().toString(36)}`, name: loginN, login: loginN, senha, email: loginN, perfilId: 'admin', status: 'ativo', createdAt: new Date().toISOString() }
-  const lista = [...users, novo]
-  await atualizarTenantN0(TENANT_N1_ID, (t) => ({ ...t, users: lista }))
+  const novo: UsuarioTenant = {
+    id: `u-${Date.now().toString(36)}`,
+    name: dados?.nome?.trim() || loginN,
+    login: loginN,
+    senha,
+    email: dados?.email?.trim() || '',
+    phone: dados?.telefone?.trim() || '',
+    perfilId: 'admin',
+    status: 'ativo',
+    createdAt: new Date().toISOString(),
+  }
+  const nomeAmbiente = dados?.nomeAmbiente?.trim()
+  await atualizarTenantN0(TENANT_N1_ID, (t) => ({ ...t, users: [novo], ...(nomeAmbiente ? { companyName: nomeAmbiente } : {}) }))
   await salvarConfiguracaoIcones({ sessaoAtiva: true, loggedUserIdN1: novo.id })
 }
 

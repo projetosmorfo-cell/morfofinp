@@ -22,15 +22,13 @@ import { Settings, MessageCircle, RefreshCw, LogOut } from 'lucide-react'
 import SuporteChat from './kit/SuporteChat'
 import ZonasIdentidade from './kit/IdentidadeTenant'
 import {
-  useTenantN1, hasUnreadTenant, nivelAcesso, perfilDoUsuario, perfisPadraoN1, usePlatformN0,
+  useTenantN1, hasUnreadTenant, usePlatformN0,
   normalizarMenuPosModo, posicaoMenuDe, ITENS_NAV_N1, ITEM_PROTEGIDO_N1,
   type TenantKit, type MenuPosModo, type PosicaoMenu,
 } from './kit/kitPlatform'
 import type { ItemMenuTopo } from './kit/TopoIcones'
 import type { ComponentType, SVGProps } from 'react'
 import { sair } from './kit/auth'
-import UsuariosTenant from './kit/UsuariosTenant'
-import PermissoesTenant from './kit/PermissoesTenant'
 // 4 telas de Configurações do Kit portadas na Decisão 55 (Parte B)
 import { MeusDadosN1, MeuAmbienteN1, AparenciaN1, AjudaN1 } from './kit/ConfigN1'
 import ConfiguracoesN1, { type ChaveConfigN1 } from './kit/ConfiguracoesN1'
@@ -78,19 +76,21 @@ const TELAS_LIGHT: Tela[] = ['resumo', 'lancamentos', 'carteira', 'planejamento'
 // abria WhatsApp — agora é uma tela de verdade (chat interno, ver
 // `src/kit/SuporteChat.tsx`), no mesmo grupo das outras telas de
 // configuração.
-// 'usuarios'/'permissoes' (10/09/2026, Decisão 54 Parte B — login virou
-// multiusuário de verdade): CRUD de `t0.users` (`UsuariosTenant.tsx`) e o
-// Gerenciador de Perfis e Permissões (`PermissoesTenant.tsx`), mesmas duas
-// telas que o N0 já tem, agora do lado do tenant.
+// 'usuarios'/'permissoes' existiram entre 10/09 e 11/09/2026 (Decisão 54
+// Parte B) e foram REMOVIDOS na Decisão 67: o ambiente do cliente é de um
+// usuário só — o do plano contratado —, com acesso total. Quem cadastra
+// cliente e libera acesso é o painel N0; o usuário edita os próprios dados
+// em "Meus Dados". As telas `UsuariosTenant.tsx`/`PermissoesTenant.tsx`
+// foram apagadas; `PerfisAcesso.tsx` continua, porque o N0 usa.
 // 'configuracoes' (10/09/2026): a TELA ÚNICA de parâmetros — ver
 // `src/kit/ConfiguracoesN1.tsx`. 'layout' e 'limpar' são as duas metades
 // de `Manutencao` reaproveitadas como destinos separados (prop `secao`),
 // pra cada parâmetro cair na sessão do Kit que lhe cabe.
-type Config = 'configuracoes' | 'categorias' | 'contas' | 'notificacoes' | 'manutencao' | 'layout' | 'limpar' | 'assinatura' | 'ferramentasTeste' | 'suporte' | 'usuarios' | 'permissoes' | 'meusDados' | 'meuAmbiente' | 'aparencia' | 'ajuda'
+type Config = 'configuracoes' | 'categorias' | 'contas' | 'notificacoes' | 'manutencao' | 'layout' | 'limpar' | 'assinatura' | 'ferramentasTeste' | 'suporte' | 'meusDados' | 'meuAmbiente' | 'aparencia' | 'ajuda'
 
 // 'notificacoes' (09/09/2026): tela "Notificações bancárias" — ver
 // `src/screens/NotificacoesBancarias.tsx` e `src/notificacaoBancaria.ts`.
-const ROTULO_CONFIG: Record<'meusDados' | 'categorias' | 'contas' | 'notificacoes' | 'meuAmbiente' | 'assinatura' | 'aparencia' | 'ajuda' | 'manutencao' | 'suporte' | 'usuarios' | 'permissoes', string> = {
+const ROTULO_CONFIG: Record<'meusDados' | 'categorias' | 'contas' | 'notificacoes' | 'meuAmbiente' | 'assinatura' | 'aparencia' | 'ajuda' | 'manutencao' | 'suporte', string> = {
   meusDados: 'Meus Dados',
   categorias: 'Categorias e Grupos',
   contas: 'Contas e carteiras',
@@ -101,8 +101,6 @@ const ROTULO_CONFIG: Record<'meusDados' | 'categorias' | 'contas' | 'notificacoe
   ajuda: 'Ajuda',
   manutencao: 'Manutenção',
   suporte: 'Suporte',
-  usuarios: 'Usuários',
-  permissoes: 'Permissões',
 }
 
 // Itens do menu de engrenagem, TODOS os que hoje existem nesse popover —
@@ -126,16 +124,14 @@ const ROTULO_CONFIG: Record<'meusDados' | 'categorias' | 'contas' | 'notificacoe
 // UI, seção 16 — a TELA continua existindo no código); 'suporte' saiu porque
 // virou item fixo do "⋮" e já está dentro de "Ajuda"; 'layout' e 'limpar'
 // entraram porque as duas metades de Manutenção viraram destinos separados.
-const ITENS_MENU_ENGRENAGEM_PADRAO = ['meusDados', 'categorias', 'contas', 'notificacoes', 'usuarios', 'ajuda', 'permissoes', 'meuAmbiente', 'assinatura', 'layout', 'manutencao', 'limpar', 'sair'] as const
+const ITENS_MENU_ENGRENAGEM_PADRAO = ['meusDados', 'categorias', 'contas', 'notificacoes', 'ajuda', 'meuAmbiente', 'assinatura', 'layout', 'manutencao', 'limpar', 'sair'] as const
 type ItemMenuEngrenagem = (typeof ITENS_MENU_ENGRENAGEM_PADRAO)[number]
 export const ROTULO_MENU_ENGRENAGEM: Record<ItemMenuEngrenagem, string> = {
   meusDados: ROTULO_CONFIG.meusDados,
   categorias: ROTULO_CONFIG.categorias,
   contas: ROTULO_CONFIG.contas,
   notificacoes: ROTULO_CONFIG.notificacoes,
-  usuarios: ROTULO_CONFIG.usuarios,
   ajuda: ROTULO_CONFIG.ajuda,
-  permissoes: ROTULO_CONFIG.permissoes,
   meuAmbiente: ROTULO_CONFIG.meuAmbiente,
   assinatura: ROTULO_CONFIG.assinatura,
   layout: 'Layout e Menus',
@@ -401,20 +397,19 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: { onVoltar: (
     if (passo.tela) setTela(passo.tela as Tela)
   }
 
-  // Gating real por perfil de acesso (10/09/2026, Decisão 54 Parte B):
-  // `loggedUserIdN1` (gravado por `auth.ts` no login) resolve QUEM está
-  // logado; `perfilDoUsuario`/`nivelAcesso` (literais do Kit) resolvem o que
-  // esse perfil pode ver. Sem perfil configurado ainda (`perfisAcesso`
-  // ausente) ou sem usuário resolvido, cai no perfil "admin" padrão
-  // (`perfisPadraoN1()`) — nunca tranca ninguém fora por acidente. Calculado
-  // aqui (antes de `telasVisiveis`/`ordemMenuEngrenagem` abaixo) pra filtrar
-  // os dois por permissão, além da visão Light×Premium/reordenação já
-  // existentes.
+  /* ACESSO TOTAL no ambiente do cliente (11/09/2026, Decisão 67).
+     Entre 10/09 e 11/09 existiu aqui um gating por perfil de acesso (o
+     modelo do Kit, pensado pra empresa com equipe): cada aba e cada item de
+     configuração só aparecia se o perfil do usuário logado liberasse. Isso
+     caiu junto com as telas de Usuários e Permissões — este produto é de uso
+     individual, um usuário por plano contratado, e esse usuário vê tudo.
+     Mantido como função (em vez de apagar as chamadas espalhadas) pra deixar
+     evidente onde o gating existia, caso um dia volte a fazer sentido. */
   const tenantN1 = useTenantN1()
   const configN1 = useLiveQuery(() => db.configuracoes.get(1), [])
+  // Quem está logado — usado só pra mostrar o nome na barra do topo.
   const usuarioTenantLogado = tenantN1?.users.find((u) => u.id === configN1?.loggedUserIdN1)
-  const perfilTenantLogado = perfilDoUsuario(tenantN1?.perfisAcesso ?? perfisPadraoN1(), usuarioTenantLogado)
-  const podeVerFuncN1 = (k: string) => nivelAcesso(perfilTenantLogado, k) !== null
+  const podeVerFuncN1 = (_k: string) => true
 
   // Visão Light × Premium (04/09/2026) — configuração persistida em
   // `db.configuracoes` (ver `useModoVisao`), trocada pela tela Manutenção.
@@ -460,10 +455,7 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: { onVoltar: (
   // uma chave nova (ex.: "sair", inexistente numa ordem salva antes desta
   // correção) sempre aparece, no final, nunca desaparece por estar
   // "faltando" numa ordem salva antiga — é isso que garante que "Sair"
-  // nunca pode ser removido do menu, só reposicionado. Cada item (exceto
-  // "sair", que nunca é gateado — sempre precisa dar pra sair da conta) só
-  // aparece quando `nivelAcesso` libera `config.<item>` pro perfil logado
-  // (Decisão 54 Parte B).
+  // nunca pode ser removido do menu, só reposicionado.
   const ordemMenuSalva = useOrdemMenuEngrenagem()
   const ordemMenuEngrenagem: ItemMenuEngrenagem[] = (ordemMenuSalva
     ? [
@@ -688,10 +680,6 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: { onVoltar: (
             <SimularData aoVoltar={fecharConfig} />
           ) : configAberta === 'suporte' ? (
             <SuporteChat aoVoltar={fecharConfig} />
-          ) : configAberta === 'usuarios' ? (
-            <UsuariosTenant aoVoltar={fecharConfig} />
-          ) : configAberta === 'permissoes' ? (
-            <PermissoesTenant aoVoltar={fecharConfig} />
           ) : configAberta === 'meusDados' ? (
             <MeusDadosN1 aoVoltar={fecharConfig} />
           ) : configAberta === 'meuAmbiente' ? (

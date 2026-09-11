@@ -205,5 +205,5 @@ export const TOUR_STEPS_N1: PassoTour[] = [
   { dataTour: 'lancamentos-incluir', tela: 'lancamentos', titulo: 'Novo lançamento', texto: 'Toque no + pra cadastrar um novo lançamento.' },
   { dataTour: 'nav-tab-carteira', tela: 'carteira', titulo: 'Carteira', texto: 'Seus cofrinhos e contas — saldo e histórico de cada um.' },
   { dataTour: 'nav-tab-planejamento', tela: 'planejamento', titulo: 'Planejamento', texto: 'Planejado × Realizado × Previsto — pra isso que este app existe.' },
-  { dataTour: 'n1-mais-opcoes', titulo: 'Mais opções', texto: 'Aqui ficam quatro coisas: Configuração (a tela única com todos os parâmetros — Categorias e Grupos, Contas e carteiras, Usuários, Layout e Menus e o resto), Suporte / Chat, Atualizar e Sair.' },
+  { dataTour: 'n1-mais-opcoes', titulo: 'Mais opções', texto: 'Aqui ficam quatro coisas: Configuração (a tela única com todos os parâmetros — Meus Dados, Categorias e Grupos, Contas e carteiras, Layout e Menus e o resto), Suporte / Chat, Atualizar e Sair.' },
 ]
