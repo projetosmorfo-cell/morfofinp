@@ -97,6 +97,40 @@ jobs:
           npx cap add android
           npx cap sync android
 
+      - name: Ícone do app (símbolo Morfo)
+        # A pasta android/ é gerada do zero a cada execução, então os ícones do
+        # template do Capacitor (o robozinho padrão) voltam sempre. Este passo
+        # copia por cima os ícones do MorfoFinP, versionados em android-icons/res
+        # (gerados a partir de public/icons/icon-512.png — o mesmo símbolo Morfo
+        # que a PWA usa — pelo script android-icons/gerar-icones.py).
+        #
+        # Falha ruidosamente se algum arquivo de destino não existir: isso
+        # significaria que o template do Capacitor mudou de estrutura e os
+        # ícones estariam sendo copiados pra um lugar que ninguém lê — exatamente
+        # o tipo de passo que "roda sem erro" e não tem efeito no .apk.
+        run: |
+          python3 - <<'PY'
+          import os, shutil, sys
+          origem = 'android-icons/res'
+          destino = 'android/app/src/main/res'
+          copiados, faltando = [], []
+          for raiz, _, arquivos in os.walk(origem):
+              for nome in arquivos:
+                  rel = os.path.relpath(os.path.join(raiz, nome), origem)
+                  alvo = os.path.join(destino, rel)
+                  if not os.path.exists(alvo):
+                      faltando.append(rel)
+                      continue
+                  shutil.copyfile(os.path.join(origem, rel), alvo)
+                  copiados.append(rel)
+          if faltando:
+              sys.exit('Estes arquivos NAO existem no projeto gerado (o template do '
+                       'Capacitor mudou?): ' + ', '.join(sorted(faltando)))
+          print(f'{len(copiados)} icone(s) copiado(s):')
+          for rel in sorted(copiados):
+              print(' ', rel, os.path.getsize(os.path.join(destino, rel)), 'bytes')
+          PY
+
       - name: Fixar a assinatura de debug no build.gradle
         # A pasta android/ é gerada do zero a cada execução (não é versionada),
         # então este passo reescreve o build.gradle recém-criado. Sem isso, o

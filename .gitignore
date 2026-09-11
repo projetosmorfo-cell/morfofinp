@@ -26,4 +26,6 @@ dist-local
 
 # Capacitor (09/09/2026): a pasta android/ é GERADA (npx cap add android) — nunca versionada.
 # O GitHub Actions gera ela do zero a cada build (.github/workflows/android.yml).
-android
+# Com a barra no fim: ignora SÓ a pasta android/ da raiz — android-icons/ (os
+# ícones do launcher, que precisam estar no repositório) continua versionada.
+/android/
