@@ -16,12 +16,19 @@
    aparelho (quantas vezes a dica já apareceu), não dado do produto, e o
    fallback do Kit ("se o armazenamento falhar, a dica só continua aparecendo,
    nunca derruba a tela") está preservado literalmente.
+
+   RECONFERIDO em 11/09/2026 contra o Projeto Modelo atual (os números "Kit
+   LNNN" acima são da Etapa 6, achar por nome de função, não pelo número):
+   `SearchBox`, `FilterButton`, `IndicatorStrip`, `InfoDot`, `TotalRegistros`,
+   `DismissibleTip`, `MenuRowCompact` idênticos função a função. Achada 1
+   divergência real em `QuickAction` (cor do ícone na variante N1/`dark`
+   falso) — corrigida, ver comentário na função.
    ========================================================================= */
 import { useEffect, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
 import { Search, X, Filter, ChevronRight } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import { alpha, INK, TXT2, TXT3, LINE, BRANCO, RED, ACCENT, PURPLE, PAPER, DEV_BG, DEV_CARD, DEV_ACCENT, Sheet } from './kitBase'
+import { alpha, INK, TXT2, TXT3, LINE, BRANCO, RED, ACCENT, PURPLE, CORAL, PAPER, DEV_BG, DEV_CARD, DEV_ACCENT, Sheet } from './kitBase'
 
 /* ---- Kit L238 (seção 2): ritmo único de espaçamento entre blocos. ---- */
 export const ESPACO_LINHA = 10
@@ -115,16 +122,21 @@ export function IndicatorStrip({ items, dark, style, sheetTitle }: {
   </>
 }
 
-/* ---- Kit L1332/L1360 (seção 9): atalho compacto de 52px — ícone · rótulo ·
-   (selo + ⓘ) numa linha só, rótulo com clamp de 2 linhas. `dark` escolhe a
-   variante do N0. ---- */
+/* ---- Referência: `QuickAction` (N1) + `DevQuickAction` (N0), Padrão UI
+   seção 9 no Projeto Modelo — mesclados aqui num componente só com `dark`
+   escolhendo a variante. RECONFERIDO em 11/09/2026 contra o Projeto Modelo
+   atual: achada divergência de cor — a variante N1 (`dark` falso) do
+   Projeto Modelo pinta o ícone de `CORAL` (o acento do N1), não branco;
+   corrigido. Sem efeito visível hoje (nenhuma tela do N1 usa `QuickAction`
+   ainda, só o N0 via `dark`) — corrigido mesmo assim, pra já nascer certo
+   se/quando o N1 adotar. */
 export function QuickAction({ icon: Icon, label, onClick, info, badge, dark }: {
   icon: LucideIcon; label: ReactNode; onClick: () => void
   info?: ReactNode; badge?: ReactNode; dark?: boolean
 }) {
   return <div role="button" tabIndex={0} onClick={onClick} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick() } }}
     style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 9, background: dark ? DEV_CARD : 'var(--mloc-quickaction, #1C1B22)', color: '#fff', border: 'none', borderRadius: 12, padding: '9px 11px', minHeight: 52, cursor: 'pointer', textAlign: 'left' }}>
-    <Icon size={17} color={dark ? DEV_ACCENT : '#fff'} style={{ flexShrink: 0 }} />
+    <Icon size={17} color={dark ? DEV_ACCENT : CORAL} style={{ flexShrink: 0 }} />
     <span style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 700, lineHeight: 1.25, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{label}</span>
     <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>{badge}<InfoDot dark info={info} titulo={label} /></div>
   </div>

@@ -17,6 +17,20 @@ import {
   salvarOrdemMenuEngrenagem,
 } from '../configuracaoIcones'
 import { sair } from '../kit/auth'
+import { usePlanoAtual } from '../kit/planoAtual'
+import {
+  usePlatformN0,
+  usePosicaoN1Proprio,
+  salvarPosicaoN1Proprio,
+  useMenuPosN1Proprio,
+  salvarMenuPosN1Proprio,
+  posicaoMenuDe,
+  normalizarMenuPosModo,
+  ITENS_NAV_N1,
+  ITEM_PROTEGIDO_N1,
+  MENU_POSICOES,
+  type PosicaoMenu,
+} from '../kit/kitPlatform'
 
 // Rótulos das 5 abas do rodapé, pra tela de reordenação abaixo — mesmas
 // chaves/nomes de `TELAS` em `App.tsx` (não importado daqui de propósito,
@@ -89,6 +103,7 @@ export default function Manutencao({
   aoVoltar,
   onAbrirTour,
   onAbrirFerramentasTeste,
+  onIrParaAssinatura,
   secao,
   focarLimparDados,
 }: {
@@ -112,6 +127,13 @@ export default function Manutencao({
   // Roteiro de Parametrização Morfo, Etapa 7 (05/09/2026) — abre a
   // ferramenta de simular data de hoje, ver `src/kit/SimularData.tsx`.
   onAbrirFerramentasTeste: () => void
+  // 11/09/2026 (achado real, comparação pixel a pixel — "Posição dos menus"
+  // abaixo é recurso de plano, ver `Plano.restricoes.layoutPersonalizado`):
+  // manda pra "Minha Assinatura" quando a pessoa toca em "Conhecer planos"
+  // no cartão travado. Mesmo padrão de `abrirSuporte` em `AjudaN1`
+  // (`App.tsx`) — quem chama decide o "voltar pra onde", esta tela só avisa
+  // que a pessoa quer ir.
+  onIrParaAssinatura: () => void
 }) {
   const [rodando, setRodando] = useState(false)
   const [resultado, setResultado] = useState<string | null>(null)
@@ -154,6 +176,32 @@ export default function Manutencao({
     salvarOrdemMenuEngrenagem(nova)
   }
 
+  // "Posição dos menus (Barra × "⋮" × Ocultar)" e "Posição do botão "⋮""
+  // (11/09/2026 — achado real, comparação visual pixel a pixel contra o
+  // Projeto Modelo: o Kit tem essa camada em `LayoutTenantScreen`,
+  // autoatendimento do PRÓPRIO ambiente, por cima do padrão que a Morfo
+  // define pra plataforma inteira (`layoutCfgN0.posicaoN1`/`menuPosN1`,
+  // editado em N0 → Parâmetros → Layout do Sistema); o MorfoFinP só tinha a
+  // camada de cima. Ver `kit/kitPlatform.ts` — `posicaoMenuDe` chamado 2x em
+  // cascata: 1ª vez resolve o padrão da Morfo, 2ª vez aplica o mapa do
+  // próprio ambiente por cima disso. Sem nada gravado em nenhum dos dois
+  // níveis, cada item cai no padrão dele mesmo (`ITENS_NAV_N1`) — o app como
+  // sempre foi. "Configuração" nunca aceita "Ocultar" (`ITEM_PROTEGIDO_N1`)
+  // — esconder o caminho de volta às configurações trancaria a pessoa fora.
+  // Atrás do gate de plano `Plano.restricoes.layoutPersonalizado`
+  // (`usePlanoAtual`, mesma marketing copy de `recursosAutomaticos()` em
+  // `kit/planos.ts`).
+  const planoAtual = usePlanoAtual()
+  const layoutLiberado = !!planoAtual?.restricoes?.layoutPersonalizado
+  const layoutCfgN0 = usePlatformN0().layoutConfig
+  const posicaoProprio = usePosicaoN1Proprio()
+  const menuPosProprio = useMenuPosN1Proprio()
+  const posicaoEfetivaDoItem = (item: { key: string; padrao: PosicaoMenu }): PosicaoMenu => {
+    const padraoMorfo = posicaoMenuDe(layoutCfgN0?.posicaoN1, item, ITEM_PROTEGIDO_N1)
+    return posicaoMenuDe(posicaoProprio, { key: item.key, padrao: padraoMorfo }, ITEM_PROTEGIDO_N1)
+  }
+  const menuPosEfetivo = normalizarMenuPosModo(menuPosProprio?.modo ?? layoutCfgN0?.menuPosN1?.modo)
+
   // Visão Light × Premium (04/09/2026, pedido do Rafael: "quero já olhar as
   // duas versões"). Light reduz o rodapé a 3 abas (Resumo, Lançamentos,
   // Carteira) — o essencial do dia a dia, sem Situação/Planejamento (as
@@ -174,6 +222,7 @@ export default function Manutencao({
   // volta a gerar sozinha se um lançamento fixo novo for cadastrado depois.
   const totalLancamentos = useLiveQuery(() => db.lancamentos.count(), [])
   const [confirmandoLimpeza, setConfirmandoLimpeza] = useState(false)
+  const [entendiLimpeza, setEntendiLimpeza] = useState(false)
   const [resultadoLimpeza, setResultadoLimpeza] = useState<string | null>(null)
 
   async function limparTodosLancamentos() {
@@ -183,6 +232,7 @@ export default function Manutencao({
       `${total} lançamento(s) apagado(s), incluindo os de séries fixas e parcelas. Categorias, contas, grupos e configurações continuam intactos.`,
     )
     setConfirmandoLimpeza(false)
+    setEntendiLimpeza(false)
   }
 
   /* ---- Backup / Restaurar / Apagar tudo (10/09/2026, pedido do Rafael) ----
@@ -493,6 +543,134 @@ export default function Manutencao({
           ))}
         </div>
       </div>
+
+      <h2>Posição dos menus (Barra × "⋮" × Ocultar)</h2>
+      <div className="cartao">
+        <p className="texto-fraco" style={{ marginTop: 0 }}>
+          Decide, item a item, se ele aparece na barra do rodapé, dentro do "⋮" ou em lugar nenhum.
+          Vale só pro seu ambiente, por cima do padrão que a Morfo definiu pro sistema inteiro.
+          "Configuração" nunca pode ser ocultada — sem ela não haveria como voltar até aqui.
+        </p>
+        {!layoutLiberado ? (
+          <div style={{ border: '1.5px dashed var(--borda)', borderRadius: 12, padding: 16, textAlign: 'center' }}>
+            <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>Recurso do plano</div>
+            <p className="texto-fraco" style={{ margin: '0 0 12px' }}>
+              Personalizar a posição dos seus próprios menus é um recurso de planos superiores.
+              Enquanto isso, seu ambiente usa o layout padrão definido pela Morfo.
+            </p>
+            <button type="button" className="primario" style={{ marginTop: 0 }} onClick={onIrParaAssinatura}>
+              Conhecer planos
+            </button>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {ITENS_NAV_N1.map((item) => {
+              const atual = posicaoEfetivaDoItem(item)
+              const temOverride = posicaoProprio?.[item.key] !== undefined
+              const opcoes: { v: PosicaoMenu; l: string }[] =
+                item.key === ITEM_PROTEGIDO_N1
+                  ? [{ v: 'rodape', l: 'Barra' }, { v: 'menu', l: '"⋮"' }]
+                  : [{ v: 'rodape', l: 'Barra' }, { v: 'menu', l: '"⋮"' }, { v: 'oculto', l: 'Ocultar' }]
+              return (
+                <div key={item.key} style={{ border: '1px solid var(--borda)', borderRadius: 10, padding: '7px 10px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <span style={{ flex: 1, fontWeight: 700, fontSize: 13.5, minWidth: 110 }}>{item.label}</span>
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      {opcoes.map((o) => (
+                        <button
+                          key={o.v}
+                          type="button"
+                          onClick={() => salvarPosicaoN1Proprio(item.key, o.v)}
+                          style={{
+                            marginTop: 0,
+                            padding: '5px 10px',
+                            fontSize: 12,
+                            borderRadius: 7,
+                            border: '1px solid var(--borda)',
+                            background: atual === o.v ? 'var(--azul)' : 'none',
+                            color: atual === o.v ? '#fff' : 'inherit',
+                            fontWeight: atual === o.v ? 600 : 400,
+                          }}
+                        >
+                          {o.l}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {temOverride && (
+                    <button
+                      type="button"
+                      onClick={() => salvarPosicaoN1Proprio(item.key, undefined)}
+                      style={{ marginTop: 6, padding: 0, background: 'none', border: 'none', color: 'var(--azul)', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
+                    >
+                      Restaurar padrão da Morfo ↺
+                    </button>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      <h2>Posição do botão "⋮"</h2>
+      <div className="cartao">
+        <p className="texto-fraco" style={{ marginTop: 0 }}>
+          Onde o botão "⋮" aparece, quando pelo menos um menu acima está marcado como "⋮".
+        </p>
+        {!layoutLiberado ? (
+          <p className="texto-fraco" style={{ margin: 0 }}>Recurso do plano — veja a seção acima.</p>
+        ) : (
+          <>
+            {menuPosProprio?.modo !== undefined && (
+              <button
+                type="button"
+                onClick={() => salvarMenuPosN1Proprio(undefined)}
+                style={{ marginTop: 0, marginBottom: 8, padding: 0, background: 'none', border: 'none', color: 'var(--azul)', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
+              >
+                Restaurar padrão da Morfo ↺
+              </button>
+            )}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {MENU_POSICOES.map((o) => (
+                <button
+                  key={o.v}
+                  type="button"
+                  onClick={() => salvarMenuPosN1Proprio(o.v)}
+                  style={{
+                    marginTop: 0,
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: 10,
+                    textAlign: 'left',
+                    padding: '10px 12px',
+                    borderRadius: 12,
+                    border: menuPosEfetivo === o.v ? '1.5px solid var(--azul)' : '1.5px solid var(--borda)',
+                    background: 'none',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <div
+                    style={{
+                      width: 14,
+                      height: 14,
+                      borderRadius: 999,
+                      border: `2px solid ${menuPosEfetivo === o.v ? 'var(--azul)' : 'var(--texto-fraco)'}`,
+                      background: menuPosEfetivo === o.v ? 'var(--azul)' : 'transparent',
+                      flexShrink: 0,
+                      marginTop: 2,
+                    }}
+                  />
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 700 }}>{o.l}</div>
+                    <div className="texto-fraco" style={{ fontSize: 11, marginTop: 2, lineHeight: 1.4 }}>{o.d}</div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
       </>
       )}
 
@@ -702,29 +880,76 @@ export default function Manutencao({
           não são afetados. <strong>Não tem como desfazer.</strong>
         </p>
         {confirmandoLimpeza ? (
-          <div style={{ display: 'flex', gap: 8 }}>
+          <>
             <button
               type="button"
-              style={{ marginTop: 0, background: 'var(--vermelho)', borderColor: 'var(--vermelho)' }}
-              onClick={limparTodosLancamentos}
-            >
-              Sim, apagar todos os lançamentos
-            </button>
-            <button
-              type="button"
+              onClick={() => setEntendiLimpeza((v) => !v)}
               style={{
-                marginTop: 0,
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: 10,
+                marginBottom: 12,
+                width: '100%',
+                textAlign: 'left',
                 background: 'none',
-                border: '1px solid var(--borda)',
-                borderRadius: 10,
-                padding: '12px',
+                border: 'none',
+                padding: 0,
                 cursor: 'pointer',
               }}
-              onClick={() => setConfirmandoLimpeza(false)}
             >
-              Cancelar
+              <div
+                style={{
+                  width: 20,
+                  height: 20,
+                  borderRadius: 6,
+                  border: `2px solid ${entendiLimpeza ? 'var(--vermelho)' : 'var(--borda)'}`,
+                  background: entendiLimpeza ? 'var(--vermelho)' : 'transparent',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                  marginTop: 1,
+                  color: '#fff',
+                  fontSize: 12,
+                  fontWeight: 900,
+                  lineHeight: 1,
+                }}
+              >
+                {entendiLimpeza && '✓'}
+              </div>
+              <span className="texto-fraco" style={{ fontSize: 13 }}>
+                Entendo que isso apaga todos os lançamentos ({totalLancamentos ?? 0} hoje), inclusive os
+                de séries fixas e parceladas, e não tem como desfazer.
+              </span>
             </button>
-          </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                type="button"
+                disabled={!entendiLimpeza}
+                style={{ marginTop: 0, background: 'var(--vermelho)', borderColor: 'var(--vermelho)' }}
+                onClick={limparTodosLancamentos}
+              >
+                Sim, apagar todos os lançamentos
+              </button>
+              <button
+                type="button"
+                style={{
+                  marginTop: 0,
+                  background: 'none',
+                  border: '1px solid var(--borda)',
+                  borderRadius: 10,
+                  padding: '12px',
+                  cursor: 'pointer',
+                }}
+                onClick={() => {
+                  setConfirmandoLimpeza(false)
+                  setEntendiLimpeza(false)
+                }}
+              >
+                Cancelar
+              </button>
+            </div>
+          </>
         ) : (
           <button type="button" onClick={() => setConfirmandoLimpeza(true)}>
             Limpar dados

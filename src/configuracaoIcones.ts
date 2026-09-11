@@ -109,6 +109,8 @@ export function useConfiguracaoIcones(): Required<
     | 'memoriaDescricaoDias'
     | 'logosInstituicoes'
     | 'pctGrupoRevisado'
+    | 'posicaoN1Proprio'
+    | 'menuPosN1Proprio'
   >
 > {
   const config = useLiveQuery(() => db.configuracoes.get(1), [])

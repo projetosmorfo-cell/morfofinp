@@ -1,23 +1,33 @@
 /* ============================================================================
-   Ícones de topo — transcrição do Kit `esqueleto-morfo-v1.jsx` (KIT_BUILD 2.0).
+   Ícones de topo — transcrição do Projeto Modelo (`esqueleto-morfo-v1.jsx`).
 
    Por que este arquivo existe: item 18 do CONTRATO DE EXECUÇÃO (G68/G69) exige
    paridade item a item — "ícones de busca/usuário/⋮ no topo do N0 e do N1" e
-   "exportação em toda tela de listagem/resumo". Até esta rodada o MorfoFinP não
-   tinha NENHUM dos três: o `TopIconMenu` só existia citado num comentário do
-   `App.tsx`, não havia ícone de usuário logado nem de busca, e a exportação não
-   existia em lugar nenhum.
+   "exportação em toda tela de listagem/resumo". Até a rodada de 10/09/2026 o
+   MorfoFinP não tinha NENHUM dos três: o `TopIconMenu` só existia citado num
+   comentário do `App.tsx`, não havia ícone de usuário logado nem de busca, e a
+   exportação não existia em lugar nenhum.
 
-   Peças transcritas, com a linha de origem no Kit:
-     L809  TopIconMenu · L901 UserHoverIcon · L5045 ThemeToggleIcon
-     L6782 LayoutContext · L6791 mostraIconeTopo · L6853 NavBadge
-     L883/L5667 StandardTopIcons / DevStandardTopIcons → `IconesDeTela` aqui
+   Peças transcritas (citadas pelo nome da função no Projeto Modelo, não por
+   número de linha — o esqueleto muda de linha a cada rodada, achado da
+   reconciliação de 11/09/2026):
+     TopIconMenu · UserHoverIcon · ThemeToggleIcon
+     LayoutContext · mostraIconeTopo · NavBadge
+     StandardTopIcons / DevStandardTopIcons → `IconesDeTela` aqui
+
+   RECONFERIDO em 11/09/2026: `TopIconMenu`/`UserHoverIcon` são montados uma
+   única vez por `App.tsx`/`DevApp.tsx` numa linha própria de marca (mesmo
+   padrão que o Projeto Modelo adotou depois — "⋮" e usuário saíram da linha
+   do título e subiram pra linha do logo); `IconesDeTela` cobre só o que ficou
+   na linha do título (Buscar/Selecionar/Filtro/Chat/Exportar/Incluir). Sem
+   divergência — as duas pontas já se falam.
 
    ADAPTAÇÕES (G44 regra 3), marcadas no ponto exato:
    - `ThemeToggleIcon` guarda a escolha no singleton `db.configuracoes`
      (`temaPreferido`), que é o armazenamento deste produto, no lugar do
-     `mlocStorage` do Kit. O papel de "restaurar no boot" (Padrão UI, seção 16)
-     já é feito por `AplicadorDeTema` em `AppRoot.tsx`, montado uma vez.
+     `mlocStorage` do Projeto Modelo. O papel de "restaurar no boot" (Padrão
+     UI, seção 16) já é feito por `AplicadorDeTema` em `AppRoot.tsx`, montado
+     uma vez.
    - `StandardTopIcons` e `DevStandardTopIcons` são o MESMO conjunto de ícones
      nos dois níveis, mudando só a cor — aqui viraram um componente só
      (`IconesDeTela`) com o prop `dark`, em vez de duas cópias.
@@ -30,7 +40,7 @@ import { alpha, iconBtnStyle, INK, TXT2, TXT3, LINE, SOFT, BRANCO, RED, PURPLE, 
 import { useTemaPreferido, salvarTemaPreferido, type TemaPreferido } from '../configuracaoIcones'
 import type { LayoutConfig } from './kitPlatform'
 
-/* ---- Kit L6782/L6791: quais ícones aparecem no topo. `topoIcones.<k> !== false`
+/* ---- Projeto Modelo (LayoutContext/mostraIconeTopo): quais ícones aparecem no topo. `topoIcones.<k> !== false`
    — ou seja, o padrão é APARECER; só some quando o N0 desliga em
    Parâmetros → Layout do Sistema. ---- */
 export const LayoutContext = createContext<LayoutConfig>({ iconesTopo: 'direita' })
@@ -38,7 +48,7 @@ export function mostraIconeTopo(cfg: LayoutConfig | undefined, k: 'busca' | 'cha
   return (cfg?.topoIcones as Record<string, boolean> | undefined)?.[k] !== false
 }
 
-/* ---- Kit L6853 ---- */
+/* ---- Projeto Modelo (NavBadge) ---- */
 export function NavBadge({ abs }: { abs?: boolean }) {
   return <span className="mloc-badge-pulse" style={{ width: 8, height: 8, borderRadius: 999, background: RED, flexShrink: 0, ...(abs ? { position: 'absolute', top: 3, right: 3 } : { marginLeft: 'auto' }) }} />
 }
@@ -49,7 +59,7 @@ export function NavBadge({ abs }: { abs?: boolean }) {
    Os dois tipos aceitam `size`/`color`, que é tudo o que este menu usa. */
 export interface ItemMenuTopo { icon: ComponentType<{ size?: number; color?: string }>; label: ReactNode; onClick: () => void; danger?: boolean; hasUnread?: boolean }
 
-/* ---- Kit L809: o "⋮". `panelDir` existe porque, fora do topo, o painel precisa
+/* ---- Projeto Modelo (TopIconMenu): o "⋮". `panelDir` existe porque, fora do topo, o painel precisa
    abrir pra cima e/ou pro lado oposto, senão nasce fora da tela. ---- */
 export function TopIconMenu({ items, dark, hasUnread, panelDir, big }: {
   items: ItemMenuTopo[]; dark?: boolean; hasUnread?: boolean
@@ -83,7 +93,7 @@ export function TopIconMenu({ items, dark, hasUnread, panelDir, big }: {
   </div>
 }
 
-/* ---- Kit L901: ícone do usuário logado; o nome aparece no hover/title. ---- */
+/* ---- Projeto Modelo (UserHoverIcon): ícone do usuário logado; o nome aparece no hover/title. ---- */
 export function UserHoverIcon({ label, dark }: { label?: string; dark?: boolean }) {
   const [hover, setHover] = useState(false)
   if (!label) return null
@@ -95,7 +105,7 @@ export function UserHoverIcon({ label, dark }: { label?: string; dark?: boolean 
   </span>
 }
 
-/* ---- Kit L5045 (Padrão UI, seção 16): ícone fixo de tema, 30×30, um toque
+/* ---- Projeto Modelo (ThemeToggleIcon, Padrão UI seção 16): ícone fixo de tema, 30×30, um toque
    CICLA Automático → Claro → Escuro. ADAPTAÇÃO: a escolha é gravada em
    `db.configuracoes.temaPreferido` (armazenamento deste produto) e aplicada ao
    <html> por `AplicadorDeTema` (AppRoot), que também é quem restaura no boot —
@@ -114,8 +124,8 @@ export function ThemeToggleIcon({ dark }: { dark?: boolean }) {
   </button>
 }
 
-/* ---- Kit L883 (N1) + L5667 (N0): a linha de ícones da tela. Ordem do Kit:
-   Buscar, Chat, Exportar, e o Incluir sempre por último. Cada um obedece o
+/* ---- Projeto Modelo (StandardTopIcons N1 + DevStandardTopIcons N0): a linha de ícones da tela. Ordem do
+   Projeto Modelo: Buscar, Chat, Exportar, e o Incluir sempre por último. Cada um obedece o
    `topoIcones` do Layout do Sistema (N0 → Parâmetros). ---- */
 export function IconesDeTela({ dark, onSelecionar, selecaoAtiva, onBuscar, buscaAtiva, onFiltrar, filtrosAtivos = 0, onChat, chatNaoLida, onExportar, incluir }: {
   dark?: boolean

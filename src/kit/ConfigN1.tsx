@@ -9,13 +9,26 @@ import {
   useTenantN1, atualizarTenantN0, TENANT_N1_ID, loginJaEmUsoGlobalmente,
   lerPlatformN0Persistida, type UsuarioTenant, type TenantKit,
 } from './kitPlatform'
-import { readImageAsDataUrl, LOGO_MAX_KB } from './kitBase'
+import { readImageAsDataUrl, LOGO_MAX_KB, alpha } from './kitBase'
 import ZonasIdentidade, { identidadeTemLogoENome } from './IdentidadeTenant'
+import { MessageCircle, Navigation, type LucideIcon } from 'lucide-react'
 
-// N1 → engrenagem: as 4 telas de Configurações do Kit que ainda não existiam
-// aqui (10/09/2026, Decisão 55 — Parte B): "Meus Dados" (Kit L3848-L3880),
-// "Meu Ambiente" (L3886+, `ParametrosAmbienteView`), "Aparência"
-// (L4090/L4110 + `TemaPicker` L4758-L4780) e "Ajuda" (L4119-L4149).
+// N1 → engrenagem: as 4 telas de Configurações do Projeto Modelo que ainda
+// não existiam aqui (10/09/2026, Decisão 55 — Parte B): "Meus Dados", "Meu
+// Ambiente" (`ParametrosAmbienteView`), "Aparência" (`TemaPicker`) e "Ajuda".
+// (citação por nome de função daqui em diante — número de linha muda a cada
+// rodada do esqueleto, ver doc de reconciliação).
+//
+// REABERTA em 11/09/2026 (mesmo dia, auditoria seguinte): a rodada anterior
+// tinha marcado "sem divergência" comparando por nome de função já existente
+// aqui, sem antes montar o inventário completo das telas do Kit — método que
+// já deixou passar uma tela inteira faltando (Layout e Menus, achada numa
+// auditoria anterior a esta). Reconferida do zero a partir do Kit: achadas e
+// corrigidas 3 divergências reais em `AjudaN1`/`MeuAmbienteN1` (cartões de
+// Ajuda sem ícone; legenda da prévia de marca faltando; divisor+título "Nos
+// documentos oficiais" faltando) — ver comentários pontuais abaixo de cada
+// uma. `MeusDadosN1`/`MeuAmbienteN1`/`AjudaN1`/`AparenciaN1` continuam,
+// depois disso, sem divergência real restante contra o Kit.
 //
 // Estilo: nativo do app (`.cabecalho-fixo`/`.cartao`/`var(--texto)`), como
 // `Contas.tsx`/`UsuariosTenant.tsx` — não o `kitBase` claro. É a mesma
@@ -37,7 +50,12 @@ const estiloInput: React.CSSProperties = {
 }
 
 function Campo({ label, children }: { label: string; children: React.ReactNode }) {
-  return <label style={{ display: 'block', marginBottom: 14 }}>
+  // Corrigido 11/09/2026 (comparação visual pixel a pixel): faltava
+  // `marginTop: 0` — sem isso o `<label>` herdava `margin-top: 12px` da
+  // regra global de `index.css` (mesma classe de bug já corrigida no
+  // `Field` de `kitBase.tsx`), somando espaço indesejado acima de cada
+  // campo desta tela.
+  return <label style={{ display: 'block', marginTop: 0, marginBottom: 14 }}>
     <span style={{ display: 'block', fontSize: 12.5, fontWeight: 700, color: 'var(--texto-fraco)', marginBottom: 6 }}>{label}</span>
     {children}
   </label>
@@ -86,7 +104,7 @@ function Aviso({ msg }: { msg: string }) {
   return <p style={{ color: 'var(--azul)', fontSize: 13, fontWeight: 700, margin: '0 0 10px' }}>{msg}</p>
 }
 
-/* ================= Meus Dados (Kit L3848-L3880, adaptado) ================= */
+/* ================= Meus Dados (Projeto Modelo, adaptado) ================= */
 export function MeusDadosN1({ aoVoltar }: { aoVoltar: () => void }) {
   const tenant = useTenantN1()
   const config = useLiveQuery(() => db.configuracoes.get(1), [])
@@ -148,14 +166,14 @@ export function MeusDadosN1({ aoVoltar }: { aoVoltar: () => void }) {
   </>
 }
 
-/* ================= Meu Ambiente (Kit L3886+, adaptado) ================= */
+/* ================= Meu Ambiente (Projeto Modelo, adaptado) ================= */
 export function MeuAmbienteN1({ aoVoltar }: { aoVoltar: () => void }) {
   const tenant = useTenantN1()
   const [msg, setMsg] = useState('')
   const [nome, setNome] = useState<string | null>(null)
   function notify(m: string) { setMsg(m); window.setTimeout(() => setMsg(''), 2500) }
 
-  /* Conjunto COMPLETO do Kit (`ParametrosAmbienteView`, L4160-L4235), no
+  /* Conjunto COMPLETO do Projeto Modelo (`ParametrosAmbienteView`), no
      lugar do upload único de antes — 10/09/2026, pedido do Rafael: "o logo
      não é só carregar ele, tem alinhamento, tamanho, espaçamento etc., tudo
      isso tem no kit ... e que eles efetivamente funcionem, sejam aplicados
@@ -200,6 +218,15 @@ export function MeuAmbienteN1({ aoVoltar }: { aoVoltar: () => void }) {
     <Cabecalho titulo="Meu Ambiente" aoVoltar={aoVoltar} />
     <Aviso msg={msg} />
     <div className="cartao">
+      {/* ADAPTAÇÃO (comentário adicionado na reconciliação N1 de 11/09/2026):
+          no Projeto Modelo o nome não se edita aqui — mora em "Dados de
+          cadastro fiscal" (`MeusDadosView`, campo "Nome fantasia"), tela que
+          este produto não tem (ver ADAPTAÇÃO no topo deste arquivo: "Meus
+          Dados" virou o cadastro do usuário logado, sem CNPJ). Como
+          `companyName` (o nome do ambiente, usado na barra do topo) ainda
+          precisa de um lugar pra ser editado, ficou aqui — o outro card desta
+          mesma tela ("Meu Logotipo") que também é sobre a identidade do
+          ambiente no topo. */}
       <Campo label="Nome do ambiente">
         <input style={estiloInput} value={nome ?? tenant?.companyName ?? ''} onChange={(e) => setNome(e.target.value)} />
       </Campo>
@@ -324,8 +351,18 @@ export function MeuAmbienteN1({ aoVoltar }: { aoVoltar: () => void }) {
               (`zonasIdentidadeTenant`), pra não existir um segundo desenho que
               possa discordar do real. */}
           <ZonasIdentidade tenant={tenant} altura={16} />
+          {/* Legenda restaurada 11/09/2026 (reconciliação N1) — existia no
+              Projeto Modelo (`ParametrosAmbienteView`) e tinha ficado de fora
+              desta transcrição. */}
+          <div style={{ fontSize: 10.5, color: 'var(--texto-fraco)', textAlign: 'center', marginTop: 8 }}>Prévia da linha de marca (aparece acima do título das telas)</div>
         </div>
 
+        {/* Divisor + subtítulo restaurados 11/09/2026 (reconciliação N1): o
+            Projeto Modelo (item 129) separa visualmente "Nos documentos
+            oficiais" de "Como vai ficar no topo" com uma linha e um título
+            próprios — esta transcrição tinha pulado direto pro campo. */}
+        <div style={{ height: 1, background: 'var(--borda)', margin: '4px 0 16px' }} />
+        <div style={{ fontSize: 12.5, fontWeight: 700, margin: '0 0 6px' }}>Nos documentos oficiais</div>
         <CampoGrupo label="Qual usar nos documentos oficiais">
           <SegmentadoN1
             valor={logoDocs}
@@ -386,8 +423,8 @@ function MemoriaDescricaoParametro({ onAviso }: { onAviso: (m: string) => void }
   </div>
 }
 
-/* ================= Aparência (Kit L4739-L4780, `TemaPicker`) ================= */
-// Mecanismo idêntico ao Kit: atributo no <html> + bloco de CSS só de
+/* ================= Aparência (Projeto Modelo, `TemaPicker`) ================= */
+// Mecanismo idêntico ao Projeto Modelo: atributo no <html> + bloco de CSS só de
 // variáveis (`src/index.css`). Persistência no Dexie (ver `configuracaoIcones.ts`).
 function aplicarTema(valor: TemaPreferido) {
   document.documentElement.setAttribute('data-mloc-tema', valor)
@@ -423,17 +460,24 @@ export function AparenciaN1({ aoVoltar }: { aoVoltar: () => void }) {
   </>
 }
 
-/* ================= Ajuda (Kit L4119-L4149) ================= */
+/* ================= Ajuda (Projeto Modelo) ================= */
 export function AjudaN1({ aoVoltar, abrirSuporte, abrirTour, temNaoLida }: {
   aoVoltar: () => void; abrirSuporte: () => void; abrirTour: () => void; temNaoLida?: boolean
 }) {
-  const card = (titulo: string, resumo: string, onClick: () => void, badge?: boolean) => (
+  // Cartão grande com ícone (Projeto Modelo `AjudaView` → `cardGrande`): cada
+  // item ganha um selo de ícone à esquerda, igual ao Kit — corrigido
+  // 11/09/2026 (reconciliação N1), a versão anterior desenhava a linha sem
+  // nenhum ícone. O selo de "não lida" segue o mesmo padrão já usado em
+  // `MenuRowCompact`/`TopoIcones` deste produto (`.mloc-badge-pulse`, "!"
+  // sobre o ícone), não um ponto solto ao lado do título.
+  const card = (Icone: LucideIcon, titulo: string, resumo: string, onClick: () => void, badge?: boolean) => (
     <button type="button" onClick={onClick} style={{ display: 'flex', alignItems: 'center', gap: 11, width: '100%', background: 'var(--bg-elevado)', border: '1px solid var(--borda)', borderRadius: 14, padding: 14, marginBottom: 10, cursor: 'pointer', textAlign: 'left', color: 'var(--texto)' }}>
+      <div style={{ position: 'relative', width: 36, height: 36, borderRadius: 10, background: alpha('var(--azul)', 10.2), display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        <Icone size={17} color="var(--azul)" />
+        {badge && <span className="mloc-badge-pulse" style={{ position: 'absolute', top: -4, right: -4, minWidth: 14, height: 14, borderRadius: 999, background: 'var(--vermelho)', border: '2px solid var(--bg-elevado)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8.5, fontWeight: 900, color: '#fff' }}>!</span>}
+      </div>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 14, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 7 }}>
-          {titulo}
-          {badge && <span style={{ minWidth: 8, height: 8, borderRadius: 999, background: 'var(--vermelho)' }} />}
-        </div>
+        <div style={{ fontSize: 14, fontWeight: 700 }}>{titulo}</div>
         <div style={{ fontSize: 11.5, color: 'var(--texto-fraco)', marginTop: 2, lineHeight: 1.4 }}>{resumo}</div>
       </div>
       <span style={{ color: 'var(--texto-fraco)' }}>›</span>
@@ -441,7 +485,7 @@ export function AjudaN1({ aoVoltar, abrirSuporte, abrirTour, temNaoLida }: {
   )
   return <>
     <Cabecalho titulo="Ajuda" aoVoltar={aoVoltar} />
-    {card('Suporte Morfo (chat)', 'Fale com o time da Morfo pelo chat interno', abrirSuporte, temNaoLida)}
-    {card('Tour guiado', 'Rever o passo a passo de uso do sistema, na tela real', abrirTour)}
+    {card(MessageCircle, 'Suporte Morfo (chat)', 'Fale com o time da Morfo pelo chat interno', abrirSuporte, temNaoLida)}
+    {card(Navigation, 'Tour guiado', 'Rever o passo a passo de uso do sistema, na tela real', abrirTour)}
   </>
 }

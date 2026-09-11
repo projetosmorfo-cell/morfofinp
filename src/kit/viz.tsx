@@ -1,10 +1,19 @@
 import { useState, type ReactNode } from 'react'
-import { BRANCO, DEV_CARD, GREEN, INK, LINE, PAPER, RED, TXT2, TXT3, iconBtnStyle } from './kitBase'
+import { BRANCO, DEV_CARD, GREEN, INK, LINE, PAPER, RED, SOFT, TXT2, TXT3, iconBtnStyle } from './kitBase'
 import { X } from 'lucide-react'
 
 // Biblioteca de gráficos e cartões de indicador do Kit de Estrutura Mínima
 // Morfo — transcrição literal (10/09/2026, Decisão 53), linha de origem
 // anotada em cada bloco. Usada pela tela de Indicadores do N0.
+//
+// RECONFERIDO em 11/09/2026 contra o Projeto Modelo atual: todas as funções
+// aqui (InfoDot, KpiCard, VizCard, VizLine, VizGroupedBars, VizRankBars,
+// VizWaterfall, MiniBarChart, paleta VIZ_LIGHT/VIZ_DARK) idênticas função a
+// função, valor a valor. O Projeto Modelo também tem `VizStacked100` e
+// `VizMeter` — NÃO portados aqui, e não é lacuna: nenhum dos dois é usado
+// por NENHUMA tela do Projeto Modelo atual (biblioteca com componente sem
+// chamador, achado ao grepar o arquivo inteiro) — nada os teria exercitado
+// mesmo lá.
 
 /* ---- Kit L4580-L4586: paleta categórica (a ORDEM dos slots é fixa — foi ela
    que passou no verificador de daltonismo; não embaralhar) ---- */
@@ -25,13 +34,22 @@ export function InfoDot({ info, titulo, dark }: { info?: ReactNode; titulo?: Rea
     <span role="button" tabIndex={0} onClick={(e) => { e.stopPropagation(); setOpen(true) }} onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); setOpen(true) } }} title="O que é isso?" style={{ width: 24, height: 24, cursor: 'pointer', flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
       <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 16, height: 16, borderRadius: 999, border: `1.5px solid ${dark ? '#9B96A8' : TXT3}`, color: dark ? '#9B96A8' : TXT3, fontSize: 9.5, fontWeight: 800, fontStyle: 'italic', fontFamily: 'Georgia, serif' }}>i</span>
     </span>
+    {/* Corrigido 11/09/2026 (comparação visual pixel a pixel contra o Projeto
+        Modelo): este painel é implementação própria (não usa o `Sheet`
+        compartilhado de `kitBase.tsx`) — 2 divergências reais achadas:
+        (1) `<h2>` sem `textTransform: 'none'` herdava o `text-transform:
+        uppercase` global de `index.css` (mesma classe do bug já corrigido no
+        título do `Sheet`); (2) o painel inteiro (fundo/título/botão
+        fechar/texto) ignorava a prop `dark` — sempre claro, mesmo dentro do
+        painel N0 (que força tema escuro via `.mloc-forcar-escuro`). O Kit já
+        tem essa correção (comentário "item 17, Padrão UI" na fonte). */}
     {open && <div onClick={(e) => { e.stopPropagation(); setOpen(false) }} style={{ position: 'fixed', inset: 0, background: 'rgba(28,27,34,0.5)', zIndex: 60, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ background: PAPER, width: '100%', maxWidth: 'var(--mloc-sheet-maxw, var(--mloc-maxw, 430px))', borderRadius: '20px 20px 0 0', padding: '18px 16px 28px' }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: dark ? DEV_CARD : PAPER, width: '100%', maxWidth: 'var(--mloc-sheet-maxw, var(--mloc-maxw, 430px))', borderRadius: '20px 20px 0 0', padding: '18px 16px 28px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-          <h2 style={{ fontSize: 16, fontWeight: 800, color: INK, margin: 0 }}>{titulo}</h2>
-          <button onClick={() => setOpen(false)} style={iconBtnStyle}><X size={18} color={INK} /></button>
+          <h2 style={{ fontSize: 16, fontWeight: 800, color: dark ? '#fff' : INK, margin: 0, textTransform: 'none' }}>{titulo}</h2>
+          <button onClick={() => setOpen(false)} style={{ ...iconBtnStyle, background: dark ? 'rgba(255,255,255,0.08)' : SOFT }}><X size={18} color={dark ? '#fff' : INK} /></button>
         </div>
-        <p style={{ fontSize: 13.5, color: TXT2, lineHeight: 1.65, margin: 0 }}>{info}</p>
+        <p style={{ fontSize: 13.5, color: dark ? '#C9C4D4' : TXT2, lineHeight: 1.65, margin: 0 }}>{info}</p>
       </div>
     </div>}
   </>

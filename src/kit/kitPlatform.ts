@@ -147,6 +147,18 @@ export interface TenantKit {
   planId?: string | null
   manualBlock?: boolean
   onboarding?: string
+  /* Desde quando este tenant está em `onboarding: 'pendente_liberacao'` —
+     usado por `verificarVencimentoPrecadastro` (Projeto Modelo, achado
+     11/09/2026) pra saber quando o prazo do parâmetro `precadastroMaxDias`
+     vence. Gravado no momento em que o pré-cadastro nasce (`NovoClienteSheet`
+     em `DevApp.tsx`, sem "liberar acesso agora"); ausente = usa `createdAt`
+     como aproximação (tenant antigo, gravado antes deste campo existir). */
+  onboardingSince?: string
+  /* Última data (ISO) em que o aviso automático de fim de teste (parâmetro
+     `trialWarning`) foi enviado pro chat deste tenant — usado por
+     `avisoTrialSeNecessario` pra não repetir o aviso todo housekeeping
+     quando `trialWarning.repetirTodoDia` é falso. */
+  trialAvisoUltimoEnvio?: string
   trial?: { days: number; startDate: string } | null
   billing?: { monthlyValue: number; dueDay: number; toleranceDays: number; installments: Parcela[] } | null
   cancellation?: { accessUntil: string } | null
@@ -354,6 +366,49 @@ export interface LayoutConfig {
   posicaoN0?: Record<string, PosicaoMenu>
   menuPosN0?: { modo: MenuPosModo }
 }
+
+// Override de "Posição dos menus" / "Posição do botão ⋮" DO PRÓPRIO
+// AMBIENTE (11/09/2026, comparação visual pixel a pixel contra o Projeto
+// Modelo — achado real: o Kit tem essa seção em `LayoutTenantScreen`, a
+// camada de autoatendimento do tenant, e o MorfoFinP só tinha a camada de
+// cima — `posicaoN1`/`menuPosN1` no `LayoutConfig` acima, o padrão que a
+// MORFO define pra plataforma inteira, editado em `DevApp.tsx`). Mesmo
+// padrão fino de `usePlanoAtual`/`salvarPlanoId` (`planoAtual.ts`) —
+// singleton `db.configuracoes`, sem bump de schema, sempre lê/grava só a
+// própria chave. Consumido em `App.tsx` como camada por cima do padrão da
+// Morfo (exatamente como o Kit: `tenant.layoutConfig` por cima de
+// `modoPadraoMorfo`) e editado em `screens/Manutencao.tsx` → "Layout e
+// Menus" → "Posição dos menus", atrás do gate de plano
+// (`Plano.restricoes.layoutPersonalizado`).
+export function usePosicaoN1Proprio(): Record<string, PosicaoMenu> | undefined {
+  const config = useLiveQuery(() => db.configuracoes.get(1), [])
+  return config?.posicaoN1Proprio
+}
+
+// Grava só a chave do item alterado, preservando as demais já gravadas —
+// nunca substitui o mapa inteiro. `valor: undefined` apaga a chave (é o
+// que o botão "Restaurar padrão da Morfo" usa, item a item — mesma regra
+// já registrada no comentário de `posicaoN1Proprio` em `db.ts`).
+export async function salvarPosicaoN1Proprio(chave: string, valor: PosicaoMenu | undefined) {
+  const config = await db.configuracoes.get(1)
+  const mapaAtual: Record<string, PosicaoMenu> = { ...(config?.posicaoN1Proprio ?? {}) }
+  if (valor === undefined) {
+    delete mapaAtual[chave]
+  } else {
+    mapaAtual[chave] = valor
+  }
+  await salvarConfiguracaoIcones({ posicaoN1Proprio: mapaAtual })
+}
+
+export function useMenuPosN1Proprio(): { modo?: MenuPosModo } | undefined {
+  const config = useLiveQuery(() => db.configuracoes.get(1), [])
+  return config?.menuPosN1Proprio
+}
+
+export async function salvarMenuPosN1Proprio(modo: MenuPosModo | undefined) {
+  await salvarConfiguracaoIcones({ menuPosN1Proprio: modo === undefined ? undefined : { modo } })
+}
+
 /* ---- Kit L489-L493: "perfil = { id, nome, fixo?, permissoes: { <funcKey>:
    "editar"|"visualizar" } }". Chave ausente = sem acesso (nem vê). O perfil
    "admin" é fixo: acesso total, nunca editável nem excluível; usuário sem
@@ -469,7 +524,13 @@ export const FUNCOES_PERFIL_N1: FuncaoPerfil[] = [
        como referência de funcionalidade do produto. */
   ] },
 ]
-/* ---- Kit L542-L549 (nivelAcesso), literal ---- */
+/* ---- Referência: `nivelAcesso` no Projeto Modelo. RECONFERIDO em
+   11/09/2026: não é mais "literal" — o Projeto Modelo atual devolve
+   `perfil.permissoes[pai] || null` puro, o que devolveria a STRING
+   "nenhum" (valor truthy) quando o item-pai está explicitamente marcado
+   "nenhum". Esta versão do MorfoFinP já tratava esse caso (`pai !== 'nenhum'
+   ? pai : null`) — não é lacuna, é correção que o MorfoFinP já tinha sobre
+   o próprio bug do Projeto Modelo. Mantido como está. ---- */
 export function nivelAcesso(perfil: PerfilAcesso | undefined, k: string): 'editar' | 'visualizar' | null {
   if (!perfil?.permissoes) return 'editar'
   const v = perfil.permissoes[k]
@@ -484,22 +545,34 @@ export function permTodas(funcs: FuncaoPerfil[], nivel: 'editar' | 'visualizar')
   funcs.forEach((f) => { p[f.k] = nivel })
   return p
 }
-/* ---- Kit L558-L565 (perfisPadraoN0), chaves adaptadas ao MorfoFinP ---- */
+/* ---- Referência: `perfisPadraoN0` no Projeto Modelo, chaves adaptadas ao
+   MorfoFinP (`clientes` do Projeto Modelo ≈ `tenants` aqui, já renomeado na
+   Decisão 54). RECONFERIDO em 11/09/2026 contra o Projeto Modelo atual —
+   achada divergência real: "Financeiro" lá também vê `clientes: visualizar`
+   e "Negócios" também vê `financeiro: visualizar` (cada perfil enxerga o
+   dado do outro em modo leitura, só não edita); esta versão não tinha
+   nenhum dos dois. Corrigido abaixo (as duas chaves acrescentadas). ---- */
 export function perfisPadraoN0(): PerfilAcesso[] {
   return [
     { id: 'admin', nome: 'Administrador', fixo: true, permissoes: permTodas(FUNCOES_PERFIL_N0, 'editar') },
-    { id: 'financeiro', nome: 'Financeiro', permissoes: { inicio: 'visualizar', financeiro: 'editar', indicadores: 'visualizar' } },
-    { id: 'negocios', nome: 'Negócios', permissoes: { inicio: 'visualizar', tenants: 'editar', indicadores: 'visualizar' } },
+    { id: 'financeiro', nome: 'Financeiro', permissoes: { inicio: 'visualizar', tenants: 'visualizar', financeiro: 'editar', indicadores: 'visualizar' } },
+    { id: 'negocios', nome: 'Negócios', permissoes: { inicio: 'visualizar', tenants: 'editar', financeiro: 'visualizar', indicadores: 'visualizar' } },
     { id: 'atendente', nome: 'Atendente', permissoes: { inicio: 'visualizar', tenants: 'visualizar' } },
   ]
 }
-/* ---- Kit L551-L557 (perfisPadraoN1), chaves adaptadas ao MorfoFinP.
-   Kit tem 4 perfis padrão (admin/visualizacao/financeiro/operacional) — esta
-   função tinha só 3 (faltava "financeiro", achado ao reconferir contra o Kit
-   nesta rodada, 10/09/2026). Adaptação G44 regra 3: o Kit's "financeiro"
-   visualiza tudo e só EDITA a função "financeiro" — o análogo mais próximo
-   em MorfoFinP (sem uma função de mesmo nome) é editar só "lancamentos"
-   (o registro financeiro em si), visualizando o resto. */
+/* ---- Referência: `perfisPadraoN1` no Projeto Modelo, chaves adaptadas ao
+   MorfoFinP. CORRIGIDO em 11/09/2026: o comentário antigo dizia que o
+   Projeto Modelo tem 4 perfis padrão (admin/visualizacao/financeiro/
+   operacional) — reconferido agora, o Projeto Modelo ATUAL só tem 3
+   (admin/visualizacao/operacional, sem "financeiro"). O MorfoFinP ganhou
+   esse 4º perfil numa rodada anterior (adaptação G44 regra 3, abaixo) e ele
+   continua fazendo sentido pro produto (separar quem só mexe no registro
+   financeiro de quem só mexe no operacional) — mantido, só a citação da
+   fonte foi corrigida pra não overclaim o Projeto Modelo. Adaptação G44
+   regra 3: o perfil "financeiro" do Projeto Modelo (quando existia)
+   visualizava tudo e só EDITAVA a função "financeiro" — o análogo mais
+   próximo em MorfoFinP (sem uma função de mesmo nome) é editar só
+   "lancamentos" (o registro financeiro em si), visualizando o resto. */
 export function perfisPadraoN1(): PerfilAcesso[] {
   return [
     { id: 'admin', nome: 'Administrador', fixo: true, permissoes: permTodas(FUNCOES_PERFIL_N1, 'editar') },
@@ -680,6 +753,93 @@ function comBrandingPadrao(p: PlatformN0): PlatformN0 {
   return { ...p, brandingN0: { ...BRANDING_APP_LOGADO_PADRAO, ...(p.brandingN0 || {}) } }
 }
 
+/* ---- Housekeeping da plataforma (achado 11/09/2026, ao reconferir
+   `kitPlatform.ts` contra o Projeto Modelo atual): duas funções novas que o
+   Projeto Modelo ganhou depois do porte original, `verificarVencimentoPrecadastro`
+   e `avisoTrialSeNecessario` — e os parâmetros que elas aplicam
+   (`precadastroMaxDias`, `trialWarning`) JÁ existiam aqui como `GlobalParams`
+   reais, com valor de fábrica genuíno e até tela de edição própria
+   (`ParametrosN0.tsx`, "Prazo do pré-cadastro"; `trialWarning` tem texto
+   padrão pronto) — mas sem NENHUM código que os aplicasse. Ou seja: dois
+   parâmetros editáveis pelo admin que não faziam nada, o tipo de lacuna mais
+   enganosa que existe (pior que "faltando", porque parece que já funciona).
+   Trazidas agora, por causa da decisão do Rafael de trazer tudo que for
+   novo — mesma lógica do Projeto Modelo, adaptada à persistência em Dexie
+   (ver `runPlatformHousekeeping`/`usePlatformN0` abaixo). Nenhuma função de
+   log GLOBAL separada foi trazida (o Projeto Modelo grava tanto em
+   `tenant.accessLog` quanto num `platform.auditLog` à parte) — o MorfoFinP
+   já unifica os dois: `AbaAuditoria` em `DevApp.tsx` lê direto de
+   `tenants[].accessLog`, então só gravar ali já basta pra aparecer em
+   Auditoria, sem duplicar a entrada num log que este produto não tem. */
+/* Pré-cadastro (ou reativação) vencido pelo prazo configurado
+   (`precadastroMaxDias`) — encerra automaticamente e registra em
+   `accessLog` (aparece em Auditoria). Só se aplica a `onboarding ===
+   'pendente_liberacao'`: o Projeto Modelo também cobre `'reativando'`, mas
+   o MorfoFinP não tem esse segundo estado de onboarding (achado nesta
+   rodada — o único fluxo de reativação existente é o de PLANOS, sem relação
+   com onboarding de tenant), por isso a checagem cobre só o estado que este
+   produto realmente tem. */
+export function verificarVencimentoPrecadastro(t: TenantKit, maxDias: number | undefined): Partial<TenantKit> | null {
+  if (!maxDias || t.cancellation) return null
+  if (t.onboarding !== 'pendente_liberacao') return null
+  const desde = t.onboardingSince || t.createdAt
+  if (!desde || (daysUntil(addDays(desde, maxDias)) ?? 0) >= 0) return null
+  return {
+    cancellation: { accessUntil: addDays(todayISO(), -1) },
+    accessLog: [
+      { id: uid(), ts: agoraISO(), action: `Encerrado automaticamente por vencimento de prazo do pré-cadastro (${maxDias} dia(s) sem completar o pagamento)` },
+      ...(t.accessLog || []),
+    ].slice(0, 50),
+  }
+}
+/* Aviso automático no chat, vindo da Morfo, X dias antes do ambiente de
+   teste (trial) expirar — respeita o parâmetro `trialWarning` (dias antes,
+   texto, repetir todo dia ou avisar só uma vez). Mesma regra do Projeto
+   Modelo (item 141 de lá, 2026-08-11): se o aviso NUNCA foi enviado, dispara
+   assim que faltar `diasAntes` dias ou menos — mesmo que o salto de data da
+   ferramenta de teste já tenha passado direto da janela sem nunca disparar
+   — garantindo que o aviso sempre sai pelo menos uma vez; se já foi
+   enviado, só repete dentro da janela original, no modo "repetir todo dia". */
+export function avisoTrialSeNecessario(t: TenantKit, trialWarning: TrialWarningCfg | undefined): Partial<TenantKit> | null {
+  if (t.plan !== 'trial' || !trialWarning || !t.trial) return null
+  const diasAntes = trialWarning.diasAntes ?? 0
+  if (diasAntes <= 0) return null
+  const expiry = addDays(t.trial.startDate, t.trial.days)
+  const diasRestantes = daysUntil(expiry) ?? 0
+  const hoje = todayISO()
+  if (t.trialAvisoUltimoEnvio) {
+    if (!trialWarning.repetirTodoDia) return null
+    if (t.trialAvisoUltimoEnvio === hoje) return null
+    if (diasRestantes < 0 || diasRestantes > diasAntes) return null
+  } else {
+    if (diasRestantes > diasAntes) return null
+  }
+  return {
+    trialAvisoUltimoEnvio: hoje,
+    supportMessages: [...(t.supportMessages || []), { id: uid(), from: 'suporte', text: trialWarning.texto, imageUrl: null, ts: agoraISO(), automatica: true }],
+  }
+}
+/* Roda as duas checagens acima pra todos os tenants da plataforma —
+   idempotente (devolve `null` quando não há nada vencendo, então quem chama
+   sabe que não precisa gravar nada). Usa `paramsGlobais` (não
+   `p.defaultParams` direto) de propósito: mesma classe de bug já documentada
+   no Projeto Modelo (item 215) — uma plataforma persistida ANTES de
+   `trialWarning` existir teria esse campo `undefined`, e sem o merge de
+   fábrica o aviso ficaria permanentemente desligado sem erro nenhum. */
+export function runPlatformHousekeeping(p: PlatformN0): { tenants: TenantKit[] } | null {
+  const globais = paramsGlobais(p)
+  let mudou = false
+  const tenants = p.tenants.map((t) => {
+    let novo = t
+    const patchPrecadastro = verificarVencimentoPrecadastro(novo, globais.precadastroMaxDias)
+    if (patchPrecadastro) { novo = { ...novo, ...patchPrecadastro }; mudou = true }
+    const patchAviso = avisoTrialSeNecessario(novo, globais.trialWarning)
+    if (patchAviso) { novo = { ...novo, ...patchAviso }; mudou = true }
+    return novo
+  })
+  return mudou ? { tenants } : null
+}
+
 /* ---- Persistência (ver ADAPTAÇÃO no topo) ---- */
 //
 // BUG REAL corrigido em 10/09/2026 (achado por teste — G54, não reportado
@@ -709,6 +869,22 @@ export function usePlatformN0(): PlatformN0 {
     jaTentouSemear.current = true
     void salvarPlatformN0(gerarPlatformN0())
   }, [carregando, platformSalva])
+  /* Housekeeping (achado 11/09/2026 — ver bloco de comentário acima de
+     `runPlatformHousekeeping`): reavalia vencimento de pré-cadastro e aviso
+     de fim de teste toda vez que a plataforma é lida OU a data simulada
+     muda. Depende de `config` inteiro (não de `platformSalva`) de propósito:
+     `hojeSimuladoISO` mora no MESMO singleton `db.configuracoes` (ver
+     `hojeSimulado.ts`) — se a checagem dependesse só de `platformSalva`,
+     avançar a data pela ferramenta de teste sem tocar em nenhum tenant não
+     dispararia o efeito, e a funcionalidade continuaria sem nenhuma forma
+     de testar. Idempotente: `runPlatformHousekeeping` devolve `null` quando
+     não há nada vencendo, então isto não entra em loop de gravação. */
+  useEffect(() => {
+    if (carregando || !platformSalva) return
+    const hk = runPlatformHousekeeping(platformSalva)
+    if (hk) void salvarPlatformN0({ ...platformSalva, tenants: hk.tenants })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [carregando, config])
   return comBrandingPadrao(platformSalva ?? gerarPlatformN0())
 }
 export async function salvarPlatformN0(p: PlatformN0) {

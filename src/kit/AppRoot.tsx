@@ -7,6 +7,9 @@ import LoginView from './LoginView'
 import { SimulacaoResolucaoFrame, FerramentasTesteFlutuantes } from './SimulacaoResolucao'
 import { AplicadorDeTema } from './ConfigN1'
 import SimularData from './SimularData'
+import AmbienteBloqueado from './AmbienteBloqueado'
+import { useTenantN1, tenantBlocked } from './kitPlatform'
+import { sair } from './auth'
 
 // Raiz de camadas — REESCRITA em 08/09/2026 (Roteiro de Parametrização
 // Morfo, G59 — "critério de aceite binário do encaixe"). A versão anterior
@@ -50,6 +53,13 @@ export default function AppRoot() {
   // por trás continua a mesma.
   const [ferramentaDataAberta, setFerramentaDataAberta] = useState(false)
 
+  // Tenant N1 (sempre `t0`, ver `TENANT_N1_ID` em `kitPlatform.ts`) — lido
+  // aqui, incondicional a cada render (regra dos hooks), só pra decidir o
+  // gate de bloqueio logo abaixo. `useTenantN1` já é reativo (`useLiveQuery`
+  // por baixo), então um bloqueio/desbloqueio feito pelo N0 troca a tela na
+  // hora, sem precisar de reload.
+  const tenantN1 = useTenantN1()
+
   if (config === CARREGANDO) return null
 
   const n0Ativa = Boolean(config?.sessaoAtivaN0)
@@ -68,6 +78,17 @@ export default function AppRoot() {
     conteudo = <DevApp onEntrarComoTenant={() => setImpersonando(true)} />
   } else if (!n1Ativa) {
     conteudo = <LoginView />
+  } else if (tenantN1 && tenantBlocked(tenantN1)) {
+    // Gate de bloqueio (11/09/2026, lacuna real — achado por investigação:
+    // o app do cliente nunca checava `tenantBlocked()`, então um ambiente
+    // bloqueado manualmente pela Morfo ou por pendência de pagamento além
+    // do prazo de tolerância continuava abrindo o app normal). Kit
+    // (App.jsx ~L7813): este check vem só do lado do login DIRETO do
+    // cliente (`n1Ativa`, sem impersonação) — a sessão N0 impersonando
+    // (`n0Ativa && impersonando`, ramo acima) continua entrando no
+    // ambiente mesmo bloqueado, porque é o próprio suporte da Morfo
+    // acessando pra ajudar a resolver a pendência.
+    conteudo = <AmbienteBloqueado tenant={tenantN1} onLogoff={() => { void sair() }} />
   } else {
     conteudo = <App />
   }

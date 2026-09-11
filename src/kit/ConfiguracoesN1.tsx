@@ -1,5 +1,8 @@
 /* ============================================================================
-   Tela ÚNICA de Configurações do N1 — Kit `ConfiguracoesView` (L4326-L4372).
+   Tela ÚNICA de Configurações do N1 — Projeto Modelo `ConfiguracoesView`.
+   Reconferido em 11/09/2026 contra o Projeto Modelo atual: as 3 sessões, a
+   ordem e os itens de cada uma seguem idênticos; nenhum item novo apareceu
+   desde o merge original — sem divergência.
 
    Por que existe (10/09/2026, pedido do Rafael): até aqui os 13 destinos de
    configuração do MorfoFinP moravam soltos dentro do popover "⋮", numa lista

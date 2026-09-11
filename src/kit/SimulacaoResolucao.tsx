@@ -143,6 +143,18 @@ export function FerramentasTesteFlutuantes({ onAbrirFerramentaData }: { onAbrirF
     fontSize: 18,
   }
 
+  // Corrigido 11/09/2026 (comparação visual pixel a pixel contra o Projeto
+  // Modelo): `left: 12`/`left: 64` fixo é relativo ao viewport de VERDADE,
+  // não à coluna do app (`#root { max-width: 430px }`, sem `transform` —
+  // mesma causa-raiz já documentada no bug do painel N0 em `DevApp.tsx`: só
+  // `max-width` não cria "containing block" pra `position: fixed`). Em tela
+  // larga (desktop) estes 2 botões apareciam colados na borda ESQUERDA de
+  // verdade do navegador, longe da coluna visível do app. O próprio
+  // `.botao-flutuante` (index.css, o "+" de novo lançamento) já resolve isso
+  // pro canto direito com `right: max(16px, calc((100vw - 430px)/2 + 16px))`
+  // — aqui é o mesmo cálculo, espelhado pro canto esquerdo.
+  const esquerda = (offset: number) => `max(${offset}px, calc((100vw - 430px) / 2 + ${offset}px))`
+
   return (
     <>
       <button
@@ -153,7 +165,7 @@ export function FerramentasTesteFlutuantes({ onAbrirFerramentaData }: { onAbrirF
             ? 'Ferramenta de teste MVP: voltar pra largura normal de produção (430px)'
             : 'Ferramenta de teste MVP: alternar pra área simulada WEB (100% da largura do navegador)'
         }
-        style={{ ...base, left: 12, background: web ? '#f59e0b' : 'rgba(0,0,0,0.35)' }}
+        style={{ ...base, left: esquerda(12), background: web ? '#f59e0b' : 'rgba(0,0,0,0.35)' }}
       >
         {web ? '📱' : '🖥️'}
       </button>
@@ -170,7 +182,7 @@ export function FerramentasTesteFlutuantes({ onAbrirFerramentaData }: { onAbrirF
            canto ESQUERDO (12 + 44 + 8 = 64), longe de qualquer botão do
            produto. Mesma classe do bug de 09/09 com a engrenagem flutuante
            interceptando o "Ver" do banner de notificação. */
-        style={{ ...base, left: 12 + FLUT_SIZE + 8, background: dataSimulada ? '#f59e0b' : 'rgba(0,0,0,0.35)' }}
+        style={{ ...base, left: esquerda(12 + FLUT_SIZE + 8), background: dataSimulada ? '#f59e0b' : 'rgba(0,0,0,0.35)' }}
       >
         🕐
       </button>

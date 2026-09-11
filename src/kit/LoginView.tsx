@@ -43,6 +43,21 @@ import { CARIMBO_BUILD } from '../buildInfo'
 //
 // Toda diferença em relação ao texto do Kit está marcada "ADAPTAÇÃO" com o
 // motivo. O que não está marcado é transcrição literal (só com tipos TS).
+//
+// RECONFERIDO em 11/09/2026 contra o Projeto Modelo atual (7855 linhas — os
+// números "Kit LNNN" abaixo são do arquivo de quando este porte foi feito,
+// 09/09/2026, e podem não bater mais com a linha exata de hoje; achar por
+// nome de função, não pelo número). `ForgotPasswordSheet`, `AceitarConviteSheet`,
+// `LoginView`/`LoginViewKit`, `planFeaturesAuto`, `PlanoCard`, `ContratarPacoteFlow`
+// comparados função a função: sem divergência nova — as únicas diferenças
+// continuam sendo as ADAPTAÇÕES já marcadas neste arquivo (login normalizado,
+// `acessoAberto`, cadastro de pessoa física em vez de empresa, carimbo de
+// build). O recurso de convite por LINK real do Projeto Modelo (`gerarLinkPreCadastro`,
+// item 220 de lá) não tem equivalente aqui por desenho — o MorfoFinP cadastra
+// o pré-cadastro direto pelo N0 (`NovoClienteSheet`, `DevApp.tsx`), sem
+// backend nem roteamento por URL (Decisão 6, Backlog #028); `AceitarConviteSheet`
+// fica como no Kit, mas nunca recebe convite de verdade (já documentado acima,
+// "Fica como no-op declarado").
 
 /* =====================================================================
    2. FOLHAS DO LOGIN — Kit L6826-L6894

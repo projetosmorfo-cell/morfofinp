@@ -12,8 +12,9 @@
       esta mesma função — antes eram dois desenhos parecidos, que podiam
       (e iam) discordar um do outro.
 
-   Kit de referência: `TenantBrandBar`, L916-L950 — de onde vêm `logoTopo`,
-   `logoModo` (com os TRÊS valores, incluindo `so_nome`) e `logoPos`. */
+   Referência no Projeto Modelo: `TenantBrandBar` — de onde vêm `logoTopo`,
+   `logoModo` (com os TRÊS valores, incluindo `so_nome`) e `logoPos`.
+   Reconferido em 11/09/2026: sem divergência. */
 import type { ReactNode } from 'react'
 import type { TenantKit } from './kitPlatform'
 
@@ -64,7 +65,7 @@ export default function ZonasIdentidade({ tenant, altura = 17 }: { tenant?: Tena
       ? <img key="lq" src={i.logoQuadrada} alt="" style={{ height: altura, width: altura, borderRadius: 4, objectFit: 'contain', display: 'block', flexShrink: 0 }} />
       : null)
   // Com a logo horizontal o nome não é escrito de novo — ele já faz parte da
-  // arte (mesma regra do Kit, L942-L947).
+  // arte (mesma regra do Projeto Modelo).
   const escondeNome = (i.topo === 'horizontal' && !!i.logoHoriz) || (i.modo === 'so_logo' && !!i.logoQuadrada)
   const elNome: ReactNode = !escondeNome && i.nome
     ? <span key="nm" className="barra-marca-n1-nome" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{i.nome}</span>

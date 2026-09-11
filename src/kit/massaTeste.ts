@@ -4,10 +4,9 @@ import { addDays, todayISO, type DevUserN0, type PlatformN0, type TenantKit } fr
 import type { PlanoRegistro } from '../db'
 
 // Massa de dados fictícios e limpeza em massa (10/09/2026, Decisão 55 —
-// Parte B). Transcrição adaptada do Kit `esqueleto-morfo-v1.jsx`:
+// Parte B). Transcrição adaptada do Projeto Modelo:
 // `gerarPlanosFicticios`/`gerarEmpresasFicticias`/`gerarUsuariosMorfoFicticios`
-// (usadas pelo grupo "testeAdm", L1861-L1870) e `gerarAmbienteTeste` (grupo
-// "teste", L1835).
+// (usadas pelo grupo "testeAdm") e `gerarAmbienteTeste` (grupo "teste").
 //
 // ADAPTAÇÃO CENTRAL, registrada (G44 regra 3 — a MECÂNICA é a do Kit, o
 // DADO é o do produto): o Kit popula `tenant.env.entidadesA` (registros de
@@ -26,13 +25,13 @@ import type { PlanoRegistro } from '../db'
 // é justamente ela que impede misturar massa fictícia com os lançamentos
 // reais do Rafael sem perceber.
 
-/* ---- Kit L1821 (`tenantTemRegistros`) ---- */
+/* ---- Projeto Modelo (`tenantTemRegistros`) ---- */
 export function tenantTemRegistros(t: TenantKit, qtdLancamentosReais: number) {
   if (t.real) return qtdLancamentosReais > 0
   return (t.env?.registros || 0) > 0
 }
 
-/* ---- Kit L1865 (`gerarPlanosFicticios`) ---- */
+/* ---- Projeto Modelo (`gerarPlanosFicticios`) ---- */
 export function gerarPlanosFicticios(): Omit<PlanoRegistro, 'id'>[] {
   return [
     { nome: 'Bronze (teste)', valorMensal: 49, funcionalidades: ['Plano fictício de teste', 'Gerado pela massa de dados'], ativo: true, ficticio: true },
@@ -46,13 +45,23 @@ const SOBRENOMES = ['Lima', 'Souza', 'Prado', 'Nogueira', 'Camargo', 'Batista', 
 const PRIMEIROS = ['Marina', 'Otávio', 'Helena', 'Bruno', 'Tereza', 'Igor', 'Lívia', 'Caio', 'Sofia', 'Murilo']
 
 /* ---- Kit L1866 (`gerarEmpresasFicticias`): empresas de teste com
-   mensalidade de até 12 meses, mix de situações e conversa de chat. ---- */
+   mensalidade de até 12 meses, mix de situações e conversa de chat.
+   RECONFERIDO em 11/09/2026: o Projeto Modelo hoje gira entre 6 situações
+   (pagante/trial/bloqueada/encerrando/pré-cadastro/encerrada, achado desta
+   rodada — antes eram só 4 aqui, faltavam "pré-cadastro" e "encerrada"). As
+   duas que faltavam testam telas reais do MorfoFinP que sem elas nunca
+   recebiam dado de teste: o alerta de "pendente de liberação" em
+   DevInicioScreen (`onboarding: 'pendente_liberacao'`) e uma assinatura já
+   encerrada de verdade (não só "encerrando"), com o registro de auditoria
+   correspondente em `accessLog`. Trazido agora — mesma trava de sempre (só
+   gera em base vazia), nenhum dado real é tocado. ---- */
 export function gerarEmpresasFicticias(qtd: number, planosFic: { id?: number; valorMensal: number }[], offset: number): TenantKit[] {
   const hoje = todayISO()
+  const SITUACOES = ['pagante', 'trial', 'bloqueada', 'encerrando', 'precadastro', 'encerrada'] as const
   return Array.from({ length: qtd }, (_, i) => {
     const n = offset + i + 1
     const nome = `${NOMES_EMPRESA[n % NOMES_EMPRESA.length]} ${['Comércio', 'Serviços', 'Indústria', 'Log'][n % 4]} ${n} (teste)`
-    const situacao = n % 4
+    const situacao = SITUACOES[n % SITUACOES.length]
     const plano = planosFic.length ? planosFic[n % planosFic.length] : null
     const valor = plano ? plano.valorMensal : [79, 129, 199, 249][n % 4]
     const meses = 3 + (n % 10)
@@ -69,13 +78,29 @@ export function gerarEmpresasFicticias(qtd: number, planosFic: { id?: number; va
       hasWhatsapp: true,
       email: `contato${n}@exemplo-teste.com.br`,
       createdAt: addDays(hoje, -30 * meses),
-      plan: situacao === 1 ? 'trial' : 'pagante',
+      plan: situacao === 'trial' ? 'trial' : 'pagante',
       planId: plano?.id != null ? String(plano.id) : null,
-      manualBlock: situacao === 2,
-      onboarding: 'completo',
-      trial: situacao === 1 ? { days: 15, startDate: addDays(hoje, -(n % 20)) } : null,
-      billing: situacao === 1 ? null : { monthlyValue: valor, dueDay: 5 + (n % 20), toleranceDays: 5, installments },
-      cancellation: situacao === 3 ? { accessUntil: addDays(hoje, 20 + (n % 10)) } : null,
+      manualBlock: situacao === 'bloqueada',
+      onboarding: situacao === 'precadastro' ? 'pendente_liberacao' : 'completo',
+      /* Achado 11/09/2026 (reconciliação `kitPlatform.ts`, housekeeping):
+         se este campo não fosse gravado, `onboardingSince` cairia no
+         fallback `createdAt` — que pra esta situação fica 90-360 dias no
+         passado (ver `createdAt` acima), vencendo o prazo padrão de 15 dias
+         no instante seguinte à geração e encerrando o tenant fictício antes
+         do admin sequer ver o alerta "pendente de liberação" que ele existe
+         pra testar. Gravado como "hoje" — igual um pré-cadastro de verdade,
+         que nasce pendente no dia em que é criado. */
+      onboardingSince: situacao === 'precadastro' ? hoje : undefined,
+      trial: situacao === 'trial' ? { days: 15, startDate: addDays(hoje, -(n % 20)) } : null,
+      billing: situacao === 'trial' ? null : { monthlyValue: valor, dueDay: 5 + (n % 20), toleranceDays: 5, installments },
+      cancellation:
+        situacao === 'encerrando' ? { accessUntil: addDays(hoje, 20 + (n % 10)) }
+        : situacao === 'encerrada' ? { accessUntil: addDays(hoje, -(5 + (n % 30))) }
+        : null,
+      accessLog:
+        situacao === 'encerrada'
+          ? [{ id: uid(), ts: new Date().toISOString(), action: 'Assinatura encerrada pelo cliente (dado fictício de teste)' }]
+          : [],
       supportAuthorized: n % 2 === 0,
       supportMessages: n % 3 === 0 ? [
         { id: uid(), from: 'cliente', text: 'Bom dia! Tenho uma dúvida sobre a cobrança deste mês.', ts: addDays(hoje, -(2 + (n % 5))) + 'T09:30:00' },
@@ -85,14 +110,13 @@ export function gerarEmpresasFicticias(qtd: number, planosFic: { id?: number; va
       chatLastReadMorfo: null,
       users: [{ id: uid(), name: `${PRIMEIROS[n % PRIMEIROS.length]} ${SOBRENOMES[n % SOBRENOMES.length]}`, login: `teste${n}`, senha: '1234', status: 'ativo', perfilId: 'admin', createdAt: addDays(hoje, -30 * meses) }],
       userLimit: 3,
-      accessLog: [],
       ficticio: true,
     }
     return t
   })
 }
 
-/* ---- Kit L1867 (`gerarUsuariosMorfoFicticios`) ---- */
+/* ---- Projeto Modelo (`gerarUsuariosMorfoFicticios`) ---- */
 export function gerarUsuariosMorfoFicticios(qtd: number, offset: number): DevUserN0[] {
   return Array.from({ length: qtd }, (_, i) => {
     const n = offset + i + 1
@@ -105,7 +129,7 @@ export function gerarUsuariosMorfoFicticios(qtd: number, offset: number): DevUse
   })
 }
 
-/* ---- Kit L1835 (`gerarAmbienteTeste`): massa DENTRO do ambiente de um
+/* ---- Projeto Modelo (`gerarAmbienteTeste`): massa DENTRO do ambiente de um
    cliente. Para o tenant real, isso são lançamentos de verdade no Dexie
    (marcados `ficticio: true`); para um tenant de demonstração do painel, é
    a contagem no `env` dele (ver ADAPTAÇÃO no topo). ---- */
@@ -157,7 +181,7 @@ export async function apagarTodosLancamentos() {
   return n
 }
 
-/* Quantos registros de teste existem hoje na base do N0 (Kit L1927-L1931) */
+/* Quantos registros de teste existem hoje na base do N0 (Projeto Modelo) */
 export function contarRegistrosTesteN0(platform: PlatformN0, planos: PlanoRegistro[]) {
   return {
     empresas: platform.tenants.filter((t) => t.ficticio),

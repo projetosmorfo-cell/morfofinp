@@ -1,16 +1,22 @@
 import { useState } from 'react'
-import { usePlanos, recursosAutomaticos, type Plano } from './planos'
+import { usePlanos, usePlanoPadrao, recursosAutomaticos, type Plano } from './planos'
 import { usePlanoAtual, salvarPlanoId } from './planoAtual'
 
 // Modelo de negócio Completo (05/09/2026, Roteiro de Parametrização Morfo,
-// Etapa 5) — adaptado de `MinhaAssinaturaView`/`TrocarPlanoSheet` do Kit de
-// Estrutura Mínima. Front-end primeiro, backend depois (Decisão 6): sem
-// backend real (Backlog #028), não existe cobrança, parcela nem downgrade
-// pró-rata de verdade — esta tela valida só o FLUXO (ver plano atual, trocar,
-// encerrar), com plano/preço placeholder (ver `src/kit/planos.ts`). Acesso
-// temporário via Manutenção → "Minha Assinatura", mesmo padrão do painel N0
-// (Etapa 4) — não entra no menu de engrenagem principal ainda, porque o
-// lugar definitivo disso é o "Ambiente Logado" da Etapa 8.
+// Etapa 5) — adaptado de `MinhaAssinaturaView`/`TrocarPlanoSheet`/
+// `EncerrarPlanoSheet` do Kit de Estrutura Mínima. Front-end primeiro,
+// backend depois (Decisão 6): sem backend real (Backlog #028) não existe
+// cobrança, parcela nem gateway de pagamento de verdade — mas TROCAR e
+// ENCERRAR plano não dependem de cobrar ninguém (o app roda 100% local em
+// Dexie), então aqui a troca de `planoId` é real, não só um teste de fluxo
+// (reconciliação de 11/09/2026, cluster "Minha Assinatura": a rodada
+// anterior tinha marcado o arquivo inteiro como placeholder por nome de
+// função, sem reler o código — reaberto e corrigido). Plano/preço em si
+// continuam placeholder (Rafael nunca definiu catálogo real, ver
+// `src/kit/planos.ts`). Acesso temporário via Manutenção → "Minha
+// Assinatura", mesmo padrão do painel N0 (Etapa 4) — não entra no menu de
+// engrenagem principal ainda, porque o lugar definitivo disso é o "Ambiente
+// Logado" da Etapa 8.
 function CartaoPlano({
   plano,
   selecionado,
@@ -29,6 +35,7 @@ function CartaoPlano({
         display: 'block',
         width: '100%',
         textAlign: 'left',
+        position: 'relative',
         border: `1.5px solid ${selecionado ? 'var(--azul)' : 'var(--borda)'}`,
         borderRadius: 12,
         padding: 14,
@@ -37,8 +44,31 @@ function CartaoPlano({
         marginTop: 0,
       }}
     >
+      {/* Kit L7565 (`PlanoCard`): selo "MAIS ESCOLHIDO" pro plano marcado `destaque` —
+          faltava aqui, embora o campo já exista em `PlanoRegistro` e já seja usado com o
+          mesmo texto em `LoginView.tsx`. */}
+      {plano.destaque && (
+        <span
+          style={{
+            position: 'absolute',
+            top: -10,
+            right: 14,
+            background: 'var(--amarelo)',
+            color: '#fff',
+            fontSize: 10,
+            fontWeight: 800,
+            padding: '3px 10px',
+            borderRadius: 999,
+          }}
+        >
+          MAIS ESCOLHIDO
+        </span>
+      )}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
-        <strong style={{ fontSize: 14.5 }}>{plano.nome}</strong>
+        <div>
+          <strong style={{ fontSize: 14.5 }}>{plano.nome}</strong>
+          {plano.porte && <div className="texto-fraco" style={{ fontSize: 11.5 }}>Porte {plano.porte}</div>}
+        </div>
         <span style={{ fontSize: 14.5, fontWeight: 800, color: 'var(--azul)', whiteSpace: 'nowrap' }}>
           {plano.gratuito
             ? `Grátis · ${plano.validadeDias ?? 0} dias`
@@ -68,12 +98,17 @@ function TrocarPlanoModal({
   planoAtualId,
   onFechar,
   onConfirmar,
+  onEncerrar,
 }: {
   planoAtualId: number | undefined
   onFechar: () => void
   onConfirmar: (planoId: number) => void
+  onEncerrar?: () => void
 }) {
   const planos = usePlanos()
+  // Kit L7614 (`TrocarPlanoSheet`): a lista de "trocar para" não mostra o plano atual —
+  // ele já está selecionado por definição, oferecê-lo de novo só confunde.
+  const planosParaTrocar = planos.filter((p) => p.id !== planoAtualId)
   const [selecionadoId, setSelecionadoId] = useState(planoAtualId)
   return (
     <div className="modal-fundo" onClick={onFechar}>
@@ -90,9 +125,13 @@ function TrocarPlanoModal({
           </button>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
-          {planos.map((p) => (
-            <CartaoPlano key={p.id} plano={p} selecionado={p.id === selecionadoId} onSelecionar={() => setSelecionadoId(p.id)} />
-          ))}
+          {planosParaTrocar.length > 0 ? (
+            planosParaTrocar.map((p) => (
+              <CartaoPlano key={p.id} plano={p} selecionado={p.id === selecionadoId} onSelecionar={() => setSelecionadoId(p.id)} />
+            ))
+          ) : (
+            <p className="texto-fraco" style={{ marginTop: 0 }}>Não há outro plano cadastrado pelo painel N0 pra trocar agora.</p>
+          )}
         </div>
         <button
           type="button"
@@ -104,15 +143,57 @@ function TrocarPlanoModal({
           Confirmar troca
         </button>
         <p className="texto-fraco" style={{ fontSize: 11.5, marginTop: 10 }}>
-          Placeholder: sem cobrança real ainda (depende do backend, Backlog #028) — troca só muda qual
-          plano esta tela mostra como atual.
+          A troca já muda de verdade qual plano fica marcado como o seu — sem cobrança automática
+          ainda, pois isso depende do gateway de pagamento (Backlog #028).
         </p>
+        {/* Kit L7635 (`TrocarPlanoSheet`, `onEncerrar`): atalho pra encerrar direto da tela de troca,
+            sem precisar voltar pra Minha Assinatura primeiro. */}
+        {onEncerrar && planoAtualId !== undefined && (
+          <button
+            type="button"
+            onClick={onEncerrar}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 6,
+              width: '100%',
+              background: 'none',
+              border: 'none',
+              color: 'var(--vermelho)',
+              fontSize: 12.5,
+              fontWeight: 700,
+              cursor: 'pointer',
+              padding: '14px 0 0',
+              marginTop: 0,
+            }}
+          >
+            ✕ Encerrar assinatura
+          </button>
+        )}
       </div>
     </div>
   )
 }
 
-function EncerrarPlanoModal({ onFechar, onConfirmar }: { onFechar: () => void; onConfirmar: () => void }) {
+// Kit L7580 (`EncerrarPlanoSheet`): lá o encerramento é uma DATA futura (acesso continua
+// liberado até o fim do ciclo já pago, com "reativar" antes disso) porque existe cobrança e
+// parcela de verdade por trás. Aqui não existe backend de cobrança (Backlog #028) — não há
+// ciclo pago, nem data de corte, nem "reativar" pra desfazer, então adaptar o texto pra uma
+// data futura seria inventar um dado que não existe. O que É real: confirmar aqui troca o
+// `planoId` na hora, sem cobrança, pro plano padrão (`usePlanoPadrao`) — é isso que o texto
+// abaixo descreve pro usuário, sem expor jargão interno de roadmap.
+function EncerrarPlanoModal({
+  plano,
+  planoDestino,
+  onFechar,
+  onConfirmar,
+}: {
+  plano: Plano | undefined
+  planoDestino: Plano | undefined
+  onFechar: () => void
+  onConfirmar: () => void
+}) {
   const [entendi, setEntendi] = useState(false)
   return (
     <div className="modal-fundo" onClick={onFechar}>
@@ -129,8 +210,10 @@ function EncerrarPlanoModal({ onFechar, onConfirmar }: { onFechar: () => void; o
           </button>
         </div>
         <p className="texto-fraco" style={{ marginTop: 0 }}>
-          Placeholder: sem backend real ainda, não existe data de corte de acesso nem bloqueio de
-          verdade (Backlog #028) — confirmar aqui só volta esta tela pro plano padrão.
+          Ao confirmar, você sai do <strong>{plano?.nome || 'plano atual'}</strong> agora — sem cobrança
+          adicional — e volta pro plano padrão
+          {planoDestino ? <> (<strong>{planoDestino.nome}</strong>)</> : ''}. Não há período de carência
+          nem opção de reativar o plano anterior: pra voltar, é preciso trocar de plano de novo.
         </p>
         <button
           type="button"
@@ -147,7 +230,9 @@ function EncerrarPlanoModal({ onFechar, onConfirmar }: { onFechar: () => void; o
               flexShrink: 0,
             }}
           />
-          <span style={{ fontSize: 12.5, fontWeight: 600, textAlign: 'left' }}>Entendi que isso é só um teste de fluxo</span>
+          <span style={{ fontSize: 12.5, fontWeight: 600, textAlign: 'left' }}>
+            Entendo que perco o {plano?.nome || 'plano atual'} agora, sem poder desfazer
+          </span>
         </button>
         <button
           type="button"
@@ -165,6 +250,11 @@ function EncerrarPlanoModal({ onFechar, onConfirmar }: { onFechar: () => void; o
 export default function MinhaAssinatura({ aoVoltar }: { aoVoltar: () => void }) {
   const planoAtual = usePlanoAtual()
   const planos = usePlanos()
+  // `usePlanoPadrao()` (o plano `destaque`, com fallback pro primeiro cadastrado) — igual ao
+  // Kit, que também trata "destaque" como plano-alvo padrão (ex.: L7655, `ContratarPacoteFlow`).
+  // Antes desta correção, encerrar assinatura mandava direto pro `planos[0]`, ou seja, o plano de
+  // MENOR id no banco — não necessariamente o padrão pretendido pelo N0.
+  const planoPadrao = usePlanoPadrao()
   const [trocarAberto, setTrocarAberto] = useState(false)
   const [encerrarAberto, setEncerrarAberto] = useState(false)
 
@@ -178,9 +268,9 @@ export default function MinhaAssinatura({ aoVoltar }: { aoVoltar: () => void }) 
       </div>
 
       <p className="texto-fraco">
-        Modelo de negócio Completo (Roteiro de Parametrização Morfo, Etapa 5) — front-end de validação
-        do fluxo, sem plano/preço real definido ainda e sem cobrança de verdade (depende do backend,
-        Backlog #028). Planos gerenciados pelo painel N0 (G59).
+        Planos gerenciados pela Morfo. Trocar ou encerrar aqui já muda de verdade qual plano fica
+        marcado como o seu — sem cobrança automática ainda, pois isso depende do gateway de
+        pagamento.
       </p>
 
       <h2 style={{ marginTop: 0 }}>Plano atual</h2>
@@ -220,13 +310,19 @@ export default function MinhaAssinatura({ aoVoltar }: { aoVoltar: () => void }) 
             salvarPlanoId(planoId)
             setTrocarAberto(false)
           }}
+          onEncerrar={() => {
+            setTrocarAberto(false)
+            setEncerrarAberto(true)
+          }}
         />
       )}
-      {encerrarAberto && planos[0]?.id !== undefined && (
+      {encerrarAberto && planoPadrao?.id !== undefined && (
         <EncerrarPlanoModal
+          plano={planoAtual}
+          planoDestino={planoPadrao}
           onFechar={() => setEncerrarAberto(false)}
           onConfirmar={() => {
-            salvarPlanoId(planos[0].id as number)
+            salvarPlanoId(planoPadrao.id as number)
             setEncerrarAberto(false)
           }}
         />

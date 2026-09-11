@@ -29,6 +29,14 @@ import { useEffect, useState } from 'react'
 // nenhum wrapper de transição de tela com transform hoje, mas por
 // segurança `<GuidedTour>` é renderizado no nível mais alto de `App.tsx`,
 // como o último filho.
+//
+// CORREÇÃO (reabertura método novo, 11/09/2026): a passagem anterior conferiu
+// "o motor existe e funciona parecido", mas não pedaço a pedaço. Achado real:
+// o div do recorte/contorno tinha `pointerEvents: 'none'`, deixando cliques
+// atravessarem pro elemento real embaixo — o Kit bloqueia clique de propósito
+// dentro do recorte ("olhe, não toque", comentário do Kit em `GuidedTour`),
+// pra nunca disparar uma ação real sem querer no meio do tour guiado.
+// Corrigido removendo o `pointerEvents: 'none'` (ver o div do recorte abaixo).
 export interface PassoTour {
   dataTour?: string
   tela?: string
@@ -123,6 +131,11 @@ export default function GuidedTour({
           <div style={{ position: 'fixed', left: 0, top: recorte.top, width: Math.max(0, recorte.left), height: recorte.height, background: corMascara }} />
           <div style={{ position: 'fixed', left: recorte.left + recorte.width, top: recorte.top, right: 0, height: recorte.height, background: corMascara }} />
           <div style={{ position: 'fixed', left: 0, top: recorte.top + recorte.height, right: 0, bottom: 0, background: corMascara }} />
+          {/* CORREÇÃO (reabertura método novo, 11/09/2026): este div tinha `pointerEvents: 'none'`, deixando
+              cliques atravessarem pro elemento real destacado embaixo — o Kit desenha o recorte "olhe, não
+              toque" de propósito (bloqueador transparente sobre o próprio recorte, ver GuidedTour do Kit,
+              L4045-4047), pra nunca disparar uma ação real sem querer no meio do tour. Sem `pointerEvents`
+              aqui (padrão "auto"), o próprio box do contorno volta a bloquear o clique, igual ao Kit. */}
           <div
             style={{
               position: 'fixed',
@@ -133,7 +146,6 @@ export default function GuidedTour({
               borderRadius: 10,
               border: '2px solid var(--azul)',
               boxShadow: '0 0 0 3px rgba(59,130,246,0.25)',
-              pointerEvents: 'none',
             }}
           />
         </>

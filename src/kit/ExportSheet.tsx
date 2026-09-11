@@ -1,22 +1,31 @@
 /* ============================================================================
-   Exportação — transcrição do Kit de Estrutura Mínima (Morfo)
-   `esqueleto-morfo-v1.jsx` (7855 linhas, KIT_BUILD 2.0, arquivo desta rodada).
+   Exportação — transcrição do Projeto Modelo (`esqueleto-morfo-v1.jsx`).
 
    Por que este arquivo existe: G44 regra 11b do Roteiro de Parametrização
    Morfo exige `ExportSheet` em TODA tela de listagem/resumo/dashboard, N0 e
-   N1 — inclusive nas telas de negócio próprias do produto. Até esta rodada o
-   MorfoFinP não tinha NENHUMA exportação (o nome só aparecia num comentário
-   em `indicadoresKit.tsx`, sem componente por trás).
+   N1 — inclusive nas telas de negócio próprias do produto. Até a rodada de
+   10/09/2026 o MorfoFinP não tinha NENHUMA exportação (o nome só aparecia
+   num comentário em `indicadoresKit.tsx`, sem componente por trás).
 
-   Peças transcritas, com a linha de origem no Kit:
-     L3114 bytesCP1252 · L3096 csvEscape · L3097 toCSV · L3123 exportCSV
-     L3131 csvGraficos · L3236 PDF_CORES · L3237 pdfFmtValor · L3242 svgGrafico
-     L3296 exportPDF · L2700 whatsappLink · L2717 EnvioCanais
-     L102  RestrictionsContext · L3361 ExportSheet
+   Peças transcritas (citadas pelo nome da função no Projeto Modelo, não por
+   número de linha — o esqueleto muda de linha a cada rodada):
+     bytesCP1252 · csvEscape · toCSV · exportCSV · csvGraficos · PDF_CORES
+     pdfFmtValor · svgGrafico · exportPDF · whatsappLink · EnvioCanais
+     RestrictionsContext · ExportSheet
+
+   RECONFERIDO em 11/09/2026, função por função contra o Projeto Modelo
+   atual: `exportCSV`/`toCSV`/`bytesCP1252`/`whatsappLink`/`EnvioCanais`
+   idênticos (fora as ADAPTAÇÕES já marcadas abaixo). O Projeto Modelo ganhou
+   um campo novo em `RestrictionsContext` (`locationLimit`, item 219,
+   2026-08-20) — é limite de "pátios/depósitos" do plano, conceito que não
+   existe no MorfoFinP (app de finanças pessoais, sem pátio/depósito) e não é
+   usado dentro de `ExportSheet`/`EnvioCanais` em si (só passado adiante no
+   nível do app) — não se aplica aqui, mesmo critério já usado noutros
+   achados desta reconciliação (recurso de outro domínio de produto).
 
    ADAPTAÇÕES (G44 regra 3), todas marcadas com "ADAPTAÇÃO" no ponto exato:
    nome do produto no cabeçalho do CSV/PDF/texto compartilhado, e tipagem
-   TypeScript dos parâmetros (o Kit é `.jsx` sem tipos).
+   TypeScript dos parâmetros (o Projeto Modelo é `.jsx` sem tipos).
    Nada foi resumido, cortado ou "deixado pra depois".
    ========================================================================= */
 import { createContext, useContext, useEffect, useState } from 'react'

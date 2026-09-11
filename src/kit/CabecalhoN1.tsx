@@ -1,11 +1,13 @@
-/* Linha de título das telas do N1 com a fileira de ícones do Kit à direita
-   (`StandardTopIcons`, Kit L5667 — Buscar · Chat · Exportar · Incluir, nessa
-   ordem). Até esta rodada as telas do N1 tinham só o `<h1>` solto dentro do
-   `.cabecalho-fixo`; item 18 do CONTRATO DE EXECUÇÃO e G44 regra 11b pedem a
-   exportação em toda tela de listagem/resumo, no lugar padrão do Kit.
+/* Linha de título das telas do N1 com a fileira de ícones do Projeto Modelo à
+   direita (`StandardTopIcons` — Buscar · Chat · Exportar · Incluir, nessa
+   ordem; ver `TopoIcones.tsx`). Até a rodada de 10/09/2026 as telas do N1
+   tinham só o `<h1>` solto dentro do `.cabecalho-fixo`; item 18 do CONTRATO DE
+   EXECUÇÃO e G44 regra 11b pedem a exportação em toda tela de
+   listagem/resumo, no lugar padrão do Projeto Modelo.
 
    Fica num arquivo próprio (e não dentro de cada tela) porque são 7 telas
-   usando exatamente a mesma linha — o Kit também tem um componente só. */
+   usando exatamente a mesma linha — o Projeto Modelo também tem um
+   componente só. Reconferido em 11/09/2026: sem divergência. */
 import type { ReactNode } from 'react'
 import { IconesDeTela } from './TopoIcones'
 import { ESPACO_LINHA } from './PadraoUI'

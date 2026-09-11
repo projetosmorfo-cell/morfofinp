@@ -1,6 +1,7 @@
-// Logos oficiais do Kit — copiadas LITERALMENTE das linhas 89, 92 e 100 de
-// `Kit de Estrutura Mínima (Morfo) - esqueleto-morfo.jsx` (versão recebida em
-// 09/09/2026, G63), sem nenhuma alteração no conteúdo do SVG/base64.
+// Logos oficiais do Projeto Modelo — copiadas LITERALMENTE (constantes
+// MORFO_SIMBOLO_URI/MORFO_HORIZONTAL_URI/PRODUTO_WORDMARK_URI do esqueleto,
+// versão recebida em 09/09/2026, G63), sem nenhuma alteração no conteúdo do
+// SVG/base64. Reconferido em 11/09/2026: valores continuam idênticos.
 // MORFO_* = marca Morfo (mesma em todo produto, G55). PRODUTO_WORDMARK_URI = o
 // wordmark de exemplo do Kit ("morfoMod"); no MorfoFinP ele nunca aparece,
 // porque `platform.branding.produtoExterna/produtoTopo` (mecanismo de

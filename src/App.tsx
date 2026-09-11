@@ -24,6 +24,7 @@ import ZonasIdentidade from './kit/IdentidadeTenant'
 import {
   useTenantN1, hasUnreadTenant, usePlatformN0,
   normalizarMenuPosModo, posicaoMenuDe, ITENS_NAV_N1, ITEM_PROTEGIDO_N1,
+  usePosicaoN1Proprio, useMenuPosN1Proprio,
   type TenantKit, type MenuPosModo, type PosicaoMenu,
 } from './kit/kitPlatform'
 import type { ItemMenuTopo } from './kit/TopoIcones'
@@ -437,14 +438,30 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: { onVoltar: (
      N0 → Parâmetros → Layout do Sistema → "Menus do N1"). Decide, menu a
      menu, se ele fica na barra do rodapé, dentro do "⋮" ou em lugar nenhum.
      Sem nada configurado, cada item cai no padrão dele (`ITENS_NAV_N1`), que
-     é exatamente o app como sempre foi. */
+     é exatamente o app como sempre foi.
+
+     Camada extra (11/09/2026, achado real da comparação pixel a pixel: o
+     Kit tem uma 2ª camada aqui, `tenant.layoutConfig` por cima do padrão da
+     plataforma — `LayoutTenantScreen`, autoatendimento do PRÓPRIO ambiente
+     — e o MorfoFinP só tinha a de cima). `posicaoN1Proprio`/
+     `menuPosN1Proprio` (ver `kit/kitPlatform.ts`) são essa 2ª camada:
+     aplicadas DEPOIS do padrão da Morfo (`layoutCfg?.posicaoN1`), na mesma
+     ordem do Kit (tenant vence, Morfo é só o "chão"). `posicaoMenuDe` já
+     resolve "sem nada gravado, cai no padrão" nos dois níveis — chamado 2x
+     em cascata: 1ª vez com o padrão da Morfo tratado como "padrão do
+     item", 2ª vez com o mapa do próprio ambiente por cima disso. Editado
+     em `screens/Manutencao.tsx` → "Layout e Menus" → "Posição dos menus",
+     atrás do gate de plano (`Plano.restricoes.layoutPersonalizado`). */
   const layoutCfg = usePlatformN0().layoutConfig
+  const posicaoProprio = usePosicaoN1Proprio()
+  const menuPosProprio = useMenuPosN1Proprio()
   const posDeMenu = (chave: string): PosicaoMenu => {
     const item = ITENS_NAV_N1.find((i) => i.key === chave)
     if (!item) return 'rodape'
-    return posicaoMenuDe(layoutCfg?.posicaoN1, item, ITEM_PROTEGIDO_N1)
+    const padraoMorfo = posicaoMenuDe(layoutCfg?.posicaoN1, item, ITEM_PROTEGIDO_N1)
+    return posicaoMenuDe(posicaoProprio, { key: item.key, padrao: padraoMorfo }, ITEM_PROTEGIDO_N1)
   }
-  const menuPosN1 = normalizarMenuPosModo(layoutCfg?.menuPosN1?.modo)
+  const menuPosN1 = normalizarMenuPosModo(menuPosProprio?.modo ?? layoutCfg?.menuPosN1?.modo)
   // Telas que ainda EXISTEM pra navegação (barra ou "⋮"); só 'oculto' some.
   const telasVisiveis = telasOrdenadas.filter((t) => posDeMenu(t) !== 'oculto')
 
@@ -699,6 +716,7 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: { onVoltar: (
               aoVoltar={fecharConfig}
               onAbrirTour={() => setTourAberto(true)}
               onAbrirFerramentasTeste={() => setConfigAberta('ferramentasTeste')}
+              onIrParaAssinatura={() => { setVoltaPara('layout'); setConfigAberta('assinatura') }}
             />
           ) : (
             <Manutencao
@@ -707,6 +725,7 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: { onVoltar: (
               aoVoltar={fecharConfig}
               onAbrirTour={() => setTourAberto(true)}
               onAbrirFerramentasTeste={() => setConfigAberta('ferramentasTeste')}
+              onIrParaAssinatura={() => { setVoltaPara(configAberta); setConfigAberta('assinatura') }}
             />
           )
         ) : (

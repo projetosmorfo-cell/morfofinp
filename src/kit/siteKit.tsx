@@ -9,6 +9,19 @@ import produtoLogoUrl from '../assets/morfofinp-padrao-branco.svg'
 // porque o painel N0 → Parâmetros → "Site MorfoFinP" usa as mesmas peças na
 // prévia, exatamente como o Kit faz em L2146-L2343). Nada aqui é do produto —
 // exceto `NOME_PRODUTO` (L211 do Kit) e o bloco `montarPlatformSite` no fim.
+//
+// RECONFERIDO em 11/09/2026 contra o Projeto Modelo atual (achar por nome de
+// função, os "Kit LNNN" acima são de 09/09): `siteWebLayoutDe`, `fraseCorStyle`,
+// `sitePagesDe`, `paginasSiteComLogin`, `logoHeaderSite`, `loginPageCfgDe`,
+// `BlocoLogosLogin`, `SiteNavHorizontalWeb`, `SiteNavVerticalWeb` idênticos
+// função a função, incluindo `SiteHeaderWeb` — 1 diferença de TEXTO só, sem
+// diferença de comportamento: esta versão computa `fraseEl` já checando
+// `h.frasePos !== 'ocultar'` explicitamente; o Projeto Modelo não tem esse
+// checagem explícita, mas chega no mesmo resultado — "ocultar" não bate com
+// nenhuma das 5 posições específicas (acima/abaixo/esquerda/direita/centro)
+// que de fato inserem `fraseEl` na árvore, então a frase já ficava escondida
+// por exclusão. O parâmetro "Ocultar" em Parâmetros N0 → Site → Cabeçalho do
+// web já existe no Kit atual (item 186 de lá) — não é achado novo.
 
 /* Kit L211: NOME_PRODUTO = "MorfoMod" no Kit → "MorfoFinP" aqui (identidade
    do produto, a única coisa que muda por produto — G55). */

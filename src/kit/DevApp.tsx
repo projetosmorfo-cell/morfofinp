@@ -31,6 +31,7 @@ import {
   installmentDisplayStatus,
   fmtDate,
   hasUnreadMorfo,
+  chatDiaLabel,
   filtrarTenantsPorDados,
   OPCOES_FILTRO_DADOS,
   FUNCOES_PERFIL_N0,
@@ -55,13 +56,14 @@ import {
   type FiltroDados,
   type TenantKit,
   type DevUserN0,
+  type Parcela,
 } from './kitPlatform'
 import { PerfisAcessoContent } from './PerfisAcesso'
 import { LayoutContext, TopIconMenu, UserHoverIcon, IconesDeTela, type ItemMenuTopo } from './TopoIcones'
 import { ExportSheet, type ExportRow } from './ExportSheet'
-import { RotateCcw, LogOut, AlertTriangle, Timer, ShieldAlert, UserPlus, Plus, FileBadge, Settings, MessageCircle } from 'lucide-react'
-import { alpha, uid, GREEN, AMBER, RED, SectionLabel, DEV_BG, DEV_CARD, DEV_ACCENT, Segmented, Sheet, Field, FieldError, inputStyle, primaryBtn, Toggle, PhoneComWhats, AddressFieldsBasic, normalizeAddress, validaCPF, validaTelefone, validaEmailEnvio, type Endereco } from './kitBase'
-import { ESPACO_LINHA, InfoDot, IndicatorStrip, QuickAction, TotalRegistros, formatMoneyShort } from './PadraoUI'
+import { RotateCcw, LogOut, AlertTriangle, Timer, ShieldAlert, UserPlus, Plus, FileBadge, Settings, MessageCircle, Pencil, Trash2, Check, Search, Building2, Wallet, Link2, Copy, CheckCircle2, Lock, Unlock } from 'lucide-react'
+import { alpha, uid, GREEN, AMBER, RED, SectionLabel, DEV_BG, DEV_CARD, DEV_ACCENT, Segmented, Sheet, Field, FieldError, inputStyle, primaryBtn, Toggle, PhoneComWhats, AddressFieldsBasic, normalizeAddress, validaCPF, validaTelefone, validaEmailEnvio, EmptyState, type Endereco } from './kitBase'
+import { ESPACO_LINHA, InfoDot, IndicatorStrip, QuickAction, TotalRegistros, formatMoneyShort, SearchBox } from './PadraoUI'
 // Telas novas de Parâmetros (10/09/2026, Decisão 55 — Parte B)
 import {
   SubParametrosAssinatura, SubParametrosAmbiente, SubParametrosChat,
@@ -190,6 +192,53 @@ const STATUS_COR: Record<StatusTenant, string> = {
 function fmtBRL(v: number): string {
   if (v === 0) return '—'
   return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+}
+
+// ---- Parcelas de cobrança: status/forma de pagamento (cluster Financeiro
+// x Kit, 11/09/2026) — equivalentes locais de `STATUS_MAP`/`METHODS`/
+// `methodLabel`/`instCobravel` do Kit (App.jsx). Ficam aqui, não em
+// `kitPlatform.ts`, porque só telas deste arquivo (Financeiro/Auditoria)
+// exibem parcela a parcela — o resto do app já lida só com o agregado
+// (`mrrDoTenant`). Sem os campos de desconto/acréscimo do Kit
+// (`baseAmount`/`adjDiscount`/`adjSurcharge`) porque a interface `Parcela`
+// deste produto (`kitPlatform.ts`) não os tem — ver nota em
+// `AlterarStatusParcelaSheet`.
+const METODOS_PAGAMENTO: { v: string; label: string }[] = [
+  { v: 'pix', label: 'Pix' },
+  { v: 'boleto', label: 'Boleto' },
+  { v: 'cartao_credito', label: 'Cartão crédito' },
+  { v: 'cartao_debito', label: 'Cartão débito' },
+]
+function metodoLabel(m?: string | null): string {
+  return METODOS_PAGAMENTO.find((x) => x.v === m)?.label ?? '—'
+}
+type StatusParcela = 'pago' | 'pendente' | 'vencido' | 'perda' | 'cancelada'
+const PARCELA_ROTULO: Record<StatusParcela, string> = {
+  pago: 'Pago', pendente: 'A vencer', vencido: 'Vencido', perda: 'Perda', cancelada: 'Cancelada',
+}
+const PARCELA_COR: Record<StatusParcela, string> = {
+  pago: GREEN, pendente: AMBER, vencido: RED, perda: DEV_TXT3, cancelada: DEV_TXT3,
+}
+function ParcelaBadge({ status }: { status: StatusParcela }) {
+  return (
+    <span style={{ fontSize: 10.5, fontWeight: 800, color: PARCELA_COR[status], background: `${PARCELA_COR[status]}22`, borderRadius: 999, padding: '3px 9px', whiteSpace: 'nowrap' }}>
+      {PARCELA_ROTULO[status]}
+    </span>
+  )
+}
+// Kit `instCobravel` (App.jsx L112): só uma parcela em aberto de verdade
+// (não paga, não perdida, não cancelada) pode ser cobrada.
+function instCobravelLocal(i: Parcela): boolean {
+  return !i.paid && !i.cancelada && !i.perda
+}
+// Link de WhatsApp com mensagem pré-preenchida — mesmo padrão de
+// `whatsappLink` do Kit, sem depender de biblioteca externa. Prefixa DDI 55
+// quando o telefone só tem DDD+número (10/11 dígitos); mantém como está se
+// já vier com DDI (ligações internacionais, cadastro manual completo).
+function linkWhatsApp(phone: string | undefined, texto: string): string {
+  const digitos = (phone ?? '').replace(/\D/g, '')
+  const numero = digitos ? (digitos.length <= 11 ? `55${digitos}` : digitos) : ''
+  return `https://wa.me/${numero}?text=${encodeURIComponent(texto)}`
 }
 
 // ---- Peças de UI compartilhadas desta tela -------------------------------
@@ -328,6 +377,102 @@ const labelN0Style: React.CSSProperties = {
 
 // ---- Abas -----------------------------------------------------------------
 
+/* ===================== Busca global (N0) =====================
+   Auditoria do cluster Início/Financeiro/Auditoria x Kit (11/09/2026): o Kit
+   mostra uma lupa no topo de quase toda tela do N0 (`DevStandardTopIcons`,
+   Kit L5667) que abre `DevGlobalSearchScreen` (Kit L5613) — procura em
+   empresas clientes (nome, responsável, telefone, cidade, login) e nas
+   parcelas da assinatura (empresa, mês/vencimento). Não existia NENHUM jeito
+   de buscar aqui — nem o ícone (nenhuma aba passava `onBuscar` pro
+   `IconesDeTela`, que já suporta a prop), nem uma tela equivalente.
+
+   Adaptação: como folha (`Sheet`), não como tela própria — este painel não
+   tem uma pilha de navegação genérica tipo `push()` do Kit, é abas com
+   estado local (mesmo padrão já usado por `ExportSheet` em toda aba). Sem
+   busca por cidade (o cadastro de cliente deste produto, Decisão 67, não
+   pede endereço da empresa — só o Kit, que atende PJ, tem isso). Reaberta a
+   partir de Início e Financeiro, as 2 telas deste cluster onde o Kit também
+   mostra a lupa (Auditoria já tem busca própria — ver `AbaAuditoria` — e o
+   Kit nem mostra a lupa padrão lá, só o campo de busca da própria tela). */
+function BuscaGlobalN0Sheet({ onClose, onAbrirTenant, onAbrirParcela }: {
+  onClose: () => void
+  onAbrirTenant: (id: string) => void
+  onAbrirParcela: (tenantId: string) => void
+}) {
+  const platform = usePlatformN0()
+  const [query, setQuery] = useState('')
+  const q = query.trim().toLowerCase()
+  const tenantsAchados = q
+    ? platform.tenants
+        .filter((t) =>
+          (t.companyName || '').toLowerCase().includes(q) ||
+          (t.ownerName || '').toLowerCase().includes(q) ||
+          (t.phone || '').includes(query) ||
+          (t.users ?? []).some((u) => (u.login || '').toLowerCase().includes(q)))
+        .slice(0, 12)
+    : []
+  const parcelasAchadas = q
+    ? platform.tenants
+        .flatMap((t) => (t.billing?.installments ?? [])
+          .filter((i) => (t.companyName || '').toLowerCase().includes(q) || fmtDate(i.dueDate).includes(q))
+          .map((i) => ({ inst: i, tenant: t })))
+        .slice(0, 12)
+    : []
+  const nada = !!q && tenantsAchados.length === 0 && parcelasAchadas.length === 0
+
+  return (
+    <Sheet dark title="Buscar em tudo" onClose={onClose}>
+      <SearchBox dark value={query} onChange={setQuery} placeholder="Empresa, responsável, telefone, login..." />
+      <div style={{ marginTop: 14 }}>
+        {!q && <EmptyState dark icon={Search} title="Busca em tudo" hint="Digite o nome de uma empresa, do responsável, o telefone ou o login." />}
+        {nada && <EmptyState dark icon={Search} title="Nada encontrado" hint="Tente outro termo." />}
+        {tenantsAchados.length > 0 && (
+          <>
+            <SectionLabel dark>Empresas clientes</SectionLabel>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14 }}>
+              {tenantsAchados.map((t) => (
+                <button key={t.id} type="button" onClick={() => onAbrirTenant(t.id)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 10, background: DEV_CARD, border: 'none', borderRadius: 12, padding: '11px 12px', textAlign: 'left', cursor: 'pointer' }}>
+                  <div style={{ width: 34, height: 34, borderRadius: 9, background: `${DEV_ACCENT}22`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <Building2 size={16} color={DEV_ACCENT} />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 700, fontSize: 14, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.companyName}</div>
+                    <div style={{ fontSize: 11.5, color: DEV_TXT2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.ownerName}{t.phone ? ` · ${t.phone}` : ''}</div>
+                  </div>
+                  <Badge status={statusDoTenant(t)} />
+                </button>
+              ))}
+              <TotalRegistros dark n={tenantsAchados.length} label={tenantsAchados.length === 1 ? 'empresa' : 'empresas'} />
+            </div>
+          </>
+        )}
+        {parcelasAchadas.length > 0 && (
+          <>
+            <SectionLabel dark>Parcelas da assinatura</SectionLabel>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {parcelasAchadas.map(({ inst, tenant: t }) => (
+                <button key={inst.id} type="button" onClick={() => onAbrirParcela(t.id)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 10, background: DEV_CARD, border: 'none', borderRadius: 12, padding: '11px 12px', textAlign: 'left', cursor: 'pointer' }}>
+                  <div style={{ width: 34, height: 34, borderRadius: 9, background: `${GREEN}22`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <Wallet size={16} color={GREEN} />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 700, fontSize: 13.5, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.companyName}</div>
+                    <div style={{ fontSize: 11.5, color: DEV_TXT2 }}>{fmtDate(inst.dueDate)} · {fmtBRL(inst.amount)}</div>
+                  </div>
+                  <ParcelaBadge status={installmentDisplayStatus(inst, t.billing?.toleranceDays) as StatusParcela} />
+                </button>
+              ))}
+              <TotalRegistros dark n={parcelasAchadas.length} label={parcelasAchadas.length === 1 ? 'parcela' : 'parcelas'} />
+            </div>
+          </>
+        )}
+      </div>
+    </Sheet>
+  )
+}
+
 /* ---- N0 Início — reconstruído nesta rodada a partir de `DevInicioScreen` do
    Kit (L5690-L5765). Item 18 do CONTRATO DE EXECUÇÃO: "atalhos do N0 Início" e
    "seção Situações que precisam de atenção", conferidos individualmente.
@@ -335,10 +480,11 @@ const labelN0Style: React.CSSProperties = {
    O que existia antes: 4 KPIs numa grade 2×2 e nada mais — sem atalhos, sem a
    seção de atenção. A grade 2×2 é justamente o que o Padrão de Interface (seção
    3) manda trocar pela faixa de indicadores de uma linha. ---- */
-function AbaInicio({ filtroDados, onIrPara }: { filtroDados: FiltroDados; onIrPara: (aba: AbaN0) => void }) {
+function AbaInicio({ filtroDados, onIrPara, onAbrirSuporte }: { filtroDados: FiltroDados; onIrPara: (aba: AbaN0) => void; onAbrirSuporte: () => void }) {
   const platform = usePlatformN0()
   const tenants = filtrarTenantsPorDados(platform.tenants, filtroDados)
   const [exportOpen, setExportOpen] = useState(false)
+  const [buscaAberta, setBuscaAberta] = useState(false) /* Correção de auditoria — cluster Início x Kit, ver BuscaGlobalN0Sheet */
 
   const bloqueados = tenants.filter((t) => tenantBlocked(t)).length
   const trials = tenants.filter((t) => t.plan === 'trial').length
@@ -385,8 +531,13 @@ function AbaInicio({ filtroDados, onIrPara }: { filtroDados: FiltroDados; onIrPa
       <TopoN0
         titulo="Visão geral"
         subtitulo="Resumo da plataforma Morfo"
-        acoes={<IconesDeTela dark onExportar={() => setExportOpen(true)} />}
+        acoes={<IconesDeTela dark onBuscar={() => setBuscaAberta(true)} onExportar={() => setExportOpen(true)} />}
       />
+      {buscaAberta && <BuscaGlobalN0Sheet
+        onClose={() => setBuscaAberta(false)}
+        onAbrirTenant={() => { setBuscaAberta(false); onIrPara('tenants') }}
+        onAbrirParcela={() => { setBuscaAberta(false); onIrPara('financeiro') }}
+      />}
       {exportOpen && <ExportSheet dark title="Visão geral" filenameBase="morfofinp-n0-visao-geral"
         screenColumns={[
           { key: 'companyName', label: 'Ambiente' },
@@ -442,7 +593,11 @@ function AbaInicio({ filtroDados, onIrPara }: { filtroDados: FiltroDados; onIrPa
           info="Valores padrão aplicados aos ambientes: tolerância, vencimento, teste grátis, retenção e mais." />
       </div>
       <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}>
-        <QuickAction dark icon={MessageCircle} label="Suporte" onClick={() => onIrPara('tenants')}
+        {/* Correção de auditoria (cluster Parâmetros x Kit): este atalho
+            entrava na aba Tenants inteira (achar o cliente certo era manual)
+            — o Kit abre direto a caixa de entrada agregada de conversas
+            (`DevChatGeralScreen`, L6370). Agora abre `CentralSuporteN0`. */}
+        <QuickAction dark icon={MessageCircle} label="Suporte" onClick={onAbrirSuporte}
           info="Fale com as empresas clientes pelo chat de suporte."
           badge={suporteNaoLido > 0
             ? <span style={{ fontSize: 10, fontWeight: 800, color: '#fff', background: RED, padding: '2px 7px', borderRadius: 999, whiteSpace: 'nowrap' }}>{suporteNaoLido} Nova{suporteNaoLido > 1 ? 's' : ''}</span>
@@ -472,6 +627,110 @@ function AbaInicio({ filtroDados, onIrPara }: { filtroDados: FiltroDados; onIrPa
         {encerrando.map((t) => alerta(`enc-${t.id}`, Timer, AMBER, t.companyName,
           `Encerrando · acesso até ${fmtDate(t.cancellation!.accessUntil)} (${Math.max(0, daysUntil(t.cancellation!.accessUntil) ?? 0)}d)`))}
         {temAlertas && <TotalRegistros dark n={totalAtencao} label="situação(ões)" />}
+      </div>
+    </div>
+  )
+}
+
+/* ===================== Central de Suporte (N0) =====================
+   Correção de auditoria (cluster Parâmetros x Kit, 11/09/2026): o Kit tem
+   uma tela própria pra ver TODAS as conversas de chat de uma vez —
+   `DevChatGeralScreen` (App.jsx L6370-L6406), acessada pelo atalho "Suporte"
+   da Início, com o mesmo selo "N Nova(s)" de não-lidas. Aqui o atalho já
+   existia com o contador certo (`hasUnreadMorfo`), mas levava pra dentro da
+   aba Tenants inteira — sem caixa de entrada, achar a conversa certa era
+   manual (abrir Tenants, achar a empresa, entrar na ficha, achar "Suporte").
+   Essa tela fecha essa lacuna: lista só quem tem conversa, ordenada por
+   não-lida primeiro e depois mensagem mais recente, com busca por empresa ou
+   palavra — igual ao Kit — e abre a MESMA peça de conversa (`ChatConversa`,
+   perspectiva="suporte") que `AbaTenants` já usa a partir da ficha do
+   cliente (não duplica lógica de chat, só a lista que falta). */
+function CentralSuporteN0({ onClose }: { onClose: () => void }) {
+  const platform = usePlatformN0()
+  const [busca, setBusca] = useState('')
+  const [tenantId, setTenantId] = useState<string | null>(null)
+
+  const conversas = platform.tenants
+    .filter((t) => (t.supportMessages || []).length > 0)
+    .map((t) => {
+      const msgs = t.supportMessages
+      return { tenant: t, ultima: msgs[msgs.length - 1], naoLida: hasUnreadMorfo(t) }
+    })
+    .sort((a, b) => Number(b.naoLida) - Number(a.naoLida) || new Date(b.ultima.ts).getTime() - new Date(a.ultima.ts).getTime())
+
+  const q = busca.trim().toLowerCase()
+  const filtradas = !q
+    ? conversas
+    : conversas.filter((c) => c.tenant.companyName.toLowerCase().includes(q) || c.tenant.supportMessages.some((m) => (m.text || '').toLowerCase().includes(q)))
+  const naoLidas = conversas.filter((c) => c.naoLida).length
+
+  const selecionado = tenantId ? platform.tenants.find((t) => t.id === tenantId) : undefined
+  if (selecionado) {
+    return (
+      <div>
+        <TopoN0 titulo={`Suporte — ${selecionado.companyName}`} onVoltarSub={() => setTenantId(null)} />
+        <ChatConversa tenant={selecionado} chatConfig={platform.defaultParams?.chat} perspectiva="suporte" />
+      </div>
+    )
+  }
+
+  return (
+    <div>
+      <TopoN0 titulo="Central de Suporte" subtitulo="Todas as conversas de chat com os clientes" onVoltarSub={onClose} />
+      <div style={{ marginBottom: 10 }}>
+        <SearchBox dark value={busca} onChange={setBusca} placeholder="Buscar por empresa ou palavra na conversa" />
+      </div>
+      {naoLidas > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: alpha(DEV_ACCENT, 12.5), border: `1px solid ${alpha(DEV_ACCENT, 33.3)}`, borderRadius: 12, padding: '9px 12px', marginBottom: 12 }}>
+          <span style={{ width: 8, height: 8, borderRadius: 999, background: DEV_ACCENT, flexShrink: 0 }} />
+          <span style={{ fontSize: 12.5, color: '#fff', fontWeight: 700 }}>{naoLidas} conversa(s) com mensagem não lida</span>
+        </div>
+      )}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {filtradas.length === 0 && (
+          <div style={{ fontSize: 13, color: DEV_TXT2, textAlign: 'center', padding: '30px 0' }}>
+            {q ? `Nada encontrado com "${busca}".` : 'Nenhuma conversa ainda.'}
+          </div>
+        )}
+        {filtradas.map(({ tenant: t, ultima, naoLida }) => (
+          <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div
+              onClick={() => setTenantId(t.id)}
+              style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 10, background: DEV_CARD, borderRadius: 12, padding: '11px 13px', cursor: 'pointer', border: naoLida ? `1.5px solid ${DEV_ACCENT}` : '1px solid transparent' }}
+            >
+              <div style={{ width: 38, height: 38, borderRadius: 10, background: alpha(DEV_ACCENT, 13.3), display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <BuildingOffice2Icon width={17} height={17} color={DEV_ACCENT} />
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 6 }}>
+                  <span style={{ fontSize: 14, fontWeight: naoLida ? 800 : 700, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.companyName}</span>
+                  <span style={{ fontSize: 10, color: DEV_TXT2, flexShrink: 0 }}>
+                    {chatDiaLabel(ultima.ts) === 'Hoje' ? new Date(ultima.ts).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : chatDiaLabel(ultima.ts)}
+                  </span>
+                </div>
+                <div style={{ fontSize: 12, color: naoLida ? '#C9C4D4' : DEV_TXT2, fontWeight: naoLida ? 600 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {ultima.from === 'suporte' ? 'Você: ' : ''}{ultima.imageUrl ? '📷 Imagem' : ultima.text}
+                </div>
+                <span style={{ display: 'inline-block', marginTop: 4, fontSize: 9.5, fontWeight: 800, letterSpacing: 0.3, padding: '2px 7px', borderRadius: 999, color: naoLida ? '#fff' : DEV_TXT2, background: naoLida ? DEV_ACCENT : 'rgba(255,255,255,0.06)' }}>
+                  {naoLida ? 'NÃO LIDA' : 'LIDA'}
+                </span>
+              </div>
+            </div>
+            {/* Kit L6393 (SwipeRow "Não lida"): sem gesto de arrastar aqui — vira
+                botão explícito com o mesmo efeito (marcar como não lida de novo). */}
+            {!naoLida && (
+              <button
+                type="button"
+                title="Marcar como não lida"
+                aria-label="Marcar como não lida"
+                onClick={() => void atualizarTenantN0(t.id, (tt) => ({ ...tt, chatLastReadMorfo: null }))}
+                style={{ width: 34, height: 34, borderRadius: 10, border: 'none', background: 'rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}
+              >
+                <MessageCircle size={15} color={DEV_ACCENT} />
+              </button>
+            )}
+          </div>
+        ))}
       </div>
     </div>
   )
@@ -543,6 +802,11 @@ function NovoClienteSheet({ diasTestePadrao, onClose }: { diasTestePadrao: numbe
       planId: tipoPlano === 'pagante' && planoEscolhido ? String(planoEscolhido.id) : null,
       manualBlock: false,
       onboarding: liberar ? 'completo' : 'pendente_liberacao',
+      /* Achado 11/09/2026 (reconciliação `kitPlatform.ts`): grava desde
+         quando este pré-cadastro está pendente, pro housekeeping automático
+         (`verificarVencimentoPrecadastro`) saber quando o prazo do parâmetro
+         "Prazo do pré-cadastro" (Parâmetros N0) vence e encerrar sozinho. */
+      onboardingSince: liberar ? undefined : hoje,
       trial: tipoPlano === 'trial' ? { days: Number(dias) || diasTestePadrao, startDate: hoje } : null,
       billing: tipoPlano === 'pagante' && mensalidade > 0
         ? { monthlyValue: mensalidade, dueDay: platform.defaultParams?.dueDay ?? 5, toleranceDays: platform.defaultParams?.toleranceDays ?? 5, installments: [] }
@@ -559,7 +823,10 @@ function NovoClienteSheet({ diasTestePadrao, onClose }: { diasTestePadrao: numbe
         status: liberar ? 'ativo' : 'pendente_aprovacao', perfilId: 'admin', createdAt: hoje,
       }],
       userLimit: 1,
-      accessLog: [{ id: uid(), ts: new Date().toISOString().slice(0, 19), action: liberar ? 'Cliente cadastrado pela Morfo, com acesso liberado' : 'Cliente cadastrado pela Morfo, aguardando liberação' }],
+      // `ator: 'suporte'` (achado no diff desta rodada, 11/09/2026): marca a
+      // entrada como ação da Morfo, não do cliente — é o que faz o bloco
+      // "Ações do suporte no meu ambiente" (SuporteChat.tsx) listar isso.
+      accessLog: [{ id: uid(), ts: new Date().toISOString().slice(0, 19), action: liberar ? 'Cliente cadastrado pela Morfo, com acesso liberado' : 'Cliente cadastrado pela Morfo, aguardando liberação', ator: 'suporte' }],
       real: true,
     }
     await salvarPlatformN0({ ...platform, tenants: [...platform.tenants, novo] })
@@ -610,6 +877,161 @@ function NovoClienteSheet({ diasTestePadrao, onClose }: { diasTestePadrao: numbe
   </Sheet>
 }
 
+/* ===================== Editar cliente (N0) =====================
+   Auditoria do cluster Tenants x Kit (11/09/2026): o Kit tem um ícone de
+   lápis no topo da ficha do tenant (`DevTenantDetailScreen`, Kit L6191) que
+   abre `EditTenantSheet` (Kit L6347) pra editar os dados cadastrais da
+   empresa a qualquer momento, depois do cadastro. Aqui não existia NENHUM
+   jeito de corrigir nome/telefone/e-mail/CPF de um cliente já cadastrado —
+   só `NovoClienteSheet`, e só pro cadastro inicial. Mesmos campos do Kit,
+   adaptados ao modelo PF deste produto (Decisão 67: sem razão social/CNPJ,
+   que no Kit só existem porque o cliente dele é PJ). */
+function EditarClienteSheet({ tenant, onClose }: { tenant: TenantKit; onClose: () => void }) {
+  const [nome, setNome] = useState(tenant.companyName)
+  const [phone, setPhone] = useState(tenant.phone ?? '')
+  const [hasWhatsapp, setHasWhatsapp] = useState(tenant.hasWhatsapp !== false)
+  const [email, setEmail] = useState(tenant.email ?? '')
+  const [doc, setDoc] = useState(tenant.doc ?? '')
+
+  const phoneOk = validaTelefone(phone)
+  const emailOk = validaEmailEnvio(email)
+  const docOk = !doc.trim() || validaCPF(doc)
+  const podeSalvar = !!nome.trim() && phoneOk && emailOk && docOk
+
+  async function salvar() {
+    await atualizarTenantN0(tenant.id, (x) => ({
+      ...x,
+      companyName: nome.trim(),
+      ownerName: nome.trim(),
+      phone: phone.trim(),
+      hasWhatsapp,
+      email: email.trim(),
+      doc: doc.trim() || undefined,
+      accessLog: [...(x.accessLog ?? []), { id: uid(), ts: new Date().toISOString().slice(0, 19), action: 'Dados do cliente editados pela Morfo', ator: 'suporte' }],
+    }))
+    onClose()
+  }
+
+  return (
+    <Sheet dark title="Editar dados do cliente" onClose={onClose}>
+      <Field dark label="Nome do cliente"><input style={inputStyle} value={nome} onChange={(e) => setNome(e.target.value)} /></Field>
+      <PhoneComWhats phone={phone} setPhone={setPhone} hasWhatsapp={hasWhatsapp} setHasWhatsapp={setHasWhatsapp} />
+      <FieldError show={phone.trim() && !phoneOk} text="Telefone inválido (use DDD + número)" />
+      <Field dark label="E-mail"><input style={inputStyle} inputMode="email" value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
+      <FieldError show={email.trim() && !emailOk} text="E-mail inválido" />
+      <Field dark label="CPF (opcional)"><input style={inputStyle} inputMode="numeric" value={doc} onChange={(e) => setDoc(e.target.value)} placeholder="000.000.000-00" /></Field>
+      <FieldError show={doc.trim() && !docOk} text="CPF inválido" />
+      <button type="button" disabled={!podeSalvar} onClick={() => void salvar()}
+        style={{ ...primaryBtn, width: '100%', background: DEV_ACCENT, opacity: podeSalvar ? 1 : 0.5, cursor: podeSalvar ? 'pointer' : 'not-allowed' }}>
+        <Check size={16} /> Salvar alterações
+      </button>
+    </Sheet>
+  )
+}
+
+/* ===================== Excluir cliente (N0) =====================
+   Mesma auditoria: o Kit sempre oferece excluir uma empresa, com
+   confirmação e bloqueio se ela tiver assinatura paga ativa (Kit L5791-95
+   `askDelete`, L5871 `ConfirmDeleteSheet`, L3480 `BlockedDeleteSheet`). Aqui
+   não existia NENHUM jeito de remover um cliente cadastrado por engano —
+   nem os de exemplo. Mesma regra do Kit (bloqueia pagante) + uma trava a
+   mais que o Kit não precisa: nunca deixa excluir `t0`, porque não é um
+   tenant substituível — é o ambiente deste aparelho, onde mora o app de
+   verdade do Rafael. */
+function ExcluirClienteSheet({ tenant, ehAppDesteAparelho, onClose, onExcluido }: {
+  tenant: TenantKit; ehAppDesteAparelho: boolean; onClose: () => void; onExcluido: () => void
+}) {
+  const [entendi, setEntendi] = useState(false)
+
+  if (ehAppDesteAparelho) {
+    return (
+      <Sheet dark title="Não é possível excluir" onClose={onClose}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: RED, fontWeight: 700, fontSize: 14, marginBottom: 10 }}>
+          <ShieldAlert size={17} /> Ambiente deste aparelho
+        </div>
+        <p style={{ fontSize: 13, color: '#C9C4D4', marginTop: 0, lineHeight: 1.5 }}>
+          {tenant.companyName} é o ambiente deste aparelho — onde está o aplicativo de verdade. Não é um tenant de
+          exemplo, não pode ser excluído por aqui.
+        </p>
+        <button type="button" onClick={onClose} style={{ ...primaryBtn, width: '100%', background: DEV_ACCENT }}>Entendi</button>
+      </Sheet>
+    )
+  }
+
+  if (tenant.plan === 'pagante') {
+    return (
+      <Sheet dark title="Não é possível excluir" onClose={onClose}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: RED, fontWeight: 700, fontSize: 14, marginBottom: 10 }}>
+          <ShieldAlert size={17} /> Existem vínculos ativos
+        </div>
+        <p style={{ fontSize: 13, color: '#C9C4D4', marginTop: 0 }}>Encerre ou resolva os itens abaixo antes de excluir:</p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 6 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: DEV_CARD, borderRadius: 10, padding: '10px 12px' }}>
+            <AlertTriangle size={15} color={RED} />
+            <span style={{ fontSize: 13.5, fontWeight: 600, color: '#fff' }}>Assinatura ativa ({fmtBRL(tenant.billing?.monthlyValue ?? 0)}/mês)</span>
+          </div>
+        </div>
+        <button type="button" onClick={onClose} style={{ ...primaryBtn, width: '100%', marginTop: 6, background: DEV_ACCENT }}>Entendi</button>
+      </Sheet>
+    )
+  }
+
+  async function confirmar() {
+    const platform = await lerPlatformN0Persistida()
+    await salvarPlatformN0({ ...platform, tenants: platform.tenants.filter((x) => x.id !== tenant.id) })
+    onExcluido()
+  }
+
+  return (
+    <Sheet dark title="Excluir cliente" onClose={onClose}>
+      <p style={{ fontSize: 13.5, color: '#C9C4D4', lineHeight: 1.5, marginTop: 0 }}>
+        Tem certeza que quer excluir {tenant.companyName}? Essa ação não pode ser desfeita.
+      </p>
+      <button type="button" onClick={() => setEntendi((v) => !v)} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, width: '100%', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
+        <div style={{ width: 20, height: 20, borderRadius: 6, border: `2px solid ${entendi ? RED : '#9B96A8'}`, background: entendi ? RED : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          {entendi && <Check size={13} color="#fff" />}
+        </div>
+        <span style={{ fontSize: 12.5, fontWeight: 600, color: '#fff', textAlign: 'left' }}>Entendo que essa ação não pode ser desfeita</span>
+      </button>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button type="button" onClick={onClose} style={{ ...primaryBtn, flex: 1, background: 'rgba(255,255,255,0.08)', color: '#fff' }}>Cancelar</button>
+        <button type="button" disabled={!entendi} onClick={() => void confirmar()} style={{ ...primaryBtn, flex: 1, background: RED, opacity: entendi ? 1 : 0.5, cursor: entendi ? 'pointer' : 'not-allowed' }}>
+          <Trash2 size={16} /> Excluir
+        </button>
+      </div>
+    </Sheet>
+  )
+}
+
+/* ===================== Bloquear/Desbloquear cliente (N0) =====================
+   Lacuna real (11/09/2026, investigação encomendada): `manualBlock` já existe
+   no tipo `TenantKit` e já é combinado por `tenantBlocked()` (`kitPlatform.ts`)
+   com pendência de pagamento/trial vencido pra decidir o status "bloqueado" do
+   badge acima — mas nenhuma tela deste produto setava a flag pra um cliente
+   REAL, só a massa de teste (`massaTeste.ts`) já nascia com alguns tenants
+   fictícios em `manualBlock: true`. Botão + confirmação adaptados do Kit
+   (`DevTenantDetailScreen`): confirmação só ao BLOQUEAR (ação que tira o
+   acesso de alguém) — desbloquear é imediato. Não existe um `ConfirmDeleteSheet`
+   genérico neste produto (`ExcluirClienteSheet` acima monta a própria
+   confirmação inline) — esta folha segue o mesmo padrão local: `Sheet` do
+   `kitBase.tsx` + Cancelar/Confirmar. */
+function ConfirmarBloqueioSheet({ tenant, onClose, onConfirm }: { tenant: TenantKit; onClose: () => void; onConfirm: () => void }) {
+  return (
+    <Sheet dark title="Bloquear empresa" onClose={onClose}>
+      <p style={{ fontSize: 13.5, color: '#C9C4D4', lineHeight: 1.5, marginTop: 0 }}>
+        Bloquear {tenant.companyName}? O ambiente fica inacessível pros usuários da empresa até ser desbloqueado
+        manualmente — cadastro, histórico e dados continuam intactos.
+      </p>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button type="button" onClick={onClose} style={{ ...primaryBtn, flex: 1, background: 'rgba(255,255,255,0.08)', color: '#fff' }}>Cancelar</button>
+        <button type="button" onClick={onConfirm} style={{ ...primaryBtn, flex: 1, background: RED }}>
+          <Lock size={16} /> Bloquear
+        </button>
+      </div>
+    </Sheet>
+  )
+}
+
 function AbaTenants({ onEntrarComoTenant, filtroDados }: { onEntrarComoTenant: () => void; filtroDados: FiltroDados }) {
   const { tenants: todos, defaultParams } = usePlatformN0()
   const tenants = filtrarTenantsPorDados(todos, filtroDados)
@@ -617,6 +1039,9 @@ function AbaTenants({ onEntrarComoTenant, filtroDados }: { onEntrarComoTenant: (
   const [chatAberto, setChatAberto] = useState(false)
   const [exportOpen, setExportOpen] = useState(false) /* G44 regra 11b */
   const [novoAberto, setNovoAberto] = useState(false) /* Decisão 67 */
+  const [editarAberto, setEditarAberto] = useState(false) /* Correção de auditoria — cluster Tenants x Kit, ver EditarClienteSheet */
+  const [excluirAberto, setExcluirAberto] = useState(false) /* idem — ver ExcluirClienteSheet */
+  const [confirmBlockOpen, setConfirmBlockOpen] = useState(false) /* idem — ver ConfirmarBloqueioSheet */
   const selecionado = selecionadoId ? tenants.find((t) => t.id === selecionadoId) : undefined
 
   // Conversa de suporte deste tenant, do lado N0 (10/09/2026, Decisão 53,
@@ -646,9 +1071,31 @@ function AbaTenants({ onEntrarComoTenant, filtroDados }: { onEntrarComoTenant: (
        abriria o app COM O DADO DO RAFAEL, o que seria errado e enganoso.
        Depende de servidor (Backlog #028), como as demais ações desabilitadas. */
     const ehAppDesteAparelho = t.id === TENANT_N1_ID
+    /* Bloqueio manual (11/09/2026): sem trava especial pro ambiente deste
+       aparelho além do que já existe — a proteção do `t0` contra ficar
+       travado por BUG mora na própria tela de bloqueio do lado N1
+       (`AppRoot.tsx`/`AmbienteBloqueado.tsx`, gate de `tenantBlocked()`), não
+       aqui. Se o próprio Rafael (ou o N0) bloquear `t0` de propósito, o
+       bloqueio vale igual a qualquer outro tenant — ação válida, não bug. */
+    const applyToggleManualBlock = () => {
+      void atualizarTenantN0(t.id, (x) => ({
+        ...x,
+        manualBlock: !x.manualBlock,
+        accessLog: [...(x.accessLog ?? []), { id: uid(), ts: new Date().toISOString().slice(0, 19), action: x.manualBlock ? 'Desbloqueio manual' : 'Bloqueio manual', ator: 'suporte' }],
+      }))
+      setConfirmBlockOpen(false)
+    }
+    const toggleManualBlock = () => (t.manualBlock ? applyToggleManualBlock() : setConfirmBlockOpen(true))
     return (
       <div>
-        <TopoN0 titulo={t.companyName} subtitulo={ehAppDesteAparelho ? 'Ambiente deste aparelho' : t.real ? 'Cliente cadastrado' : 'Tenant de exemplo'} onVoltarSub={() => setSelecionadoId(null)} />
+        <TopoN0 titulo={t.companyName} subtitulo={ehAppDesteAparelho ? 'Ambiente deste aparelho' : t.real ? 'Cliente cadastrado' : 'Tenant de exemplo'} onVoltarSub={() => setSelecionadoId(null)}
+          acoes={<button type="button" title="Editar dados do cliente" aria-label="Editar dados do cliente" onClick={() => setEditarAberto(true)}
+            style={{ width: 34, height: 34, borderRadius: 10, border: 'none', background: 'rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+            <Pencil size={15} color="#fff" />
+          </button>} />
+        {editarAberto && <EditarClienteSheet tenant={t} onClose={() => setEditarAberto(false)} />}
+        {excluirAberto && <ExcluirClienteSheet tenant={t} ehAppDesteAparelho={ehAppDesteAparelho} onClose={() => setExcluirAberto(false)} onExcluido={() => { setExcluirAberto(false); setSelecionadoId(null) }} />}
+        {confirmBlockOpen && <ConfirmarBloqueioSheet tenant={t} onClose={() => setConfirmBlockOpen(false)} onConfirm={applyToggleManualBlock} />}
         <div style={{ background: DEV_CARD, borderRadius: 14, padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: 12, color: DEV_TXT2 }}>Status</span>
@@ -693,7 +1140,7 @@ function AbaTenants({ onEntrarComoTenant, filtroDados }: { onEntrarComoTenant: (
                 ...x,
                 onboarding: 'completo',
                 users: x.users.map((u) => (u.status === 'ativo' ? u : { ...u, status: 'ativo' })),
-                accessLog: [...(x.accessLog ?? []), { id: uid(), ts: new Date().toISOString().slice(0, 19), action: 'Acesso liberado pela Morfo' }],
+                accessLog: [...(x.accessLog ?? []), { id: uid(), ts: new Date().toISOString().slice(0, 19), action: 'Acesso liberado pela Morfo', ator: 'suporte' }],
               }))}
               style={{ background: GREEN, border: 'none', borderRadius: 10, color: '#fff', padding: '10px 12px', textAlign: 'left', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}
             >
@@ -777,6 +1224,26 @@ function AbaTenants({ onEntrarComoTenant, filtroDados }: { onEntrarComoTenant: (
               </span>
             )}
           </button>
+          <button
+            type="button"
+            onClick={toggleManualBlock}
+            style={{
+              background: DEV_CARD,
+              border: 'none',
+              borderRadius: 10,
+              color: t.manualBlock ? GREEN : RED,
+              padding: '10px 12px',
+              textAlign: 'left',
+              fontSize: 12.5,
+              fontWeight: 700,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+            }}
+          >
+            {t.manualBlock ? <><Unlock size={15} /> Desbloquear</> : <><Lock size={15} /> Bloquear</>}
+          </button>
           {['Suspender acesso', 'Forçar nova cobrança'].map((acao) => (
             <button
               key={acao}
@@ -798,6 +1265,29 @@ function AbaTenants({ onEntrarComoTenant, filtroDados }: { onEntrarComoTenant: (
               {acao}
             </button>
           ))}
+          {/* Correção de auditoria (cluster Tenants x Kit): "Excluir cliente" não
+              existia — ver ExcluirClienteSheet acima (mesma regra do Kit: bloqueia
+              pagante, e aqui também bloqueia o ambiente deste aparelho). */}
+          <button
+            type="button"
+            onClick={() => setExcluirAberto(true)}
+            style={{
+              background: 'rgba(210,72,59,0.12)',
+              border: 'none',
+              borderRadius: 10,
+              color: RED,
+              padding: '10px 12px',
+              textAlign: 'left',
+              fontSize: 12.5,
+              fontWeight: 700,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+            }}
+          >
+            <Trash2 size={15} /> Excluir cliente
+          </button>
         </div>
         <p style={{ fontSize: 11, color: DEV_TXT3, lineHeight: 1.6, marginTop: 14 }}>
           {ehAppDesteAparelho
@@ -875,22 +1365,323 @@ function AbaTenants({ onEntrarComoTenant, filtroDados }: { onEntrarComoTenant: (
   )
 }
 
+/* ===================== Parcela: detalhe / alterar status / cobrar (N0) =====================
+   Auditoria do cluster Financeiro x Kit (11/09/2026): o Kit tem 3 peças pra
+   trabalhar UMA parcela de cobrança — `InstallmentDetailSheet` (Kit L2843),
+   `AlterarStatusPagamentoSheet` (Kit L1116) e `PaymentLinkSheet` (Kit
+   L2770) —, nenhuma existia aqui: a aba Financeiro só mostrava o valor
+   agregado da mensalidade (`mrrDoTenant`) por tenant, sem listar as
+   parcelas em si, sem jeito de marcar uma como paga/vencida/perdida e sem
+   fluxo de cobrança. `t.billing.installments` já existia no modelo de dados
+   (`kitPlatform.ts`) e já era usado por `tenantTemParcelaVencida` — só não
+   tinha tela nenhuma que o exibisse item a item. */
+function DetalheParcelaSheet({ tenant, inst, onClose, onAlterarStatus, onCobrar }: {
+  tenant: TenantKit; inst: Parcela; onClose: () => void
+  onAlterarStatus: () => void; onCobrar: () => void
+}) {
+  const st = installmentDisplayStatus(inst, tenant.billing?.toleranceDays) as StatusParcela
+  const linha = (label: string, value: ReactNode) => (
+    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '9px 0', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+      <span style={{ fontSize: 12.5, color: DEV_TXT2 }}>{label}</span>
+      <span style={{ fontSize: 13.5, fontWeight: 700, color: '#fff' }}>{value}</span>
+    </div>
+  )
+  return (
+    <Sheet dark title="Detalhes da parcela" onClose={onClose}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+        <div style={{ fontSize: 22, fontWeight: 800, color: '#fff' }}>{fmtBRL(inst.amount)}</div>
+        <ParcelaBadge status={st} />
+      </div>
+      <div style={{ fontSize: 13.5, color: DEV_TXT2, marginBottom: 10 }}>{tenant.companyName}</div>
+      {linha('Vencimento', fmtDate(inst.dueDate))}
+      {inst.paid
+        ? <>{linha('Pago em', fmtDate(inst.paidDate))}{linha('Forma de pagamento', metodoLabel(inst.method))}</>
+        : linha('Situação', st === 'vencido' ? 'Vencido, aguardando pagamento' : (st === 'perda' || st === 'cancelada') ? PARCELA_ROTULO[st] : 'Aguardando pagamento')}
+      <button type="button" onClick={onAlterarStatus}
+        style={{ ...primaryBtn, width: '100%', marginTop: 16, background: 'rgba(255,255,255,0.08)', color: '#fff' }}>
+        <Pencil size={15} /> Alterar situação do pagamento
+      </button>
+      {instCobravelLocal(inst) && (
+        <button type="button" onClick={onCobrar} style={{ ...primaryBtn, width: '100%', marginTop: 10, background: DEV_ACCENT }}>
+          <Link2 size={16} /> Cobrar
+        </button>
+      )}
+      {instCobravelLocal(inst) && tenant.hasWhatsapp !== false && tenant.phone && (
+        <a
+          href={linkWhatsApp(tenant.phone, `Olá ${tenant.ownerName || tenant.companyName}! Cobrança em aberto: ${fmtBRL(inst.amount)}, vencimento ${fmtDate(inst.dueDate)}.`)}
+          target="_blank" rel="noreferrer"
+          style={{ ...primaryBtn, width: '100%', marginTop: 10, background: 'rgba(37,211,102,0.14)', color: '#25D366', textDecoration: 'none' }}
+        >
+          <MessageCircle size={16} /> Enviar cobrança por WhatsApp
+        </a>
+      )}
+    </Sheet>
+  )
+}
+
+/* Kit `AlterarStatusPagamentoSheet` tem também "Desconto (R$)"/"Acréscimo
+   (R$)" (campos `adjDiscount`/`adjSurcharge`/`baseAmount` na parcela) — a
+   interface `Parcela` deste produto (`kitPlatform.ts`) não tem esses
+   campos, então não dá pra portar sem mudar o modelo de dados (fora do
+   escopo desta rodada, que edita só `DevApp.tsx`). O resto — trocar a
+   situação entre pago/a vencer/vencido/perda/cancelada, com motivo — é
+   igual ao Kit. */
+function AlterarStatusParcelaSheet({ tenant, inst, onClose, onSave }: {
+  tenant: TenantKit; inst: Parcela; onClose: () => void
+  onSave: (patch: Partial<Parcela>, novoStatus: StatusParcela, motivo: string) => void
+}) {
+  const atual = installmentDisplayStatus(inst, tenant.billing?.toleranceDays) as StatusParcela
+  const [novo, setNovo] = useState<StatusParcela>(atual)
+  const [method, setMethod] = useState(inst.method || 'pix')
+  const [paidDate, setPaidDate] = useState(inst.paidDate || new Date().toISOString().slice(0, 10))
+  const [dueDate, setDueDate] = useState(inst.dueDate)
+  const [motivo, setMotivo] = useState('')
+  const hoje = new Date().toISOString().slice(0, 10)
+  const precisaVencimentoFuturo = novo === 'pendente' && dueDate <= hoje
+  const precisaVencimentoPassado = novo === 'vencido' && dueDate > hoje
+  const podeSalvar = !precisaVencimentoFuturo && !precisaVencimentoPassado
+
+  const opcoes: { v: StatusParcela; l: string }[] = [
+    { v: 'pago', l: 'Pago' },
+    { v: 'pendente', l: 'Em aberto (a vencer)' },
+    { v: 'vencido', l: 'Vencido' },
+    { v: 'perda', l: 'Perda (não vai ser cobrado)' },
+    { v: 'cancelada', l: 'Cancelada (sem cobrança)' },
+  ]
+
+  function salvar() {
+    if (!podeSalvar) return
+    const patch: Partial<Parcela> =
+      novo === 'pago' ? { paid: true, paidDate, method, cancelada: false, perda: false }
+      : novo === 'perda' ? { paid: false, perda: true, cancelada: false }
+      : novo === 'cancelada' ? { paid: false, cancelada: true, perda: false }
+      : { paid: false, cancelada: false, perda: false, dueDate }
+    onSave(patch, novo, motivo.trim())
+  }
+
+  return (
+    <Sheet dark title="Alterar situação do pagamento" onClose={onClose}>
+      <div style={{ background: DEV_CARD, borderRadius: 12, padding: 12, marginBottom: 14, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span style={{ fontSize: 12.5, color: DEV_TXT2 }}>Situação atual</span>
+        <ParcelaBadge status={atual} />
+      </div>
+      <label style={labelN0Style}>Nova situação</label>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 14 }}>
+        {opcoes.map((o) => (
+          <button
+            key={o.v} type="button" onClick={() => setNovo(o.v)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 8, textAlign: 'left', padding: '10px 11px', borderRadius: 9,
+              border: `1.5px solid ${novo === o.v ? DEV_ACCENT : 'rgba(255,255,255,0.14)'}`,
+              background: novo === o.v ? `${DEV_ACCENT}1A` : 'transparent', cursor: 'pointer',
+            }}
+          >
+            <div style={{ width: 16, height: 16, borderRadius: 999, border: `2px solid ${novo === o.v ? DEV_ACCENT : DEV_TXT2}`, background: novo === o.v ? DEV_ACCENT : 'transparent', flexShrink: 0 }} />
+            <span style={{ fontSize: 13.5, fontWeight: 600, color: '#fff' }}>{o.l}</span>
+          </button>
+        ))}
+      </div>
+      {novo === 'pago' && (
+        <>
+          <Field dark label="Data do pagamento"><input style={inputStyle} type="date" value={paidDate} onChange={(e) => setPaidDate(e.target.value)} /></Field>
+          <Field dark label="Forma de pagamento"><Segmented value={method} onChange={setMethod} options={METODOS_PAGAMENTO.map((m) => ({ value: m.v, label: m.label }))} /></Field>
+        </>
+      )}
+      {(novo === 'pendente' || novo === 'vencido') && (
+        <>
+          <Field dark label="Data de vencimento"><input style={inputStyle} type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} /></Field>
+          {precisaVencimentoFuturo && <p style={{ fontSize: 11.5, color: RED, margin: '-10px 2px 14px' }}>Para ficar "a vencer", o vencimento precisa ser depois de hoje.</p>}
+          {precisaVencimentoPassado && <p style={{ fontSize: 11.5, color: RED, margin: '-10px 2px 14px' }}>Para ficar "vencido", o vencimento precisa ser hoje ou antes.</p>}
+        </>
+      )}
+      {(novo === 'perda' || novo === 'cancelada') && <p style={{ fontSize: 11.5, color: DEV_TXT3, margin: '-6px 2px 14px' }}>Essa parcela sai da cobrança e dos indicadores de inadimplência.</p>}
+      <Field dark label="Motivo (opcional, fica registrado)"><input style={inputStyle} value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Ex: acordo com o cliente" /></Field>
+      <button type="button" disabled={!podeSalvar} onClick={salvar}
+        style={{ ...primaryBtn, width: '100%', background: DEV_ACCENT, opacity: podeSalvar ? 1 : 0.5, cursor: podeSalvar ? 'pointer' : 'not-allowed' }}>
+        <Check size={16} /> Salvar alteração
+      </button>
+    </Sheet>
+  )
+}
+
+/* Kit `PaymentLinkSheet`: gera um código fictício de cobrança (Pix/boleto/
+   link — nenhum é conectado a um gateway real, nem no Kit) pra copiar ou
+   enviar por WhatsApp, com atalho pra já marcar como pago. Mesmo caráter de
+   demonstração do Kit — este produto não tem backend de pagamento
+   (Backlog #028), igual as outras ações que dependem disso. */
+function CobrarParcelaSheet({ tenant, inst, onClose, onMarcarPago }: {
+  tenant: TenantKit; inst: Parcela; onClose: () => void; onMarcarPago: (method: string) => void
+}) {
+  const [method, setMethod] = useState('pix')
+  const [gerado, setGerado] = useState(false)
+  const [copiado, setCopiado] = useState(false)
+  const codigo = method === 'pix'
+    ? `00020126MORFOFINP${inst.id}5204000053039865802BR`
+    : method === 'boleto'
+      ? `34191.79001 01043.510047 91020.150008 8 96060000${Math.round(inst.amount)}`
+      : `morfofinp.app/pagar/${inst.id}`
+  const texto = `Cobrança MorfoFinP — ${tenant.companyName} — ${fmtBRL(inst.amount)} (vence ${fmtDate(inst.dueDate)}):\n${codigo}`
+
+  return (
+    <Sheet dark title="Cobrar / pagar" onClose={onClose}>
+      <div style={{ fontSize: 13, color: DEV_TXT2, marginBottom: 14 }}>{tenant.companyName} · {fmtBRL(inst.amount)} · vence {fmtDate(inst.dueDate)}</div>
+      <Field dark label="Forma de pagamento">
+        <Segmented value={method} onChange={(v) => { setMethod(v); setGerado(false) }} options={[{ value: 'pix', label: 'Pix' }, { value: 'boleto', label: 'Boleto' }, { value: 'link', label: 'Link' }]} />
+      </Field>
+      {!gerado ? (
+        <button type="button" onClick={() => setGerado(true)} style={{ ...primaryBtn, width: '100%', background: DEV_ACCENT }}>
+          <Link2 size={16} /> Gerar cobrança
+        </button>
+      ) : (
+        <>
+          <div style={{ background: '#141319', border: `1px solid ${DEV_ACCENT}44`, borderRadius: 12, padding: 12, marginBottom: 12 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: DEV_TXT3, marginBottom: 6 }}>
+              {method === 'pix' ? 'PIX COPIA E COLA' : method === 'boleto' ? 'LINHA DIGITÁVEL' : 'LINK DE PAGAMENTO'}
+            </div>
+            <div style={{ fontSize: 12.5, color: '#fff', wordBreak: 'break-all', fontFamily: 'monospace' }}>{codigo}</div>
+          </div>
+          <button
+            type="button"
+            onClick={() => { void navigator.clipboard?.writeText(codigo); setCopiado(true); setTimeout(() => setCopiado(false), 1500) }}
+            style={{ ...primaryBtn, width: '100%', marginBottom: 8, background: 'rgba(255,255,255,0.08)', color: '#fff' }}
+          >
+            {copiado ? <Check size={16} color={GREEN} /> : <Copy size={16} />} {copiado ? 'Copiado' : 'Copiar'}
+          </button>
+          {tenant.hasWhatsapp !== false && tenant.phone && (
+            <a href={linkWhatsApp(tenant.phone, texto)} target="_blank" rel="noreferrer"
+              style={{ ...primaryBtn, width: '100%', marginBottom: 8, background: 'rgba(37,211,102,0.14)', color: '#25D366', textDecoration: 'none' }}>
+              <MessageCircle size={16} /> Enviar por WhatsApp
+            </a>
+          )}
+          <button type="button" onClick={() => onMarcarPago(method)} style={{ ...primaryBtn, width: '100%', marginTop: 4, background: GREEN }}>
+            <CheckCircle2 size={16} /> Marcar como pago
+          </button>
+        </>
+      )}
+    </Sheet>
+  )
+}
+
 function AbaFinanceiro({ filtroDados }: { filtroDados: FiltroDados }) {
   const { tenants: todos } = usePlatformN0()
   const tenants = filtrarTenantsPorDados(todos, filtroDados)
   const mrrTotal = tenants.reduce((soma, t) => soma + mrrDoTenant(t), 0)
   const cobrando = tenants.filter((t) => mrrDoTenant(t) > 0)
   const [exportOpen, setExportOpen] = useState(false) /* G44 regra 11b */
+  const [buscaAberta, setBuscaAberta] = useState(false) /* Correção de auditoria — cluster Financeiro x Kit, ver BuscaGlobalN0Sheet */
+  const [tenantId, setTenantId] = useState<string | null>(null) /* Correção de auditoria — extrato por tenant, ver DevFinanceiroTenantScreen no Kit */
+  const [parcelaDetalhe, setParcelaDetalhe] = useState<Parcela | null>(null)
+  const [parcelaAlterar, setParcelaAlterar] = useState<Parcela | null>(null)
+  const [parcelaCobrar, setParcelaCobrar] = useState<Parcela | null>(null)
   const linhasFin: ExportRow[] = tenants.map((t) => ({
     companyName: t.companyName, status: statusDoTenant(t), mrr: fmtBRL(mrrDoTenant(t)), plano: planoLabelDoTenant(t),
   }))
+
+  /* Kit L6436-L6437: "Recebido no mês" e "Vencido" — os 2 primeiros
+     indicadores de `DevFinanceiroGeralScreen`, que não existiam aqui (só o
+     MRR total e a contagem de cobranças ativas, que já não são do Kit
+     financeiro geral e sim mais próximas de indicadores fixos). Churn e
+     Ticket médio do Kit ficam de fora de propósito — já cobertos pela aba
+     Indicadores (ARPA/NRR), que é a mesma fonte de dados; duplicar aqui
+     criaria 2 números "quase iguais mas calculados diferente" pra Rafael
+     comparar, o problema que a Decisão 53 já corrigiu uma vez neste
+     arquivo (ver comentário no topo do arquivo). */
+  const hojeMes = new Date().toISOString().slice(0, 7)
+  const allInst = tenants.flatMap((t) => (t.billing?.installments ?? []).map((i) => ({ ...i, tenantId: t.id })))
+  const recebidoMes = allInst.filter((i) => i.paid && (i.paidDate ?? '').slice(0, 7) === hojeMes).reduce((s, i) => s + i.amount, 0)
+  const vencidoInst = allInst.filter((i) => installmentDisplayStatus(i) === 'vencido')
+  const vencidoTotal = vencidoInst.reduce((s, i) => s + i.amount, 0)
+
+  const tenant = tenantId ? tenants.find((t) => t.id === tenantId) : undefined
+
+  async function salvarStatusParcela(patch: Partial<Parcela>, novoStatus: StatusParcela, motivo: string) {
+    if (!tenant || !parcelaAlterar) return
+    await atualizarTenantN0(tenant.id, (x) => ({
+      ...x,
+      billing: x.billing ? { ...x.billing, installments: x.billing.installments.map((i) => (i.id === parcelaAlterar.id ? { ...i, ...patch } : i)) } : x.billing,
+      accessLog: [...(x.accessLog ?? []), { id: uid(), ts: new Date().toISOString().slice(0, 19), action: `Parcela de ${fmtDate(parcelaAlterar.dueDate)} marcada como ${PARCELA_ROTULO[novoStatus]}${motivo ? ` — ${motivo}` : ''}`, ator: 'suporte' }],
+    }))
+    setParcelaAlterar(null)
+  }
+
+  async function marcarParcelaPaga(inst: Parcela, method: string) {
+    if (!tenant) return
+    await atualizarTenantN0(tenant.id, (x) => ({
+      ...x,
+      billing: x.billing ? { ...x.billing, installments: x.billing.installments.map((i) => (i.id === inst.id ? { ...i, paid: true, paidDate: new Date().toISOString().slice(0, 10), method, cancelada: false, perda: false } : i)) } : x.billing,
+      onboarding: 'completo',
+      accessLog: [...(x.accessLog ?? []), { id: uid(), ts: new Date().toISOString().slice(0, 19), action: 'Pagamento de parcela confirmado pela Morfo', ator: 'suporte' }],
+    }))
+    setParcelaCobrar(null)
+  }
+
+  // ---- Extrato de um tenant (Kit `DevFinanceiroTenantScreen`, L6521) -----
+  if (tenant) {
+    const installments = (tenant.billing?.installments ?? []).slice().sort((a, b) => b.dueDate.localeCompare(a.dueDate))
+    const recebido = installments.filter((i) => i.paid).reduce((s, i) => s + i.amount, 0)
+    const emAberto = installments.filter((i) => instCobravelLocal(i)).reduce((s, i) => s + i.amount, 0)
+    return (
+      <div>
+        <TopoN0 titulo={tenant.companyName} subtitulo={`Extrato · ${fmtBRL(tenant.billing?.monthlyValue ?? 0)}/mês`} onVoltarSub={() => setTenantId(null)} />
+        {parcelaDetalhe && (
+          <DetalheParcelaSheet
+            tenant={tenant} inst={parcelaDetalhe} onClose={() => setParcelaDetalhe(null)}
+            onAlterarStatus={() => { setParcelaAlterar(parcelaDetalhe); setParcelaDetalhe(null) }}
+            onCobrar={() => { setParcelaCobrar(parcelaDetalhe); setParcelaDetalhe(null) }}
+          />
+        )}
+        {parcelaAlterar && <AlterarStatusParcelaSheet tenant={tenant} inst={parcelaAlterar} onClose={() => setParcelaAlterar(null)} onSave={salvarStatusParcela} />}
+        {parcelaCobrar && <CobrarParcelaSheet tenant={tenant} inst={parcelaCobrar} onClose={() => setParcelaCobrar(null)} onMarcarPago={(m) => void marcarParcelaPaga(parcelaCobrar, m)} />}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {installments.length === 0 && <p style={{ fontSize: 12, color: DEV_TXT3 }}>Sem parcelas de cobrança cadastradas.</p>}
+          {installments.map((i) => {
+            const st = installmentDisplayStatus(i, tenant.billing?.toleranceDays) as StatusParcela
+            return (
+              <div key={i.id} style={{ background: DEV_CARD, borderRadius: 12, padding: 12 }}>
+                <div onClick={() => setParcelaDetalhe(i)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ fontWeight: 700, fontSize: 13.5, color: '#fff' }}>Vence {fmtDate(i.dueDate)}</div>
+                    <div style={{ fontSize: 11.5, color: DEV_TXT2 }}>{fmtBRL(i.amount)}{i.paid ? ` · pago ${fmtDate(i.paidDate)} (${metodoLabel(i.method)})` : ''}</div>
+                  </div>
+                  <ParcelaBadge status={st} />
+                </div>
+                {instCobravelLocal(i) && (
+                  <button type="button" onClick={() => setParcelaCobrar(i)} style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, background: 'none', border: 'none', color: DEV_ACCENT, fontWeight: 700, fontSize: 12, padding: 0, cursor: 'pointer' }}>
+                    <Link2 size={13} /> Cobrar
+                  </button>
+                )}
+              </div>
+            )
+          })}
+        </div>
+        <div style={{ background: DEV_CARD, borderRadius: 14, padding: 14, marginTop: 12, display: 'flex', justifyContent: 'space-between' }}>
+          <div>
+            <div style={{ fontSize: 11, color: DEV_TXT2 }}>Recebido</div>
+            <div style={{ fontSize: 15, fontWeight: 800, color: GREEN }}>{fmtBRL(recebido)}</div>
+          </div>
+          <div>
+            <div style={{ fontSize: 11, color: DEV_TXT2 }}>Em aberto</div>
+            <div style={{ fontSize: 15, fontWeight: 800, color: emAberto ? AMBER : '#fff' }}>{fmtBRL(emAberto)}</div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div>
       <TopoN0
         titulo="Financeiro"
         subtitulo="Cobrança das assinaturas dos tenants"
-        acoes={<IconesDeTela dark onExportar={() => setExportOpen(true)} />}
+        acoes={<IconesDeTela dark onBuscar={() => setBuscaAberta(true)} onExportar={() => setExportOpen(true)} />}
       />
+      {buscaAberta && (
+        <BuscaGlobalN0Sheet
+          onClose={() => setBuscaAberta(false)}
+          onAbrirTenant={(id) => { setBuscaAberta(false); setTenantId(id) }}
+          onAbrirParcela={(id) => { setBuscaAberta(false); setTenantId(id) }}
+        />
+      )}
       {exportOpen && <ExportSheet dark title="Financeiro" filenameBase="morfofinp-n0-financeiro"
         screenColumns={[
           { key: 'companyName', label: 'Ambiente' },
@@ -907,6 +1698,12 @@ function AbaFinanceiro({ filtroDados }: { filtroDados: FiltroDados }) {
         detailRows={linhasFin}
         onClose={() => setExportOpen(false)} />}
       <AvisoDadoFicticio />
+      <IndicatorStrip dark style={{ marginBottom: 8 }} items={[
+        { label: 'Recebido no mês', value: formatMoneyShort(recebidoMes), full: fmtBRL(recebidoMes), sub: 'confirmado', color: GREEN,
+          info: 'Pagamentos de assinatura confirmados no mês corrente.' },
+        { label: 'Vencido', value: formatMoneyShort(vencidoTotal), full: fmtBRL(vencidoTotal), sub: `${vencidoInst.length} parcela(s)`, color: vencidoInst.length ? RED : GREEN,
+          info: 'Parcelas de assinatura vencidas e não pagas.' },
+      ]} />
       {/* Padrão de Interface Morfo (UI), seção 3: grade de cards vira faixa de
           indicadores de uma linha. O valor de dinheiro usa o formato curto
           (seção 4) — na coluna estreita "R$ 7.400,00" viraria "R$ 7,…" e não
@@ -920,9 +1717,11 @@ function AbaFinanceiro({ filtroDados }: { filtroDados: FiltroDados }) {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {tenants.map((t) => {
           const status = statusDoTenant(t)
+          const temParcelas = !!(t.billing?.installments?.length)
           return (
             <div
               key={t.id}
+              onClick={temParcelas ? () => setTenantId(t.id) : undefined}
               style={{
                 display: 'flex',
                 justifyContent: 'space-between',
@@ -930,6 +1729,7 @@ function AbaFinanceiro({ filtroDados }: { filtroDados: FiltroDados }) {
                 background: DEV_CARD,
                 borderRadius: 12,
                 padding: '11px 14px',
+                cursor: temParcelas ? 'pointer' : 'default',
               }}
             >
               <div style={{ minWidth: 0 }}>
@@ -938,8 +1738,11 @@ function AbaFinanceiro({ filtroDados }: { filtroDados: FiltroDados }) {
                 </div>
                 <div style={{ fontSize: 11, color: DEV_TXT2 }}>{planoLabelDoTenant(t)}</div>
               </div>
-              <div style={{ fontSize: 13, fontWeight: 800, color: status === 'inadimplente' ? STATUS_COR.inadimplente : '#fff' }}>
-                {fmtBRL(mrrDoTenant(t))}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 800, color: status === 'inadimplente' ? STATUS_COR.inadimplente : '#fff' }}>
+                  {fmtBRL(mrrDoTenant(t))}
+                </div>
+                {temParcelas && <ChevronRightIcon width={14} height={14} color={DEV_TXT2} />}
               </div>
             </div>
           )
@@ -949,15 +1752,38 @@ function AbaFinanceiro({ filtroDados }: { filtroDados: FiltroDados }) {
   )
 }
 
+/* Auditoria do cluster Financeiro/Auditoria x Kit (11/09/2026): o Kit
+   filtra `platform.auditLog`, um log GLOBAL separado do `tenant.accessLog`
+   — decisão de produto já tomada e documentada (`kitPlatform.ts`, nota
+   acima de `verificarVencimentoPrecadastro`): o MorfoFinP unifica os dois
+   num só (`accessLog`), então esta tela já lê tudo que existe pra ler, sem
+   duplicar. O que realmente faltava era a CAPACIDADE DE ACHAR algo nessa
+   lista — o Kit tem busca por texto + filtro por cliente/tipo/usuário/
+   origem/período (`SearchFilterRow` + `FilterSheet`, Kit L6029/L6030); esta
+   tela não tinha filtro NENHUM, só a lista cronológica inteira. Adicionados
+   busca por texto e filtro por cliente (os 2 mais usados, e os que fazem
+   sentido com os campos que `RegistroAcesso` realmente tem — `id/ts/action/
+   ator`, sem `tipo` próprio). Tipo/Usuário/Origem (N0×N1×suporte) e período
+   De-Até do Kit ficam de fora: exigiriam ou um campo `tipo` que
+   `RegistroAcesso` não tem, ou peças de filtro (`FilterSheet`,
+   `MultiFilterChips`, `DateFilterBar`) que não existem em `kitBase.tsx`/
+   `PadraoUI.tsx` — fora do escopo de um agente que só edita `DevApp.tsx`. */
 function AbaAuditoria() {
   const { tenants } = usePlatformN0()
+  const [query, setQuery] = useState('')
+  const [tenantFiltro, setTenantFiltro] = useState('')
   const eventos = tenants
-    .flatMap((t) => (t.accessLog ?? []).map((ev) => ({ ...ev, tenant: t.companyName })))
+    .flatMap((t) => (t.accessLog ?? []).map((ev) => ({ ...ev, tenant: t.companyName, tenantId: t.id })))
     .sort((a, b) => (a.ts < b.ts ? 1 : -1))
+  const q = query.trim().toLowerCase()
+  const filtrados = eventos.filter((ev) =>
+    (!tenantFiltro || ev.tenantId === tenantFiltro) &&
+    (!q || ev.action.toLowerCase().includes(q) || ev.tenant.toLowerCase().includes(q)))
   const [exportOpen, setExportOpen] = useState(false) /* G44 regra 11b */
-  const linhasAud: ExportRow[] = eventos.map((ev) => ({
+  const linhasAud: ExportRow[] = filtrados.map((ev) => ({
     ts: ev.ts.replace('T', ' ').slice(0, 16), tenant: ev.tenant, action: ev.action,
   }))
+  const filtroAtivo = !!tenantFiltro || !!q
   return (
     <div>
       <TopoN0
@@ -980,9 +1806,21 @@ function AbaAuditoria() {
         detailRows={linhasAud}
         onClose={() => setExportOpen(false)} />}
       <AvisoDadoFicticio />
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {eventos.length === 0 && <p style={{ fontSize: 12, color: DEV_TXT3 }}>Nenhum evento registrado ainda.</p>}
-        {eventos.map((ev) => (
+      <SearchBox dark value={query} onChange={setQuery} placeholder="Buscar por ação ou empresa..." />
+      <div style={{ margin: '10px 0 14px' }}>
+        <select value={tenantFiltro} onChange={(e) => setTenantFiltro(e.target.value)} style={campoN0Style}>
+          <option value="">Todos os clientes</option>
+          {tenants.map((t) => <option key={t.id} value={t.id}>{t.companyName}</option>)}
+        </select>
+      </div>
+      {filtroAtivo && <TotalRegistros dark n={filtrados.length} label={filtrados.length === 1 ? 'registro' : 'registros'} />}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: filtroAtivo ? 8 : 0 }}>
+        {filtrados.length === 0 && (
+          <p style={{ fontSize: 12, color: DEV_TXT3 }}>
+            {eventos.length === 0 ? 'Nenhum evento registrado ainda.' : 'Nenhum registro encontrado. Ajuste a busca ou o filtro.'}
+          </p>
+        )}
+        {filtrados.map((ev) => (
           <div key={ev.id} style={{ background: DEV_CARD, borderRadius: 12, padding: '11px 14px' }}>
             <div style={{ fontSize: 11, color: DEV_TXT2 }}>{ev.ts.replace('T', ' ').slice(0, 16)}</div>
             <div style={{ fontSize: 12.5, fontWeight: 700, color: '#fff', marginTop: 2 }}>{ev.tenant}</div>
@@ -1412,11 +2250,53 @@ function SubParametrosMeusDadosN0({ onVoltarSub }: { onVoltarSub: () => void }) 
   return <FormularioDevUser alvo={eu} devUsers={devUsers} tenants={platform.tenants} perfis={perfis} podeTrocarPerfil={false} titulo="Meus Dados" onFechar={onVoltarSub} />
 }
 
+/* Correção de auditoria (cluster Parâmetros x Kit, 11/09/2026): o Kit sempre
+   oferece "Excluir" na lista de Usuários Morfo (App.jsx L2144, com
+   confirmação — `ConfirmDeleteSheet`, L2160), protegido só por posição
+   (`idx > 0`, não pode excluir o 1º da lista). Aqui não existia NENHUM jeito
+   de remover um administrador cadastrado por engano — só Editar/Ativo-
+   Inativo. Mesma casca de confirmação em 2 passos já usada em
+   `ExcluirClienteSheet` (padrão estabelecido neste arquivo), com uma trava
+   mais robusta que a do Kit: nunca deixa excluir o ÚLTIMO administrador
+   ATIVO (`contaAdminsAtivos`, já usado pra bloquear inativar/trocar perfil)
+   — sem backend/recuperação de senha de verdade, excluir por posição fixa
+   poderia trancar o próprio Rafael fora do painel se ele reordenasse ou
+   criasse usuários. */
+function ExcluirDevUsuarioSheet({ usuario, onClose, onExcluido }: { usuario: DevUserN0; onClose: () => void; onExcluido: () => void }) {
+  const [entendi, setEntendi] = useState(false)
+
+  async function confirmar() {
+    await atualizarDevUsersN0((lista) => lista.filter((u) => u.id !== usuario.id))
+    onExcluido()
+  }
+
+  return (
+    <Sheet dark title="Excluir usuário" onClose={onClose}>
+      <p style={{ fontSize: 13.5, color: '#C9C4D4', lineHeight: 1.5, marginTop: 0 }}>
+        Excluir {usuario.name}? Ele perde o acesso ao painel imediatamente. Essa ação não pode ser desfeita.
+      </p>
+      <button type="button" onClick={() => setEntendi((v) => !v)} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, width: '100%', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
+        <div style={{ width: 20, height: 20, borderRadius: 6, border: `2px solid ${entendi ? RED : '#9B96A8'}`, background: entendi ? RED : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          {entendi && <Check size={13} color="#fff" />}
+        </div>
+        <span style={{ fontSize: 12.5, fontWeight: 600, color: '#fff', textAlign: 'left' }}>Entendo que essa ação não pode ser desfeita</span>
+      </button>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button type="button" onClick={onClose} style={{ ...primaryBtn, flex: 1, background: 'rgba(255,255,255,0.08)', color: '#fff' }}>Cancelar</button>
+        <button type="button" disabled={!entendi} onClick={() => void confirmar()} style={{ ...primaryBtn, flex: 1, background: RED, opacity: entendi ? 1 : 0.5, cursor: entendi ? 'pointer' : 'not-allowed' }}>
+          <Trash2 size={16} /> Excluir
+        </button>
+      </div>
+    </Sheet>
+  )
+}
+
 function SubParametrosUsuarios({ onVoltarSub }: { onVoltarSub: () => void }) {
   const platform = usePlatformN0()
   const devUsers = platform.devUsers ?? []
   const perfis = platform.perfisMorfo ?? perfisPadraoN0()
   const [editando, setEditando] = useState<DevUserN0 | 'novo' | null>(null)
+  const [excluindo, setExcluindo] = useState<DevUserN0 | null>(null)
   const [erro, setErro] = useState('')
 
   function ehUltimoAdminAtivo(u: DevUserN0): boolean {
@@ -1426,6 +2306,12 @@ function SubParametrosUsuarios({ onVoltarSub }: { onVoltarSub: () => void }) {
   async function alternarAtivo(u: DevUserN0) {
     if (u.status !== 'inativo' && ehUltimoAdminAtivo(u)) { setErro('Não é possível inativar o único administrador ativo.'); return }
     await atualizarDevUsersN0((lista) => lista.map((x) => (x.id === u.id ? { ...x, status: x.status === 'inativo' ? 'ativo' : 'inativo' } : x)))
+  }
+
+  function pedirExclusao(u: DevUserN0) {
+    if (ehUltimoAdminAtivo(u)) { setErro('Não é possível excluir o único administrador ativo — crie ou libere outro antes.'); return }
+    setErro('')
+    setExcluindo(u)
   }
 
   if (editando !== null) {
@@ -1460,12 +2346,22 @@ function SubParametrosUsuarios({ onVoltarSub }: { onVoltarSub: () => void }) {
             >
               {u.status !== 'inativo' ? 'Ativo' : 'Inativo'}
             </button>
+            <button
+              type="button"
+              title="Excluir usuário"
+              aria-label="Excluir usuário"
+              onClick={() => pedirExclusao(u)}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 6 }}
+            >
+              <Trash2 size={14} color={RED} />
+            </button>
           </div>
         ))}
       </div>
       <button type="button" onClick={() => setEditando('novo')} style={{ width: '100%', background: 'rgba(255,255,255,0.08)', border: `1px dashed ${DEV_ACCENT}66`, borderRadius: 10, padding: 12, color: DEV_ACCENT, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
         + Novo administrador
       </button>
+      {excluindo && <ExcluirDevUsuarioSheet usuario={excluindo} onClose={() => setExcluindo(null)} onExcluido={() => setExcluindo(null)} />}
     </div>
   )
 }
@@ -1619,6 +2515,10 @@ export default function DevApp({ onEntrarComoTenant }: { onEntrarComoTenant: () 
   // render (sem efeito) pra nunca piscar a aba antiga por 1 frame.
   const aba = abasVisiveis.some((a) => a.key === abaEscolhida) ? abaEscolhida : (abasVisiveis[0]?.key ?? abaEscolhida)
   const [saindo, setSaindo] = useState(false)
+  // Central de Suporte (correção de auditoria, cluster Parâmetros x Kit) —
+  // overlay de nível do shell, igual em espírito ao `push`/pilha do Kit:
+  // fica por cima da aba atual (preserva onde o usuário estava) até fechar.
+  const [suporteGeralAberto, setSuporteGeralAberto] = useState(false)
   // Filtro "Dados Reais/Dados Teste/Ambos" (Decisão 54, Parte B) — estado de
   // sessão, no nível do shell (não persiste no Dexie, mesma natureza de
   // filtro/UI temporária do Kit); padrão "ambos" preserva o comportamento
@@ -1681,13 +2581,25 @@ export default function DevApp({ onEntrarComoTenant }: { onEntrarComoTenant: () 
     <div
       className="mloc-forcar-escuro"
       style={{
-        position: 'fixed',
-        inset: 0,
+        // Corrigido 11/09/2026 (achado na comparação visual pixel a pixel
+        // contra o Projeto Modelo): `position: fixed; inset: 0` fazia o N0
+        // ocupar a JANELA DE VERDADE do navegador, ignorando o `max-width`
+        // de coluna única do `#root` (decisão de produto da Etapa 4: "sempre
+        // coluna única", registrada em Decisões.md) — só o N0 escapava
+        // disso, Login/N1 nunca usaram `position: fixed` no próprio raiz e
+        // por isso sempre ficaram contidos. No Kit isso não acontece porque
+        // a moldura dele usa `transform` (que cria um novo "containing
+        // block" pra `position: fixed`); aqui a simulação de largura usa só
+        // `max-width` (adaptação G44 registrada em `SimulacaoResolucao.tsx`),
+        // que não contém elemento `fixed`. Troca pra `flex: 1` (preenche o
+        // container flex-column pai, igual ao resto do app) resolve sem
+        // precisar mexer no mecanismo de simulação de largura.
+        flex: 1,
+        minHeight: 0,
         background: DEV_BG,
         color: '#fff',
         display: 'flex',
         flexDirection: 'column',
-        zIndex: 50,
       }}
     >
       <div
@@ -1724,12 +2636,18 @@ export default function DevApp({ onEntrarComoTenant }: { onEntrarComoTenant: () 
       {aba !== 'auditoria' && <FiltroDadosBar filtroDados={filtroDados} setFiltroDados={setFiltroDados} />}
 
       <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
-        {aba === 'inicio' && podeVerFuncN0('inicio') && <AbaInicio filtroDados={filtroDados} onIrPara={setAba} />}
-        {aba === 'tenants' && podeVerFuncN0('tenants') && <AbaTenants onEntrarComoTenant={onEntrarComoTenant} filtroDados={filtroDados} />}
-        {aba === 'financeiro' && podeVerFuncN0('financeiro') && <AbaFinanceiro filtroDados={filtroDados} />}
-        {aba === 'auditoria' && podeVerFuncN0('auditoria') && <AbaAuditoria />}
-        {aba === 'parametros' && podeVerFuncN0('parametros') && <AbaParametros podeVerFuncN0={podeVerFuncN0} />}
-        {aba === 'indicadores' && podeVerFuncN0('indicadores') && <IndicadoresDevScreen filtroDados={filtroDados} />}
+        {suporteGeralAberto ? (
+          <CentralSuporteN0 onClose={() => setSuporteGeralAberto(false)} />
+        ) : (
+          <>
+            {aba === 'inicio' && podeVerFuncN0('inicio') && <AbaInicio filtroDados={filtroDados} onIrPara={setAba} onAbrirSuporte={() => setSuporteGeralAberto(true)} />}
+            {aba === 'tenants' && podeVerFuncN0('tenants') && <AbaTenants onEntrarComoTenant={onEntrarComoTenant} filtroDados={filtroDados} />}
+            {aba === 'financeiro' && podeVerFuncN0('financeiro') && <AbaFinanceiro filtroDados={filtroDados} />}
+            {aba === 'auditoria' && podeVerFuncN0('auditoria') && <AbaAuditoria />}
+            {aba === 'parametros' && podeVerFuncN0('parametros') && <AbaParametros podeVerFuncN0={podeVerFuncN0} />}
+            {aba === 'indicadores' && podeVerFuncN0('indicadores') && <IndicadoresDevScreen filtroDados={filtroDados} />}
+          </>
+        )}
       </div>
 
       {/* Rodapé extraído pra `RodapeAbas.tsx` (Decisão 50) — mesmos valores de
@@ -1741,6 +2659,7 @@ export default function DevApp({ onEntrarComoTenant }: { onEntrarComoTenant: () 
         onTrocar={(k) => {
           const acao = acoesN0[k]
           if (acao) { acao.onClick(); return }
+          setSuporteGeralAberto(false)
           setAba(k as AbaN0)
         }}
       />

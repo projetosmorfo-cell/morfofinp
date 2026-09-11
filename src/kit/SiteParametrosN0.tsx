@@ -26,6 +26,14 @@ import { BlocoLogosLogin, NOME_PRODUTO, SITE_LOGIN_PAGE_ID, SITE_PLANOS_PAGE_ID,
 // grava em seguida — o `setPlatform(p => ...)` do Kit vira `setPlatform`
 // deste espelho, com a mesma assinatura. Os `notify(...)` do Kit viram um
 // toast local (`devToast`, mesmo texto).
+//
+// RECONFERIDO em 11/09/2026 contra o Projeto Modelo atual (grupo "site" de
+// DevApp, achar por `grupo === "site"`, não pelas linhas L2146-L2343 de
+// 09/09): todos os campos, seções, opções de cada `Segmented` e a ordem
+// (Menu de páginas → Cabeçalho do web → Página de Entrar Web/Mobile → Layout
+// mobile → Personalização avançada → Páginas do site) idênticos. Sem
+// divergência nova — nenhum campo/seção a mais no Projeto Modelo que falte
+// aqui.
 
 type PatchFn = (p: KitPlatform) => KitPlatform
 

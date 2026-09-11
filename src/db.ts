@@ -382,6 +382,23 @@ export interface ConfiguracaoIcones {
   // o código passe a exigir e que não esteja na ordem salva sempre aparece
   // no final, nunca desaparece por estar "faltando" numa ordem salva antiga.
   ordemMenuEngrenagem?: string[]
+  // "Posição dos menus" e "Posição do botão ⋮" DO PRÓPRIO AMBIENTE
+  // (11/09/2026, comparação visual pixel a pixel contra o Projeto Modelo —
+  // achado real: faltava por completo, `LayoutTenantScreen` do Kit tem essa
+  // seção e o MorfoFinP não). Mesmo tipo/regra de `platformN0.layoutConfig`
+  // (`kit/kitPlatform.ts` — `PosicaoMenu`/`MenuPosModo`, "Kit L1690"/"Kit
+  // MENU_POSICOES L867"), só que como OVERRIDE por cima do padrão que a
+  // Morfo define pra plataforma inteira — exatamente como o Kit faz
+  // (`tenant.layoutConfig` por cima de `modoPadraoMorfo`). Só aparece pro
+  // ambiente quando o plano libera (`Plano.restricoes.layoutPersonalizado`
+  // — "Layout e menus personalizáveis"), em Manutenção → "Layout e Menus" →
+  // "Posição dos menus". `config` nunca aceita 'oculto' (mesma trava de
+  // `ITEM_PROTEGIDO_N1`, aplicada nos dois níveis). Ausente/undefined = usa
+  // o padrão da Morfo (ou o padrão do próprio item, se a Morfo também não
+  // tiver customizado) — "Restaurar padrão da Morfo" apaga só a chave do
+  // item em questão, nunca o mapa inteiro.
+  posicaoN1Proprio?: Record<string, 'rodape' | 'menu' | 'oculto'>
+  menuPosN1Proprio?: { modo?: 'topo' | 'topo_esquerda' | 'rodape' | 'rodape_esquerda' | 'rodape_direita' }
   // Simulação de resolução — ferramenta de teste do MVP, pedido do Rafael
   // (Decisão 36), REESCRITA em 08/09/2026 pro padrão Kit-exato (Roteiro de
   // Parametrização Morfo, G60 — a versão anterior, com botões de TEXTO

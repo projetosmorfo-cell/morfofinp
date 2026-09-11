@@ -56,9 +56,9 @@ export function SubTesteCliente({ notify }: { notify: (m: string) => void }) {
     try {
       if (alvo.real) {
         const n = await gerarLancamentosFicticios(qtd)
-        await salvarTenantsN0((ts) => ts.map((t) => (t.id === alvo.id ? { ...t, env: { registros: n, ambienteTeste: true }, accessLog: [{ id: uid(), ts: agoraISO(), action: `Massa de dados de teste gerada pela Morfo (${n} lançamentos)` }, ...(t.accessLog || [])].slice(0, 50) } : t)))
+        await salvarTenantsN0((ts) => ts.map((t) => (t.id === alvo.id ? { ...t, env: { registros: n, ambienteTeste: true }, accessLog: [{ id: uid(), ts: agoraISO(), action: `Massa de dados de teste gerada pela Morfo (${n} lançamentos)`, ator: 'suporte' }, ...(t.accessLog || [])].slice(0, 50) } : t)))
       } else {
-        await salvarTenantsN0((ts) => ts.map((t) => (t.id === alvo.id ? { ...t, env: { registros: qtd, ambienteTeste: true }, accessLog: [{ id: uid(), ts: agoraISO(), action: `Massa de dados de teste gerada pela Morfo (${qtd} registros)` }, ...(t.accessLog || [])].slice(0, 50) } : t)))
+        await salvarTenantsN0((ts) => ts.map((t) => (t.id === alvo.id ? { ...t, env: { registros: qtd, ambienteTeste: true }, accessLog: [{ id: uid(), ts: agoraISO(), action: `Massa de dados de teste gerada pela Morfo (${qtd} registros)`, ator: 'suporte' }, ...(t.accessLog || [])].slice(0, 50) } : t)))
       }
       notify('Ambiente de teste gerado')
     } catch (e) {
@@ -192,7 +192,7 @@ export function SubLimpezaCliente({ notify }: { notify: (m: string) => void }) {
       if (t.real) apagados += modo === 'teste' ? await apagarLancamentosFicticios() : await apagarTodosLancamentos()
       else apagados += t.env?.registros || 0
     }
-    await salvarTenantsN0((ts) => ts.map((t) => (sel.has(t.id) ? { ...t, env: { registros: 0, ambienteTeste: false }, accessLog: [{ id: uid(), ts: agoraISO(), action: modo === 'teste' ? 'Dados de TESTE do ambiente apagados pela Morfo' : 'Dados do ambiente apagados pela Morfo' }, ...(t.accessLog || [])].slice(0, 50) } : t)))
+    await salvarTenantsN0((ts) => ts.map((t) => (sel.has(t.id) ? { ...t, env: { registros: 0, ambienteTeste: false }, accessLog: [{ id: uid(), ts: agoraISO(), action: modo === 'teste' ? 'Dados de TESTE do ambiente apagados pela Morfo' : 'Dados do ambiente apagados pela Morfo', ator: 'suporte' }, ...(t.accessLog || [])].slice(0, 50) } : t)))
     notify(`${apagados} registro(s) apagado(s)`)
     setSel(new Set()); setConfirma(0)
   }

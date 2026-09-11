@@ -11,13 +11,17 @@ import {
   type TenantKit,
 } from './kitPlatform'
 
-// Tela de Indicadores do N0 — porte literal de `IndicadoresDevScreen` do Kit
-// (`esqueleto-morfo-v1.jsx` L6239-L6398) — Roteiro de Parametrização Morfo,
-// ponto 2 da rodada de 10/09/2026 (achado real: o N0 da MorfoFinP nunca
-// teve essa tela, só 5 abas sem "Indicadores"). Usa a MESMA plataforma
-// (`usePlatformN0`, `src/kit/kitPlatform.ts`, Decisão 53) que Tenants/
-// Financeiro/Auditoria já passaram a consumir nesta rodada — um só tenant
-// fictício em todo o N0, nunca dois conjuntos divergentes.
+// Tela de Indicadores do N0 — porte literal de `IndicadoresDevScreen` do
+// Projeto Modelo — Roteiro de Parametrização Morfo, ponto 2 da rodada de
+// 10/09/2026 (achado real: o N0 da MorfoFinP nunca teve essa tela, só 5
+// abas sem "Indicadores"). Usa a MESMA plataforma (`usePlatformN0`,
+// `src/kit/kitPlatform.ts`, Decisão 53) que Tenants/Financeiro/Auditoria já
+// passaram a consumir nesta rodada — um só tenant fictício em todo o N0,
+// nunca dois conjuntos divergentes.
+//
+// RECONFERIDO em 11/09/2026 contra o Projeto Modelo atual: mesmas 3 abas
+// (Assinaturas/Receita/Carteira), mesmas métricas e mesmas fórmulas — sem
+// divergência nas abas em si.
 //
 // CORREÇÃO desta rodada (item 10 do CONTRATO: valor a valor, e item 9: nada
 // de tela de fachada). Aqui existia um `ResumoExportavelSheet` próprio, com a
@@ -25,6 +29,17 @@ import {
 // FALSO: ele baixa CSV por Blob, gera PDF pela impressão do navegador e envia
 // por link `wa.me`/`mailto`, tudo 100% no cliente. Substituído pelo
 // `ExportSheet` de verdade (`src/kit/ExportSheet.tsx`), igual às demais telas.
+//
+// REABERTURA método novo (11/09/2026): a passagem anterior conferiu "a tela
+// existe e usa ExportSheet de verdade", mas não item a item o que ia DENTRO
+// do ExportSheet. Achados reais, corrigidos: (1) a "Versão detalhada" exportava
+// as MESMAS linhas da "Visão da tela" (`detailRows={linhasResumo}`) — sem
+// nenhum detalhe a mais, contradizendo o próprio hint do ExportSheet ("dados
+// completos... além do que aparece na tela"); o Kit exporta a série mês a mês
+// (`mes`/`mrr`/`novos`) como detalhe de verdade, agora replicado aqui. (2)
+// Faltavam 3 dos 6 gráficos do Kit em `graficos`: cascata do MRR, Receita por
+// plano e Churn (clientes x receita) — só "MRR (12 meses)", "Novos ambientes"
+// e "Maiores contas" estavam presentes. Os 6 gráficos do Kit agora batem 1:1.
 
 function TopoIndicadores({ onExport }: { onExport: () => void }) {
   return (
@@ -177,15 +192,27 @@ export default function IndicadoresDevScreen({ filtroDados }: { filtroDados: Fil
         </>
       )}
 
+      {/* CORREÇÃO (reabertura método novo, 11/09/2026): a "Versão detalhada" estava exportando as MESMAS
+          linhas da "Visão da tela" (`detailRows={linhasResumo}`) — o hint do próprio ExportSheet promete
+          "dados completos... além do que aparece na tela", mas nada de detalhe extra vinha junto. Kit
+          exporta a série mês a mês (`serieMrr`/`meses12`) como detalhe de verdade. Também faltavam 3 dos 6
+          gráficos do Kit no `graficos` (cascata do MRR, Receita por plano, Churn: clientes x receita). */}
       {exportOpen && <ExportSheet dark title="Indicadores" filenameBase="morfofinp-n0-indicadores"
         screenColumns={[{ key: 'label', label: 'Indicador' }, { key: 'valor', label: 'Valor' }]}
         screenRows={linhasResumo}
-        detailColumns={[{ key: 'label', label: 'Indicador' }, { key: 'valor', label: 'Valor' }]}
-        detailRows={linhasResumo}
+        detailColumns={[{ key: 'mes', label: 'Mês' }, { key: 'mrr', label: 'MRR (R$)' }, { key: 'novos', label: 'Novos ambientes' }]}
+        detailRows={serieMrr.map((m, i) => ({
+          mes: m.label,
+          mrr: m.value.toFixed(2),
+          novos: meses12[i] ? tenants.filter((t) => (t.createdAt || '').slice(0, 7) === meses12[i].key).length : 0,
+        }))}
         graficos={[
-          { titulo: 'MRR (12 meses)', tipo: 'linha', formato: 'brl', categorias: serieMrr.map((m) => m.label), series: [{ nome: 'MRR', valores: serieMrr.map((m) => m.value) }] },
-          { titulo: 'Novos ambientes por mês', tipo: 'barra', categorias: porMes.map((m) => m.label), series: [{ nome: 'Ambientes', valores: porMes.map((m) => m.value) }] },
-          { titulo: 'Maiores contas', tipo: 'rank', formato: 'brl', categorias: topClientes.map((c) => c.label), series: [{ nome: 'Mensalidade', valores: topClientes.map((c) => c.value) }] },
+          { titulo: 'Variação do MRR no mês (cascata)', tipo: 'barra', formato: 'brl', categorias: ['Início do mês', 'Novos', 'Expansão', 'Contração', 'Cancelados', 'Hoje'], series: [{ nome: 'MRR (R$)', valores: [mrrInicio, mrrNovo, 0, 0, -mrrChurn, mrr] }] },
+          { titulo: 'MRR ao longo do tempo', tipo: 'linha', formato: 'brl', categorias: serieMrr.map((m) => m.label), series: [{ nome: 'MRR', valores: serieMrr.map((m) => m.value) }] },
+          { titulo: 'Receita por plano', tipo: 'rank', formato: 'brl', categorias: porPlano.map((x) => x.label), series: [{ nome: 'MRR (R$)', valores: porPlano.map((x) => x.value) }] },
+          { titulo: 'Maiores contas', tipo: 'rank', formato: 'brl', categorias: topClientes.map((c) => c.label), series: [{ nome: 'Mensalidade (R$)', valores: topClientes.map((c) => c.value) }] },
+          { titulo: 'Churn: clientes x receita', tipo: 'barra', formato: 'pct', categorias: ['Churn de clientes', 'Churn de receita'], series: [{ nome: '%', valores: [churnLogo, churnReceita] }] },
+          { titulo: 'Novos ambientes por mês', tipo: 'barra', formato: 'num', categorias: porMes.map((m) => m.label), series: [{ nome: 'Novos ambientes', valores: porMes.map((m) => m.value) }] },
         ]}
         onClose={() => setExportOpen(false)} />}
     </div>
