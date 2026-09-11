@@ -109,6 +109,7 @@ export function useConfiguracaoIcones(): Required<
     | 'memoriaDescricaoDias'
     | 'logosInstituicoes'
     | 'pctGrupoRevisado'
+    | 'gruposTipoRevisado'
     | 'posicaoN1Proprio'
     | 'menuPosN1Proprio'
   >

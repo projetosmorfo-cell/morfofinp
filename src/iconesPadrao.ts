@@ -68,6 +68,10 @@ export const ICONES_PADRAO_GRUPO: Record<string, IconePadrao> = {
   Variável: { icone: 'cadeadoAberto', iconeEstilo: 'preenchido', iconeCor: '#3b82f6' },
   Objetivos: { icone: 'negocio', iconeEstilo: 'preenchido', iconeCor: '#3b82f6' },
   Segurança: { icone: 'viagem', iconeEstilo: 'preenchido', iconeCor: '#3b82f6' },
+  // Grupo de ENTRADA criado em 11/09/2026 (tipo de grupo, `gruposUtil.ts`).
+  // Mesmo estilo e mesma cor dos outros quatro, como o Rafael pediu — o que o
+  // distingue é o desenho (cédulas), não um tratamento visual à parte.
+  Receita: { icone: 'salario', iconeEstilo: 'preenchido', iconeCor: '#3b82f6' },
 }
 
 // Usado por `seed.ts` — mescla o padrão (se existir pro nome) em cima de uma

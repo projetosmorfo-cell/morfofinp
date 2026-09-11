@@ -1,9 +1,13 @@
 import { useState, type ReactNode } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { db, NATUREZAS_ORCAMENTAVEIS, type Categoria, type Lancamento } from '../db'
-import { mesAtualISO, type TelaProps } from '../mes'
+import { db, NATUREZAS_ORCAMENTAVEIS, type Categoria, type GrupoRegistro, type Lancamento } from '../db'
+import { mesAtualISO, somarMes, type TelaProps } from '../mes'
 import { proximaDataRecorrencia } from '../recorrencia'
 import { hojeEfetivoISO } from '../hojeSimulado'
+import { tipoDoGrupo } from '../gruposUtil'
+import { PopupAceitavelCategoria, PopupMetaGrupo } from '../components/EdicaoRapida'
+import { GraficoMetasGrupos, type FatiaGrupo } from '../components/Graficos'
+import { PencilSquareIcon } from '@heroicons/react/24/outline'
 import BarraMeta, { fmtBRL as fmt } from '../components/BarraMeta'
 import SeletorMes from '../components/SeletorMes'
 import ListaLancamentosCategoria from '../components/ListaLancamentosCategoria'
@@ -63,6 +67,12 @@ export default function Planejamento({ mes, aoMudarMes, aoAbrirLancamento }: Tel
   // rodada seguinte). Guarda por nome de grupo, não globalmente, pra cada
   // grupo lembrar seu próprio estado.
   const [secoesSemMovimentoAbertas, setSecoesSemMovimentoAbertas] = useState<Set<string>>(new Set())
+  /* Edição rápida chamada pelos ícones de lápis desta tela (11/09/2026) — o
+     popup abre por cima, então a tela não desmonta: grupo aberto, categoria
+     aberta e posição de rolagem continuam onde estavam ao fechar. */
+  const [editandoCategoria, setEditandoCategoria] = useState<Categoria | null>(null)
+  const [editandoGrupo, setEditandoGrupo] = useState<GrupoRegistro | null>(null)
+  const metas = useLiveQuery(() => db.metas.toArray(), [])
   const { pctGrupo, pctCategoria } = useConfiguracaoIcones()
 
   if (!categorias || !grupos || !lancamentosDoMes || !lancamentosTodos) return null
@@ -140,20 +150,47 @@ export default function Planejamento({ mes, aoMudarMes, aoAbrirLancamento }: Tel
   const sobraProjetada =
     totalEntradas.realizado + totalEntradas.previsto - (totalSaidas.realizado + totalSaidas.previsto)
 
+  /* Base da meta do grupo: o salário do mês ANTERIOR — a mesma regra da aba
+     Metas (decisão de 30/08/2026: a base é só o salário, nunca a receita
+     total). Calculada aqui pra o popup de meta mostrar o equivalente em R$
+     sem inventar uma segunda conta do mesmo número. */
+  const mesAnterior = somarMes(mes, -1)
+  const categoriaSalarioId = categorias.find((c) => c.nome === 'Salário')?.id
+  const baseMetaEmReais = lancamentosTodos
+    .filter((l) => l.dataCompetencia.startsWith(mesAnterior) && l.categoriaId === categoriaSalarioId)
+    .reduce((sm, l) => sm + l.valor, 0)
+
   const porGrupo = grupos
     .map((g) => {
       const itens = classificadas.filter((x) => x.cat.grupo === g.nome)
       return {
         grupo: g.nome,
+        tipo: tipoDoGrupo(g),
         icone: g.icone,
         iconeEstilo: g.iconeEstilo,
         iconeCor: g.iconeCor,
         itens,
-        entradas: somaTotais(itens.filter((x) => x.classe === 'entrada').map((x) => x.totais)),
-        saidas: somaTotais(itens.filter((x) => x.classe === 'saida').map((x) => x.totais)),
+        totalGrupo: somaTotais(itens.map((x) => x.totais)),
       }
     })
     .filter((g) => g.itens.length > 0)
+
+  /* Fatias do donut: uma por grupo COM meta cadastrada. Meta em R$ vem da
+     mesma conta da aba Metas (percentual × salário do mês anterior); o
+     realizado e o previsto vêm dos mesmos totais que a tela inteira usa — o
+     gráfico nunca calcula um número por conta própria. */
+  const fatiasMeta: FatiaGrupo[] = porGrupo
+    .map((g) => {
+      const pct = metas?.find((m) => m.grupo === g.grupo)?.percentual ?? 0
+      return {
+        grupo: g.grupo,
+        percentualMeta: pct,
+        meta: (baseMetaEmReais * pct) / 100,
+        realizado: g.totalGrupo.realizado,
+        previsto: g.totalGrupo.previsto,
+      }
+    })
+    .filter((f) => f.percentualMeta > 0)
 
   function alternarGrupo(nome: string) {
     setGrupoAberto((atual) => (atual === nome ? null : nome))
@@ -267,6 +304,8 @@ export default function Planejamento({ mes, aoMudarMes, aoAbrirLancamento }: Tel
         nível.
       </DismissibleTip>
 
+      <GraficoMetasGrupos fatias={fatiasMeta} />
+
       <h2>Nível Geral</h2>
       <div className="cartao">
         <p className="texto-fraco" style={{ marginTop: 0, textTransform: 'uppercase', fontSize: 12 }}>
@@ -292,10 +331,9 @@ export default function Planejamento({ mes, aoMudarMes, aoAbrirLancamento }: Tel
       </div>
 
       <h2>Nível Grupo</h2>
-      {porGrupo.map(({ grupo, icone, iconeEstilo, iconeCor, itens, entradas: entradasGrupo, saidas: saidasGrupo }) => {
+      {porGrupo.map(({ grupo, tipo: tipoGrupo, icone, iconeEstilo, iconeCor, itens, totalGrupo }) => {
         const grupoExpandido = grupoAberto === grupo
-        const temEntrada = entradasGrupo.planejado > 0 || entradasGrupo.realizado > 0 || entradasGrupo.previsto > 0
-        const temSaida = saidasGrupo.planejado > 0 || saidasGrupo.realizado > 0 || saidasGrupo.previsto > 0
+        const temMovimentoNoGrupo = totalGrupo.planejado > 0 || totalGrupo.realizado > 0 || totalGrupo.previsto > 0
 
         // 3 seções, cada uma com cor própria (30/08/2026, rodada seguinte —
         // substitui a divisão anterior em só 2 grupos): (1) tem orçamento
@@ -319,29 +357,19 @@ export default function Planejamento({ mes, aoMudarMes, aoAbrirLancamento }: Tel
           (x) => x.totais.planejado === 0 && !temMovimento(x.totais),
         )
 
-        /* BUG REAL corrigido em 11/09/2026 (reproduzido na tela com os dados
-           da planilha, não deduzido do código): de 30/08/2026 até aqui, o
-           cabeçalho do grupo mostrava UMA barra só, somando entrada e saída
-           no mesmo balde (`somaTotais` de todos os itens). Isso nunca doeu
-           enquanto nenhum grupo tinha categoria de RECEITA com movimento —
-           mas o Salário é natureza Receita dentro do grupo Fixo, e em
-           agosto/2026 o cabeçalho do Fixo aparecia como "R$ 24.409,09 de
-           R$ 7.902,00" (estourado), quando o gasto real do grupo foi
-           R$ 7.185,32: os R$ 17.223,77 do salário estavam entrando como se
-           fossem mais um gasto.
+        /* UMA barra só por grupo — como sempre foi, e como o Rafael pediu
+           de volta em 11/09/2026 ("não precisa ter tbm 2 barras separando
+           gastos e entradas, faremos diferente").
 
-           O teto do grupo é de GASTO — é com ele que o Rafael acompanha a
-           margem do mês. Então a barra passou a medir só as saídas, e as
-           receitas do grupo viram uma linha própria logo abaixo, sem teto e
-           sem semântica de estouro (a mesma linha de 'entrada' que os níveis
-           internos já usam: barra neutra + "já recebido X · previsto Y").
-           A receita continua vinculada ao grupo — a premissa do Rafael de
-           "todo movimento categorizado e dentro de um grupo" não muda, e ele
-           continua vendo, aqui mesmo, se ela já foi realizada ou não.
-
-           Um grupo só de receita (sem nenhuma saída) mostra apenas a linha de
-           entradas; um grupo só de gasto, apenas a barra — ninguém ganha
-           linha vazia. */
+           A build 038 tinha partido este cabeçalho em duas linhas (gastos ×
+           entradas) porque um grupo podia misturar as duas coisas — o Salário
+           morava dentro do "Fixo" e inflava a barra de gasto. A solução que
+           ficou é outra e resolve na raiz: grupo agora tem TIPO (entrada ou
+           saída) e só aceita categoria da natureza correspondente
+           (`src/gruposUtil.ts`). Com o grupo homogêneo, somar tudo o que está
+           dentro dele é exatamente a conta certa, e a cor vem do tipo do
+           grupo — nunca mais de adivinhar pelo sinal do que caiu lá dentro. */
+        const classeGrupo: Classe = tipoGrupo === 'entrada' ? 'entrada' : 'saida'
 
         function linhaCategoria({ cat, classe, totais }: (typeof itens)[number]) {
           const catExpandida = categoriaAberta === cat.id
@@ -352,14 +380,37 @@ export default function Planejamento({ mes, aoMudarMes, aoAbrirLancamento }: Tel
                 onClick={() => alternarCategoria(cat.id!)}
               >
                 <span className="seta-expandir">▶</span>
-                {linhaTotais(
-                  cat.nome,
-                  classe,
-                  totais,
-                  cat.icone !== 'nenhum' && (
-                    <Icone id={cat.icone} estilo={cat.iconeEstilo} cor={cat.iconeCor} tamanho={tamanhoIconePx('categoria', pctCategoria)} />
-                  ),
-                )}
+                {/* `min-width: 0` é o que impede o nome da categoria e o valor de
+                    serem espremidos (e quebrarem em 3 linhas) quando entra o
+                    lápis ao lado: sem isso, o conteúdo não pode encolher abaixo
+                    do tamanho natural dele e o flex reparte o espaço errado. */}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  {linhaTotais(
+                    cat.nome,
+                    classe,
+                    totais,
+                    cat.icone !== 'nenhum' && (
+                      <Icone id={cat.icone} estilo={cat.iconeEstilo} cor={cat.iconeCor} tamanho={tamanhoIconePx('categoria', pctCategoria)} />
+                    ),
+                  )}
+                </div>
+                <button
+                  type="button"
+                  aria-label={`Editar aceitável de ${cat.nome}`}
+                  data-testid={`editar-aceitavel-${cat.id}`}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setEditandoCategoria(cat)
+                  }}
+                  /* `flex: 0 0 auto` sobrescreve a regra do `index.css` que dá
+                     `flex: 1` ao ÚLTIMO filho de uma linha expansível — regra
+                     escrita quando o último filho ERA o conteúdo. Com o lápis
+                     no fim, sem isso o botão é que esticava e o conteúdo
+                     encolhia. */
+                  style={{ flex: '0 0 auto', background: 'none', border: 'none', padding: 4, cursor: 'pointer', color: 'var(--texto-fraco)', display: 'flex', alignSelf: 'flex-start', marginTop: 2 }}
+                >
+                  <PencilSquareIcon width={16} height={16} />
+                </button>
               </div>
               {catExpandida && (
                 <div style={{ marginTop: 8 }}>
@@ -391,22 +442,28 @@ export default function Planejamento({ mes, aoMudarMes, aoAbrirLancamento }: Tel
                     )}
                     {grupo}
                   </strong>
-                  <span className="texto-fraco">{itens.length} categoria(s)</span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span className="texto-fraco">{itens.length} categoria(s)</span>
+                    <button
+                      type="button"
+                      aria-label={`Editar meta do grupo ${grupo}`}
+                      data-testid={`editar-meta-${grupo}`}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        const g = grupos.find((x) => x.nome === grupo)
+                        if (g) setEditandoGrupo(g)
+                      }}
+                      style={{ background: 'none', border: 'none', padding: 4, cursor: 'pointer', color: 'var(--texto-fraco)', display: 'flex' }}
+                    >
+                      <PencilSquareIcon width={16} height={16} />
+                    </button>
+                  </span>
                 </div>
                 {/* Barra de verdade em vez de só texto (30/08/2026) — reusa a
-                    mesma linhaTotais() do nível Geral/Categoria. Desde
-                    11/09/2026 são DUAS linhas, nunca somadas: a barra de
-                    gastos (o teto do grupo) e, quando o grupo tem categoria
-                    de receita, a linha de entradas sem teto — ver o bloco
-                    comentado acima. */}
-                {temSaida && (
+                    mesma linhaTotais() do nível Geral/Categoria. */}
+                {temMovimentoNoGrupo && (
                   <div className="total-geral" style={{ marginTop: 8 }}>
-                    {linhaTotais('Gastos do grupo', 'saida', saidasGrupo)}
-                  </div>
-                )}
-                {temEntrada && (
-                  <div className="total-geral" style={{ marginTop: 8 }}>
-                    {linhaTotais('Entradas neste grupo', 'entrada', entradasGrupo)}
+                    {linhaTotais('Total do grupo', classeGrupo, totalGrupo)}
                   </div>
                 )}
               </div>
@@ -488,6 +545,18 @@ export default function Planejamento({ mes, aoMudarMes, aoAbrirLancamento }: Tel
       <button type="button" className="botao-flutuante" onClick={() => aoAbrirLancamento()} aria-label="Novo lançamento">
         +
       </button>
+      {editandoCategoria && (
+        <PopupAceitavelCategoria categoria={editandoCategoria} onFechar={() => setEditandoCategoria(null)} />
+      )}
+      {editandoGrupo && (
+        <PopupMetaGrupo
+          grupo={editandoGrupo}
+          percentualAtual={metas?.find((m) => m.grupo === editandoGrupo.nome)?.percentual ?? 0}
+          baseEmReais={baseMetaEmReais}
+          mesVigencia={mes.replace('-', '')}
+          onFechar={() => setEditandoGrupo(null)}
+        />
+      )}
     </>
   )
 }

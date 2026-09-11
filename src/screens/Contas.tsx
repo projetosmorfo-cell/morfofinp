@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, type Conta, type TipoConta } from '../db'
+import ModalCadastro from '../components/ModalCadastro'
 import SeletorInstituicao, { type IconeCarteira } from '../components/SeletorInstituicao'
 import SeloInstituicao from '../components/SeloInstituicao'
 
@@ -53,6 +54,69 @@ export default function Contas({ aoVoltar }: { aoVoltar: () => void }) {
   const [confirmandoExclusaoId, setConfirmandoExclusaoId] = useState<number | null>(null)
   const [mostrarNova, setMostrarNova] = useState(false)
   const [novaConta, setNovaConta] = useState<RascunhoConta>(rascunhoVazio())
+
+  const contaEmEdicao = (contas ?? []).find((c) => c.id === editandoId) ?? null
+
+  /* Formulário da conta — o MESMO nos dois popups (nova e edição), pra não
+     existirem dois desenhos que podem divergir (11/09/2026, "Nos cadastros
+     todos do sistema, deve abrir popup e nunca na mesma tela"). */
+  function formularioConta(
+    rasc: RascunhoConta,
+    setRasc: React.Dispatch<React.SetStateAction<RascunhoConta>>,
+  ) {
+    return (
+      <>
+        <label htmlFor="conta-nome">Nome</label>
+        <input
+          id="conta-nome"
+          type="text"
+          placeholder="Ex.: Nubank, Cofrinho Viagem…"
+          value={rasc.nome}
+          onChange={(e) => setRasc((r) => ({ ...r, nome: e.target.value }))}
+        />
+        <label>Ícone</label>
+        <SeletorInstituicao
+          nome={rasc.nome}
+          valor={rasc.icone}
+          onEscolher={(icone) => setRasc((r) => ({ ...r, icone }))}
+        />
+        <label htmlFor="conta-tipo">Tipo</label>
+        <select
+          id="conta-tipo"
+          value={rasc.tipo}
+          onChange={(e) => setRasc((r) => ({ ...r, tipo: e.target.value as TipoConta }))}
+        >
+          {(Object.keys(ROTULO_TIPO) as TipoConta[]).map((t) => (
+            <option key={t} value={t}>
+              {ROTULO_TIPO[t]}
+            </option>
+          ))}
+        </select>
+        {rasc.tipo === 'cartao' && (
+          <>
+            <label htmlFor="conta-fechamento">Dia de fechamento da fatura</label>
+            <input
+              id="conta-fechamento"
+              type="number"
+              min={1}
+              max={31}
+              value={rasc.diaFechamento}
+              onChange={(e) => setRasc((r) => ({ ...r, diaFechamento: e.target.value }))}
+            />
+            <label htmlFor="conta-vencimento">Dia de vencimento da fatura</label>
+            <input
+              id="conta-vencimento"
+              type="number"
+              min={1}
+              max={31}
+              value={rasc.diaVencimento}
+              onChange={(e) => setRasc((r) => ({ ...r, diaVencimento: e.target.value }))}
+            />
+          </>
+        )}
+      </>
+    )
+  }
 
   if (!contas || !lancamentos) return null
 
@@ -133,78 +197,7 @@ export default function Contas({ aoVoltar }: { aoVoltar: () => void }) {
       <div className="cartao">
         {contas.length === 0 && <p className="texto-fraco">Nenhuma conta cadastrada ainda.</p>}
         {contas.map((c) => {
-          const emEdicao = editandoId === c.id
           const temLancamentos = (contagemPorConta.get(c.id!) ?? 0) > 0
-
-          if (emEdicao) {
-            return (
-              <div key={c.id} style={{ padding: '10px 0', borderBottom: '1px solid var(--borda)' }}>
-                <label>Nome</label>
-                <input
-                  type="text"
-                  value={rascunho.nome}
-                  onChange={(e) => setRascunho((r) => ({ ...r, nome: e.target.value }))}
-                />
-                <label>Ícone</label>
-                <SeletorInstituicao
-                  nome={rascunho.nome}
-                  valor={rascunho.icone}
-                  onEscolher={(icone) => setRascunho((r) => ({ ...r, icone }))}
-                />
-                <label>Tipo</label>
-                <select
-                  value={rascunho.tipo}
-                  onChange={(e) => setRascunho((r) => ({ ...r, tipo: e.target.value as TipoConta }))}
-                >
-                  {(Object.keys(ROTULO_TIPO) as TipoConta[]).map((t) => (
-                    <option key={t} value={t}>
-                      {ROTULO_TIPO[t]}
-                    </option>
-                  ))}
-                </select>
-                {rascunho.tipo === 'cartao' && (
-                  <>
-                    <label>Dia de fechamento da fatura</label>
-                    <input
-                      type="number"
-                      min={1}
-                      max={31}
-                      value={rascunho.diaFechamento}
-                      onChange={(e) => setRascunho((r) => ({ ...r, diaFechamento: e.target.value }))}
-                    />
-                    <label>Dia de vencimento da fatura</label>
-                    <input
-                      type="number"
-                      min={1}
-                      max={31}
-                      value={rascunho.diaVencimento}
-                      onChange={(e) => setRascunho((r) => ({ ...r, diaVencimento: e.target.value }))}
-                    />
-                  </>
-                )}
-                <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-                  <button type="button" className="primario" style={{ marginTop: 0 }} onClick={salvarEdicao}>
-                    Salvar
-                  </button>
-                  <button
-                    type="button"
-                    style={{
-                      marginTop: 0,
-                      background: 'none',
-                      border: '1px solid var(--borda)',
-                      borderRadius: 10,
-                      padding: '12px',
-                      flex: 1,
-                      cursor: 'pointer',
-                    }}
-                    onClick={() => setEditandoId(null)}
-                  >
-                    Cancelar
-                  </button>
-                </div>
-              </div>
-            )
-          }
 
           return (
             <div key={c.id} style={{ padding: '10px 0', borderBottom: '1px solid var(--borda)' }}>
@@ -280,90 +273,47 @@ export default function Contas({ aoVoltar }: { aoVoltar: () => void }) {
 
       <h2>Nova conta</h2>
       <div className="cartao">
-        {mostrarNova ? (
-          <>
-            <label>Nome</label>
-            <input
-              type="text"
-              placeholder="Ex.: Nubank, Cofrinho Viagem…"
-              value={novaConta.nome}
-              onChange={(e) => setNovaConta((r) => ({ ...r, nome: e.target.value }))}
-            />
-            <label>Ícone</label>
-            <SeletorInstituicao
-              nome={novaConta.nome}
-              valor={novaConta.icone}
-              onEscolher={(icone) => setNovaConta((r) => ({ ...r, icone }))}
-            />
-            <label>Tipo</label>
-            <select
-              value={novaConta.tipo}
-              onChange={(e) => setNovaConta((r) => ({ ...r, tipo: e.target.value as TipoConta }))}
-            >
-              {(Object.keys(ROTULO_TIPO) as TipoConta[]).map((t) => (
-                <option key={t} value={t}>
-                  {ROTULO_TIPO[t]}
-                </option>
-              ))}
-            </select>
-            {novaConta.tipo === 'cartao' && (
-              <>
-                <label>Dia de fechamento da fatura</label>
-                <input
-                  type="number"
-                  min={1}
-                  max={31}
-                  value={novaConta.diaFechamento}
-                  onChange={(e) => setNovaConta((r) => ({ ...r, diaFechamento: e.target.value }))}
-                />
-                <label>Dia de vencimento da fatura</label>
-                <input
-                  type="number"
-                  min={1}
-                  max={31}
-                  value={novaConta.diaVencimento}
-                  onChange={(e) => setNovaConta((r) => ({ ...r, diaVencimento: e.target.value }))}
-                />
-              </>
-            )}
-            <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-              <button type="button" className="primario" style={{ marginTop: 0 }} onClick={adicionarConta}>
-                Adicionar
-              </button>
-              <button
-                type="button"
-                style={{
-                  marginTop: 0,
-                  background: 'none',
-                  border: '1px solid var(--borda)',
-                  borderRadius: 10,
-                  padding: '12px',
-                  flex: 1,
-                  cursor: 'pointer',
-                }}
-                onClick={() => {
-                  setMostrarNova(false)
-                  setNovaConta(rascunhoVazio())
-                }}
-              >
-                Cancelar
-              </button>
-            </div>
-          </>
-        ) : (
-          <button
-            type="button"
-            className="primario"
-            style={{ marginTop: 0 }}
-            onClick={() => {
-              setNovaConta(rascunhoVazio())
-              setMostrarNova(true)
-            }}
-          >
-            + Nova conta
-          </button>
-        )}
+        <button
+          type="button"
+          className="primario"
+          style={{ marginTop: 0 }}
+          onClick={() => {
+            setNovaConta(rascunhoVazio())
+            setMostrarNova(true)
+          }}
+        >
+          + Nova conta
+        </button>
       </div>
+
+      {mostrarNova && (
+        <ModalCadastro
+          titulo="Nova conta"
+          rotuloSalvar="Adicionar"
+          salvarDesabilitado={!novaConta.nome.trim()}
+          onFechar={() => {
+            setMostrarNova(false)
+            setNovaConta(rascunhoVazio())
+          }}
+          onSalvar={async () => {
+            await adicionarConta()
+            setMostrarNova(false)
+          }}
+        >
+          {formularioConta(novaConta, setNovaConta)}
+        </ModalCadastro>
+      )}
+
+      {contaEmEdicao && (
+        <ModalCadastro
+          titulo="Editar conta"
+          salvarDesabilitado={!rascunho.nome.trim()}
+          onFechar={() => setEditandoId(null)}
+          onSalvar={salvarEdicao}
+        >
+          {formularioConta(rascunho, setRascunho)}
+        </ModalCadastro>
+      )}
     </>
   )
 }

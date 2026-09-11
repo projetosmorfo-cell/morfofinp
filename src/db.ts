@@ -54,6 +54,37 @@ export type Natureza =
 // cofrinho/Pagamento de fatura não têm essa noção (ou já são tratadas à parte).
 export const NATUREZAS_ORCAMENTAVEIS: Natureza[] = ['Consumo', 'Aporte']
 
+/* Tipo do grupo (11/09/2026, pedido do Rafael) — cada grupo passou a ser de
+   ENTRADA ou de SAÍDA, e o vínculo de categoria obedece isso:
+
+     grupo de entrada → só categoria de natureza Receita
+     grupo de saída   → todas as outras naturezas
+
+   Antes disso um grupo podia misturar receita e gasto (o Salário morava dentro
+   do "Fixo"), e o cabeçalho do grupo precisava separar os dois lados na hora de
+   somar — foi essa separação, feita na build 038, que este tipo substitui: com
+   grupo homogêneo, a meta olha só o movimento de dentro dele e a apresentação
+   volta a ser uma barra só.
+
+   `undefined` = grupo de antes deste campo; `migrarTipoDosGrupos()`
+   (`src/gruposUtil.ts`) atribui o tipo uma única vez na abertura. Campo
+   aditivo e sem índice: nunca é buscado por `.where()`, só lido da tabela
+   inteira (que é pequena) — mesma regra de sempre, sem bump de schema. */
+export type TipoGrupo = 'entrada' | 'saida'
+
+export function naturezaEhEntrada(natureza: Natureza): boolean {
+  return natureza === 'Receita'
+}
+
+export function tipoDoGrupoPelaNatureza(natureza: Natureza): TipoGrupo {
+  return naturezaEhEntrada(natureza) ? 'entrada' : 'saida'
+}
+
+export function naturezasDoTipo(tipo: TipoGrupo): Natureza[] {
+  const todas: Natureza[] = ['Receita', 'Consumo', 'Aporte', 'Neutro', 'Gasto de cofrinho', 'Pagamento de fatura', 'Transferência']
+  return todas.filter((n) => tipoDoGrupoPelaNatureza(n) === tipo)
+}
+
 export interface Categoria {
   id?: number
   nome: string
@@ -101,6 +132,10 @@ export interface GrupoRegistro {
   id?: number
   nome: string
   ativo: boolean // inativo = não aparece mais pra escolher em categoria nova, mas categorias existentes continuam válidas
+  // Entrada × saída — ver `TipoGrupo` acima. Opcional só por compatibilidade
+  // com grupo cadastrado antes deste campo; na prática a migração preenche
+  // todos na primeira abertura e o cadastro exige a escolha.
+  tipo?: TipoGrupo
   // Ícone de identificação visual do grupo (31/08/2026, rodada seguinte) —
   // mesmo mecanismo/motivo de não precisar de índice que `Categoria.icone`
   // acima (tabela `grupos` também é pequena e sempre carregada inteira).
@@ -246,6 +281,10 @@ export interface ConfiguracaoIcones {
   // `src/configuracaoIcones.ts`. Campo aditivo, não indexado, sem bump de
   // schema (mesma regra de sempre pra esta tabela singleton).
   pctGrupoRevisado?: boolean
+  // Marca de que a migração de tipo de grupo (entrada × saída) já rodou nesta
+  // instalação (11/09/2026) — ver `migrarTipoDosGrupos()` em
+  // `src/gruposUtil.ts`. Mesma regra do campo acima: aditivo, não indexado.
+  gruposTipoRevisado?: boolean
   // `modoVisao` (04/09/2026, pedido do Rafael): visão "Light" (simplificada —
   // só Resumo/Lançamentos/Carteira no rodapé) vs. "Premium" (todas as 5
   // abas, o app como é hoje). Mesmo raciocínio de sempre pra campo aditivo

@@ -1,10 +1,12 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { db, NATUREZAS_ORCAMENTAVEIS, type Categoria, type Natureza } from '../db'
+import { db, NATUREZAS_ORCAMENTAVEIS, type Categoria, type GrupoRegistro, type Natureza, type TipoGrupo } from '../db'
 import type { TelaProps } from '../mes'
 import { Icone, type EstiloIcone } from '../icones'
 import SeletorIcone from '../components/SeletorIcone'
 import MenuLinha from '../components/MenuLinha'
+import ModalCadastro from '../components/ModalCadastro'
+import { ROTULO_TIPO_GRUPO, gruposParaNatureza, tipoDoGrupo } from '../gruposUtil'
 import { fmtBRL, formatarMoeda, aplicarMascaraValor, paraNumero } from '../formatoMoeda'
 import { useConfiguracaoIcones, tamanhoIconePx, salvarConfiguracaoIcones } from '../configuracaoIcones'
 import {
@@ -79,13 +81,14 @@ function rascunhoVazio(grupoPadrao: string): RascunhoCategoria {
 
 interface RascunhoGrupo {
   nome: string
+  tipo: TipoGrupo
   icone: string
   iconeEstilo: EstiloIcone
   iconeCor: string
 }
 
 function rascunhoGrupoVazio(): RascunhoGrupo {
-  return { nome: '', icone: 'outros', iconeEstilo: 'colorido', iconeCor: '#3b82f6' }
+  return { nome: '', tipo: 'saida', icone: 'outros', iconeEstilo: 'colorido', iconeCor: '#3b82f6' }
 }
 
 // "Categorias e Grupos" (renomeada de "Categorias" em 31/08/2026, rodada
@@ -223,11 +226,212 @@ export default function Categorias(_props: TelaProps & { aoVoltar: () => void })
   })
 
   // --- CRUD de grupos ---
-  function iniciarEdicaoGrupo(id: number, nomeAtual: string, icone?: string, iconeEstilo?: EstiloIcone, iconeCor?: string) {
-    setEditandoGrupoId(id)
-    setRascunhoGrupo({ nome: nomeAtual, icone: icone ?? 'outros', iconeEstilo: iconeEstilo ?? 'colorido', iconeCor: iconeCor ?? '#3b82f6' })
+  function iniciarEdicaoGrupo(g: GrupoRegistro) {
+    setEditandoGrupoId(g.id!)
+    setRascunhoGrupo({
+      nome: g.nome,
+      tipo: tipoDoGrupo(g),
+      icone: g.icone ?? 'outros',
+      iconeEstilo: g.iconeEstilo ?? 'colorido',
+      iconeCor: g.iconeCor ?? '#3b82f6',
+    })
     setConfirmandoExclusaoGrupoId(null)
   }
+
+  /* Trocar o tipo de um grupo que já tem categoria dentro quebraria a regra
+     de vínculo em silêncio (as categorias de dentro deixariam de bater com o
+     tipo novo). Então o campo fica travado nesse caso — o caminho é mover as
+     categorias primeiro, que é uma ação consciente, categoria a categoria. */
+  function tipoTravadoPara(nomeGrupo: string): boolean {
+    return (contagemCategoriasPorGrupo.get(nomeGrupo) ?? 0) > 0
+  }
+
+  /* Formulário do grupo — o MESMO nos dois popups (novo e edição), pra não
+     existirem dois desenhos que podem divergir. O tipo é `Segmented`-like
+     (dois botões), não `<select>`: escolha de 2 valores com rótulo curto lê
+     melhor assim, e `<select>` nativo não respeita o tema (regra da build
+     023). */
+  function formularioGrupo(
+    rascunho: RascunhoGrupo,
+    setRascunho: React.Dispatch<React.SetStateAction<RascunhoGrupo>>,
+    tipoTravado: boolean,
+  ) {
+    return (
+      <>
+        <label htmlFor="grupo-nome">Nome</label>
+        <input
+          id="grupo-nome"
+          type="text"
+          value={rascunho.nome}
+          onChange={(e) => setRascunho((r) => ({ ...r, nome: e.target.value }))}
+        />
+        <span style={{ display: 'block', fontSize: 12, color: 'var(--texto-fraco)', margin: '10px 0 6px' }}>Tipo</span>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {(['saida', 'entrada'] as TipoGrupo[]).map((t) => (
+            <button
+              key={t}
+              type="button"
+              disabled={tipoTravado && rascunho.tipo !== t}
+              onClick={() => setRascunho((r) => ({ ...r, tipo: t }))}
+              style={{
+                flex: 1,
+                marginTop: 0,
+                padding: '10px 12px',
+                borderRadius: 10,
+                cursor: tipoTravado ? 'not-allowed' : 'pointer',
+                border: `1px solid ${rascunho.tipo === t ? 'var(--azul)' : 'var(--borda)'}`,
+                background: rascunho.tipo === t ? 'var(--bg-elevado)' : 'none',
+                color: 'var(--texto)',
+                fontWeight: rascunho.tipo === t ? 700 : 400,
+                opacity: tipoTravado && rascunho.tipo !== t ? 0.4 : 1,
+              }}
+            >
+              {ROTULO_TIPO_GRUPO[t]}
+            </button>
+          ))}
+        </div>
+        <p className="texto-fraco" style={{ marginTop: 6, marginBottom: 0, fontSize: 12 }}>
+          {tipoTravado
+            ? 'O tipo não pode mudar enquanto houver categoria vinculada a este grupo — mova as categorias primeiro.'
+            : rascunho.tipo === 'entrada'
+              ? 'Só aceita categoria de natureza Receita.'
+              : 'Aceita todas as naturezas, menos Receita.'}
+        </p>
+        <SeletorIcone
+          icone={rascunho.icone}
+          estilo={rascunho.iconeEstilo}
+          cor={rascunho.iconeCor}
+          onChange={({ icone, estilo, cor }) => setRascunho((r) => ({ ...r, icone, iconeEstilo: estilo, iconeCor: cor }))}
+        />
+      </>
+    )
+  }
+
+  /* Formulário da categoria — o MESMO nos dois popups (nova e edição).
+
+     A regra de vínculo (11/09/2026) vive aqui, na forma mais simples que
+     existe: a lista de grupos oferecida é só a dos grupos compatíveis com a
+     natureza escolhida (`gruposParaNatureza`). Trocar a natureza pra Receita
+     num grupo de saída não dá erro — o campo Grupo se reposiciona sozinho no
+     primeiro grupo de entrada disponível. Não existe caminho pela tela que
+     grave a combinação errada. */
+  function formularioCategoria(
+    rasc: RascunhoCategoria,
+    setRasc: React.Dispatch<React.SetStateAction<RascunhoCategoria>>,
+  ) {
+    const gruposValidos = gruposParaNatureza(gruposAtivos, rasc.natureza)
+    const grupoEscolhido = gruposValidos.some((g) => g.nome === rasc.grupo) ? rasc.grupo : (gruposValidos[0]?.nome ?? '')
+    return (
+      <>
+        <label htmlFor="cat-nome">Nome</label>
+        <input
+          id="cat-nome"
+          type="text"
+          value={rasc.nome}
+          onChange={(e) => setRasc((r) => ({ ...r, nome: e.target.value }))}
+        />
+        <label htmlFor="cat-natureza">Natureza</label>
+        <select
+          id="cat-natureza"
+          value={rasc.natureza}
+          onChange={(e) => {
+            const natureza = e.target.value as Natureza
+            const permitidos = gruposParaNatureza(gruposAtivos, natureza)
+            setRasc((r) => ({
+              ...r,
+              natureza,
+              grupo: permitidos.some((g) => g.nome === r.grupo) ? r.grupo : (permitidos[0]?.nome ?? ''),
+            }))
+          }}
+        >
+          {NATUREZAS.map((n) => (
+            <option key={n} value={n}>
+              {n}
+            </option>
+          ))}
+        </select>
+        <label htmlFor="cat-grupo">Grupo</label>
+        <select
+          id="cat-grupo"
+          value={grupoEscolhido}
+          onChange={(e) => setRasc((r) => ({ ...r, grupo: e.target.value }))}
+        >
+          {gruposValidos.map((g2) => (
+            <option key={g2.id} value={g2.nome}>
+              {g2.nome}
+            </option>
+          ))}
+        </select>
+        <p className="texto-fraco" style={{ marginTop: 4, marginBottom: 0, fontSize: 12 }}>
+          Só aparecem grupos de {ROTULO_TIPO_GRUPO[rasc.natureza === 'Receita' ? 'entrada' : 'saida']} — é a
+          natureza da categoria que define onde ela pode ser vinculada.
+        </p>
+        <label htmlFor="cat-aceitavel">Aceitável mensal (R$)</label>
+        <input
+          id="cat-aceitavel"
+          type="text"
+          inputMode="decimal"
+          placeholder="0,00"
+          value={rasc.aceitavelMensal}
+          onChange={(e) => setRasc((r) => ({ ...r, aceitavelMensal: aplicarMascaraValor(e.target.value) }))}
+        />
+        {rasc.natureza === 'Receita' && (
+          <>
+            <label htmlFor="cat-esperado">Planejado mensal (R$) — pra tela Planejamento</label>
+            <input
+              id="cat-esperado"
+              type="text"
+              inputMode="decimal"
+              placeholder="0,00"
+              value={rasc.esperadoMensal}
+              onChange={(e) => setRasc((r) => ({ ...r, esperadoMensal: aplicarMascaraValor(e.target.value) }))}
+            />
+          </>
+        )}
+        {NATUREZAS_VINCULAVEIS.includes(rasc.natureza) && contasVinculaveis.length > 0 && (
+          <>
+            <label htmlFor="cat-cofrinho">Vincular a um cofrinho (opcional)</label>
+            <select
+              id="cat-cofrinho"
+              value={rasc.contaVinculada}
+              onChange={(e) => setRasc((r) => ({ ...r, contaVinculada: e.target.value }))}
+            >
+              <option value="">Nenhum</option>
+              {contasVinculaveis.map((c2) => (
+                <option key={c2.id} value={c2.id}>
+                  {c2.nome}
+                </option>
+              ))}
+            </select>
+            <p className="texto-fraco" style={{ marginTop: 4, marginBottom: 0 }}>
+              Ajuste de fluxo, não movimentação real: um lançamento nesta categoria, mesmo pago por outra conta
+              (ex.: direto pelo Bradesco), aparece como nota informativa no cofrinho — não altera o saldo dele, só
+              sinaliza que esse gasto substituiu parte do aporte daquele mês.
+            </p>
+          </>
+        )}
+        <SeletorIcone
+          icone={rasc.icone}
+          estilo={rasc.iconeEstilo}
+          cor={rasc.iconeCor}
+          onChange={({ icone, estilo, cor }) => setRasc((r) => ({ ...r, icone, iconeEstilo: estilo, iconeCor: cor }))}
+        />
+      </>
+    )
+  }
+
+  /* Único caso em que a regra trava de verdade: a natureza escolhida não tem
+     NENHUM grupo compatível cadastrado (ex.: primeira categoria de receita num
+     app onde ninguém criou grupo de entrada). Em vez de deixar salvar errado,
+     a tela diz o que falta. */
+  function avisoDeVinculo(natureza: Natureza) {
+    if (gruposParaNatureza(gruposAtivos, natureza).length > 0) return undefined
+    const tipo = natureza === 'Receita' ? 'entrada' : 'saída'
+    return `Não existe nenhum grupo de ${tipo} ativo. Cadastre um na aba Grupos antes de criar esta categoria.`
+  }
+
+  const categoriaEmEdicao = categorias.find((c) => c.id === editandoId) ?? null
+  const grupoEmEdicao = grupos.find((g) => g.id === editandoGrupoId) ?? null
 
   async function salvarNomeGrupo(id: number, nomeAntigo: string) {
     const novoNome = rascunhoGrupo.nome.trim()
@@ -240,6 +444,7 @@ export default function Categorias(_props: TelaProps & { aoVoltar: () => void })
     await db.transaction('rw', db.grupos, db.categorias, db.metas, async () => {
       await db.grupos.update(id, {
         nome: novoNome,
+        tipo: rascunhoGrupo.tipo,
         icone: rascunhoGrupo.icone,
         iconeEstilo: rascunhoGrupo.iconeEstilo,
         iconeCor: rascunhoGrupo.iconeEstilo === 'colorido' ? undefined : rascunhoGrupo.iconeCor,
@@ -273,6 +478,7 @@ export default function Categorias(_props: TelaProps & { aoVoltar: () => void })
     await db.grupos.add({
       nome,
       ativo: true,
+      tipo: novoGrupo.tipo,
       icone: novoGrupo.icone,
       iconeEstilo: novoGrupo.iconeEstilo,
       iconeCor: novoGrupo.iconeEstilo === 'colorido' ? undefined : novoGrupo.iconeCor,
@@ -480,36 +686,6 @@ export default function Categorias(_props: TelaProps & { aoVoltar: () => void })
         {grupos.length === 0 && <p className="texto-fraco">Nenhum grupo cadastrado ainda.</p>}
         {grupos.map((g) => {
           const temCategoria = (contagemCategoriasPorGrupo.get(g.nome) ?? 0) > 0
-          if (editandoGrupoId === g.id) {
-            return (
-              <div key={g.id} style={{ padding: '8px 0' }}>
-                <label>Nome</label>
-                <input
-                  type="text"
-                  value={rascunhoGrupo.nome}
-                  onChange={(e) => setRascunhoGrupo((r) => ({ ...r, nome: e.target.value }))}
-                />
-                <SeletorIcone
-                  icone={rascunhoGrupo.icone}
-                  estilo={rascunhoGrupo.iconeEstilo}
-                  cor={rascunhoGrupo.iconeCor}
-                  onChange={({ icone, estilo, cor }) => setRascunhoGrupo((r) => ({ ...r, icone, iconeEstilo: estilo, iconeCor: cor }))}
-                />
-                <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-                  <button type="button" className="primario" style={{ marginTop: 0 }} onClick={() => salvarNomeGrupo(g.id!, g.nome)}>
-                    Salvar
-                  </button>
-                  <button
-                    type="button"
-                    style={{ background: 'none', border: '1px solid var(--borda)', borderRadius: 10, padding: '12px', cursor: 'pointer' }}
-                    onClick={() => setEditandoGrupoId(null)}
-                  >
-                    Cancelar
-                  </button>
-                </div>
-              </div>
-            )
-          }
           return (
             <div key={g.id} className="linha linha-cabecalho-grupo">
               <span style={{ opacity: g.ativo ? 1 : 0.5, display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -517,13 +693,14 @@ export default function Categorias(_props: TelaProps & { aoVoltar: () => void })
                   <Icone id={g.icone} estilo={g.iconeEstilo} cor={g.iconeCor} tamanho={tamanhoIconePx('grupo', configIcones.pctGrupo)} />
                 )}
                 {g.nome}
+                <span className="texto-fraco"> · {ROTULO_TIPO_GRUPO[tipoDoGrupo(g)]}</span>
                 {!g.ativo && <span className="texto-fraco"> · inativo</span>}
               </span>
               <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
                 <button
                   type="button"
                   style={{ background: 'none', border: 'none', color: 'var(--azul)', cursor: 'pointer', padding: 0 }}
-                  onClick={() => iniciarEdicaoGrupo(g.id!, g.nome, g.icone, g.iconeEstilo, g.iconeCor)}
+                  onClick={() => iniciarEdicaoGrupo(g)}
                 >
                   Editar
                 </button>
@@ -595,73 +772,55 @@ export default function Categorias(_props: TelaProps & { aoVoltar: () => void })
           )
         })}
         <div style={{ marginTop: 12 }}>
-          {mostrarNovoGrupo ? (
-            <>
-              <label>Nome do novo grupo</label>
-              <input
-                type="text"
-                placeholder="Nome do novo grupo"
-                value={novoGrupo.nome}
-                onChange={(e) => setNovoGrupo((r) => ({ ...r, nome: e.target.value }))}
-              />
-              <SeletorIcone
-                icone={novoGrupo.icone}
-                estilo={novoGrupo.iconeEstilo}
-                cor={novoGrupo.iconeCor}
-                onChange={({ icone, estilo, cor }) => setNovoGrupo((r) => ({ ...r, icone, iconeEstilo: estilo, iconeCor: cor }))}
-              />
-              <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                <button
-                  type="button"
-                  className="primario"
-                  style={{ marginTop: 0 }}
-                  onClick={async () => {
-                    if (!novoGrupo.nome.trim()) return
-                    await adicionarGrupo()
-                    setMostrarNovoGrupo(false)
-                  }}
-                >
-                  + Grupo
-                </button>
-                <button
-                  type="button"
-                  style={{
-                    marginTop: 0,
-                    background: 'none',
-                    border: '1px solid var(--borda)',
-                    borderRadius: 10,
-                    padding: '12px',
-                    flex: 1,
-                    cursor: 'pointer',
-                  }}
-                  onClick={() => {
-                    setMostrarNovoGrupo(false)
-                    setNovoGrupo(rascunhoGrupoVazio())
-                  }}
-                >
-                  Cancelar
-                </button>
-              </div>
-            </>
-          ) : (
-            <button
-              type="button"
-              className="primario"
-              style={{ marginTop: 0 }}
-              onClick={() => {
-                setNovoGrupo(rascunhoGrupoVazio())
-                setMostrarNovoGrupo(true)
-              }}
-            >
-              + Incluir grupo
-            </button>
-          )}
+          <button
+            type="button"
+            className="primario"
+            style={{ marginTop: 0 }}
+            onClick={() => {
+              setNovoGrupo(rascunhoGrupoVazio())
+              setMostrarNovoGrupo(true)
+            }}
+          >
+            + Incluir grupo
+          </button>
         </div>
         <p className="texto-fraco" style={{ marginTop: 8, marginBottom: 0 }}>
-          Grupo com categoria vinculada só pode ser inativado (some das opções de categoria nova, mas o
-          histórico continua íntegro); sem nenhuma categoria, pode ser excluído de verdade.
+          Todo grupo é de <strong>Entrada</strong> (só categorias de Receita) ou de <strong>Saída</strong> (todas as
+          outras naturezas) — é o tipo que define o que pode ser vinculado nele. Grupo com categoria vinculada só
+          pode ser inativado (some das opções de categoria nova, mas o histórico continua íntegro); sem nenhuma
+          categoria, pode ser excluído de verdade.
         </p>
       </div>
+
+      {mostrarNovoGrupo && (
+        <ModalCadastro
+          titulo="Novo grupo"
+          rotuloSalvar="Adicionar"
+          salvarDesabilitado={!novoGrupo.nome.trim()}
+          onFechar={() => {
+            setMostrarNovoGrupo(false)
+            setNovoGrupo(rascunhoGrupoVazio())
+          }}
+          onSalvar={async () => {
+            if (!novoGrupo.nome.trim()) return
+            await adicionarGrupo()
+            setMostrarNovoGrupo(false)
+          }}
+        >
+          {formularioGrupo(novoGrupo, setNovoGrupo, false)}
+        </ModalCadastro>
+      )}
+
+      {grupoEmEdicao && (
+        <ModalCadastro
+          titulo="Editar grupo"
+          salvarDesabilitado={!rascunhoGrupo.nome.trim()}
+          onFechar={() => setEditandoGrupoId(null)}
+          onSalvar={() => salvarNomeGrupo(grupoEmEdicao.id!, grupoEmEdicao.nome)}
+        >
+          {formularioGrupo(rascunhoGrupo, setRascunhoGrupo, tipoTravadoPara(grupoEmEdicao.nome))}
+        </ModalCadastro>
+      )}
       </>
       )}
 
@@ -807,110 +966,7 @@ export default function Categorias(_props: TelaProps & { aoVoltar: () => void })
             </div>
             <div className="cartao">
               {doGrupo.map((c) => {
-                const emEdicao = editandoId === c.id
                 const temLancamentos = (contagemPorCategoria.get(c.id!) ?? 0) > 0
-
-                if (emEdicao) {
-                  return (
-                    <div key={c.id} style={{ padding: '10px 0', borderBottom: '1px solid var(--borda)' }}>
-                      <label>Nome</label>
-                      <input
-                        type="text"
-                        value={rascunho.nome}
-                        onChange={(e) => setRascunho((r) => ({ ...r, nome: e.target.value }))}
-                      />
-                      <label>Grupo</label>
-                      <select
-                        value={rascunho.grupo}
-                        onChange={(e) => setRascunho((r) => ({ ...r, grupo: e.target.value }))}
-                      >
-                        {gruposAtivos.map((g2) => (
-                          <option key={g2.id} value={g2.nome}>
-                            {g2.nome}
-                          </option>
-                        ))}
-                      </select>
-                      <label>Natureza</label>
-                      <select
-                        value={rascunho.natureza}
-                        onChange={(e) => setRascunho((r) => ({ ...r, natureza: e.target.value as Natureza }))}
-                      >
-                        {NATUREZAS.map((n) => (
-                          <option key={n} value={n}>
-                            {n}
-                          </option>
-                        ))}
-                      </select>
-                      <label>Aceitável mensal (R$)</label>
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        value={rascunho.aceitavelMensal}
-                        onChange={(e) => setRascunho((r) => ({ ...r, aceitavelMensal: aplicarMascaraValor(e.target.value) }))}
-                      />
-                      {rascunho.natureza === 'Receita' && (
-                        <>
-                          <label>Planejado mensal (R$) — pra tela Planejamento</label>
-                          <input
-                            type="text"
-                            inputMode="decimal"
-                            placeholder="0,00"
-                            value={rascunho.esperadoMensal}
-                            onChange={(e) => setRascunho((r) => ({ ...r, esperadoMensal: aplicarMascaraValor(e.target.value) }))}
-                          />
-                        </>
-                      )}
-                      {NATUREZAS_VINCULAVEIS.includes(rascunho.natureza) && contasVinculaveis.length > 0 && (
-                        <>
-                          <label>Vincular a um cofrinho (opcional)</label>
-                          <select
-                            value={rascunho.contaVinculada}
-                            onChange={(e) => setRascunho((r) => ({ ...r, contaVinculada: e.target.value }))}
-                          >
-                            <option value="">Nenhum</option>
-                            {contasVinculaveis.map((c) => (
-                              <option key={c.id} value={c.id}>
-                                {c.nome}
-                              </option>
-                            ))}
-                          </select>
-                          <p className="texto-fraco" style={{ marginTop: 4, marginBottom: 0 }}>
-                            Ajuste de fluxo, não movimentação real: um lançamento nesta categoria, mesmo pago por
-                            outra conta (ex.: direto pelo Bradesco), aparece como nota informativa no cofrinho —
-                            não altera o saldo dele, só sinaliza que esse gasto substituiu parte do aporte
-                            daquele mês.
-                          </p>
-                        </>
-                      )}
-                      <SeletorIcone
-                        icone={rascunho.icone}
-                        estilo={rascunho.iconeEstilo}
-                        cor={rascunho.iconeCor}
-                        onChange={({ icone, estilo, cor }) => setRascunho((r) => ({ ...r, icone, iconeEstilo: estilo, iconeCor: cor }))}
-                      />
-                      <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-                        <button type="button" className="primario" style={{ marginTop: 0 }} onClick={salvarEdicao}>
-                          Salvar
-                        </button>
-                        <button
-                          type="button"
-                          style={{
-                            marginTop: 0,
-                            background: 'none',
-                            border: '1px solid var(--borda)',
-                            borderRadius: 10,
-                            padding: '12px',
-                            flex: 1,
-                            cursor: 'pointer',
-                          }}
-                          onClick={() => setEditandoId(null)}
-                        >
-                          Cancelar
-                        </button>
-                      </div>
-                    </div>
-                  )
-                }
 
                 return (
                   <div key={c.id} style={{ padding: '10px 0', borderBottom: '1px solid var(--borda)' }}>
@@ -1025,119 +1081,49 @@ export default function Categorias(_props: TelaProps & { aoVoltar: () => void })
 
       <h2>Nova categoria</h2>
       <div className="cartao">
-        {mostrarNova ? (
-          <>
-            <label>Nome</label>
-            <input
-              type="text"
-              value={novaCategoria.nome}
-              onChange={(e) => setNovaCategoria((r) => ({ ...r, nome: e.target.value }))}
-            />
-            <label>Grupo</label>
-            <select
-              value={novaCategoria.grupo || nomesGrupoAtivos[0] || ''}
-              onChange={(e) => setNovaCategoria((r) => ({ ...r, grupo: e.target.value }))}
-            >
-              {gruposAtivos.map((g) => (
-                <option key={g.id} value={g.nome}>
-                  {g.nome}
-                </option>
-              ))}
-            </select>
-            <label>Natureza</label>
-            <select
-              value={novaCategoria.natureza}
-              onChange={(e) => setNovaCategoria((r) => ({ ...r, natureza: e.target.value as Natureza }))}
-            >
-              {NATUREZAS.map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
-            </select>
-            <label>Aceitável mensal (R$)</label>
-            <input
-              type="text"
-              inputMode="decimal"
-              placeholder="0,00"
-              value={novaCategoria.aceitavelMensal}
-              onChange={(e) => setNovaCategoria((r) => ({ ...r, aceitavelMensal: aplicarMascaraValor(e.target.value) }))}
-            />
-            {novaCategoria.natureza === 'Receita' && (
-              <>
-                <label>Planejado mensal (R$) — pra tela Planejamento</label>
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  placeholder="0,00"
-                  value={novaCategoria.esperadoMensal}
-                  onChange={(e) => setNovaCategoria((r) => ({ ...r, esperadoMensal: aplicarMascaraValor(e.target.value) }))}
-                />
-              </>
-            )}
-            {NATUREZAS_VINCULAVEIS.includes(novaCategoria.natureza) && contasVinculaveis.length > 0 && (
-              <>
-                <label>Vincular a um cofrinho (opcional)</label>
-                <select
-                  value={novaCategoria.contaVinculada}
-                  onChange={(e) => setNovaCategoria((r) => ({ ...r, contaVinculada: e.target.value }))}
-                >
-                  <option value="">Nenhum</option>
-                  {contasVinculaveis.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.nome}
-                    </option>
-                  ))}
-                </select>
-                <p className="texto-fraco" style={{ marginTop: 4, marginBottom: 0 }}>
-                  Ajuste de fluxo, não movimentação real — ver explicação na edição de categoria.
-                </p>
-              </>
-            )}
-            <SeletorIcone
-              icone={novaCategoria.icone}
-              estilo={novaCategoria.iconeEstilo}
-              cor={novaCategoria.iconeCor}
-              onChange={({ icone, estilo, cor }) => setNovaCategoria((r) => ({ ...r, icone, iconeEstilo: estilo, iconeCor: cor }))}
-            />
-            <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-              <button type="button" className="primario" style={{ marginTop: 0 }} onClick={adicionarCategoria}>
-                Adicionar
-              </button>
-              <button
-                type="button"
-                style={{
-                  marginTop: 0,
-                  background: 'none',
-                  border: '1px solid var(--borda)',
-                  borderRadius: 10,
-                  padding: '12px',
-                  flex: 1,
-                  cursor: 'pointer',
-                }}
-                onClick={() => {
-                  setMostrarNova(false)
-                  setNovaCategoria(rascunhoVazio(nomesGrupoAtivos[0] ?? ''))
-                }}
-              >
-                Cancelar
-              </button>
-            </div>
-          </>
-        ) : (
-          <button
-            type="button"
-            className="primario"
-            style={{ marginTop: 0 }}
-            onClick={() => {
-              setNovaCategoria(rascunhoVazio(nomesGrupoAtivos[0] ?? ''))
-              setMostrarNova(true)
-            }}
-          >
-            + Nova categoria
-          </button>
-        )}
+        <button
+          type="button"
+          className="primario"
+          style={{ marginTop: 0 }}
+          onClick={() => {
+            setNovaCategoria(rascunhoVazio(nomesGrupoAtivos[0] ?? ''))
+            setMostrarNova(true)
+          }}
+        >
+          + Nova categoria
+        </button>
       </div>
+
+      {mostrarNova && (
+        <ModalCadastro
+          titulo="Nova categoria"
+          rotuloSalvar="Adicionar"
+          salvarDesabilitado={!novaCategoria.nome.trim() || gruposParaNatureza(gruposAtivos, novaCategoria.natureza).length === 0}
+          aviso={avisoDeVinculo(novaCategoria.natureza)}
+          onFechar={() => {
+            setMostrarNova(false)
+            setNovaCategoria(rascunhoVazio(nomesGrupoAtivos[0] ?? ''))
+          }}
+          onSalvar={async () => {
+            await adicionarCategoria()
+            setMostrarNova(false)
+          }}
+        >
+          {formularioCategoria(novaCategoria, setNovaCategoria)}
+        </ModalCadastro>
+      )}
+
+      {categoriaEmEdicao && (
+        <ModalCadastro
+          titulo="Editar categoria"
+          salvarDesabilitado={!rascunho.nome.trim() || gruposParaNatureza(gruposAtivos, rascunho.natureza).length === 0}
+          aviso={avisoDeVinculo(rascunho.natureza)}
+          onFechar={() => setEditandoId(null)}
+          onSalvar={salvarEdicao}
+        >
+          {formularioCategoria(rascunho, setRascunho)}
+        </ModalCadastro>
+      )}
       </>
       )}
     </>

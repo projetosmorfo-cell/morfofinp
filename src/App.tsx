@@ -16,6 +16,7 @@ import { ArrowPathIcon, ArrowRightOnRectangleIcon, CalendarDaysIcon, ChartPieIco
 import DetalheLancamento from './components/DetalheLancamento'
 import { mesInicial } from './mes'
 import { avancarSeriesFixasPendentes } from './recorrencia'
+import { migrarTipoDosGrupos } from './gruposUtil'
 import { migrarPctGrupo, useModoVisao, useOrdemAbas, useOrdemMenuEngrenagem, useTemaEfetivo } from './configuracaoIcones'
 import { TopIconMenu, UserHoverIcon, ThemeToggleIcon } from './kit/TopoIcones'
 import { Settings, MessageCircle, RefreshCw, LogOut } from 'lucide-react'
@@ -87,7 +88,7 @@ const TELAS_LIGHT: Tela[] = ['resumo', 'lancamentos', 'carteira', 'planejamento'
 // `src/kit/ConfiguracoesN1.tsx`. 'layout' e 'limpar' são as duas metades
 // de `Manutencao` reaproveitadas como destinos separados (prop `secao`),
 // pra cada parâmetro cair na sessão do Kit que lhe cabe.
-type Config = 'configuracoes' | 'categorias' | 'contas' | 'notificacoes' | 'manutencao' | 'layout' | 'limpar' | 'assinatura' | 'ferramentasTeste' | 'suporte' | 'meusDados' | 'meuAmbiente' | 'aparencia' | 'ajuda'
+type Config = 'configuracoes' | 'categorias' | 'contas' | 'notificacoes' | 'notificacoesPendentes' | 'manutencao' | 'layout' | 'limpar' | 'assinatura' | 'ferramentasTeste' | 'suporte' | 'meusDados' | 'meuAmbiente' | 'aparencia' | 'ajuda'
 
 // 'notificacoes' (09/09/2026): tela "Notificações bancárias" — ver
 // `src/screens/NotificacoesBancarias.tsx` e `src/notificacaoBancaria.ts`.
@@ -502,6 +503,11 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: { onVoltar: (
     // Correção única do percentual do ícone de grupo numa base que já existe
     // (11/09/2026) — ver `migrarPctGrupo()` em `src/configuracaoIcones.ts`.
     migrarPctGrupo()
+    // Tipo de grupo (entrada × saída) numa base que já existe: atribui o tipo
+    // a cada grupo e move pro grupo "Receita" toda categoria de receita que
+    // estiver dentro de grupo de saída (11/09/2026) — roda uma vez só, ver
+    // `migrarTipoDosGrupos()` em `src/gruposUtil.ts`.
+    migrarTipoDosGrupos()
   }, [])
 
   // Notificação bancária (09/09/2026): ao abrir o app, puxa o que o serviço
@@ -631,7 +637,7 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: { onVoltar: (
         </div>
       )}
       <BannerDataSimulada />
-      {qtdNotificacoesPendentes > 0 && configAberta !== 'notificacoes' && (
+      {qtdNotificacoesPendentes > 0 && configAberta !== 'notificacoes' && configAberta !== 'notificacoesPendentes' && (
         // Aviso de notificação bancária pendente — mesmo padrão de layout dos
         // outros banners (bloco normal antes de <main>, nunca position:fixed).
         //
@@ -646,7 +652,7 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: { onVoltar: (
         <button
           type="button"
           data-testid="banner-notificacoes"
-          onClick={() => setConfigAberta('notificacoes')}
+          onClick={() => setConfigAberta('notificacoesPendentes')}
           style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '10px 64px 10px 14px', background: '#2b2140', color: '#fff', border: 'none', borderRadius: 0, width: '100%', textAlign: 'left', cursor: 'pointer', font: 'inherit' }}
         >
           <span style={{ fontSize: 12, fontWeight: 700 }}>
@@ -688,8 +694,14 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: { onVoltar: (
             <Contas aoVoltar={fecharConfig} />
           ) : configAberta === 'assinatura' ? (
             <MinhaAssinatura aoVoltar={fecharConfig} />
-          ) : configAberta === 'notificacoes' ? (
+          ) : configAberta === 'notificacoes' || configAberta === 'notificacoesPendentes' ? (
+            /* Duas portas, uma tela: por Configurações vem a tela completa
+               (permissões do Android, histórico, ferramenta de teste); pelo
+               AVISO do topo vem só a lista de pendentes — 11/09/2026, pedido
+               do Rafael: o aviso promete "confirmar movimentação", então é só
+               isso que a tela dele mostra. */
             <NotificacoesBancarias
+              somentePendentes={configAberta === 'notificacoesPendentes'}
               aoVoltar={fecharConfig}
               aoConfirmar={(n) => setLancamentoAberto({ notificacao: n })}
             />

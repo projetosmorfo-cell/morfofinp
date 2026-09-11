@@ -6,6 +6,7 @@ import { proximaDataRecorrencia } from '../recorrencia'
 import { hojeEfetivoISO } from '../hojeSimulado'
 import BarraMeta, { fmtBRL as fmt } from '../components/BarraMeta'
 import SeletorMes from '../components/SeletorMes'
+import { GraficoMargem } from '../components/Graficos'
 import ListaLancamentosCategoria from '../components/ListaLancamentosCategoria'
 import { Icone } from '../icones'
 import { useConfiguracaoIcones, tamanhoIconePx } from '../configuracaoIcones'
@@ -238,6 +239,14 @@ export default function Situacao({ mes, aoMudarMes, aoAbrirLancamento, aoAbrirPl
         Aceitável de cada categoria contra o que já foi gasto neste mês — pra você ver de cara onde
         estourou e onde ainda sobra espaço. Toque numa categoria pra ver os lançamentos dela.
       </DismissibleTip>
+
+      <GraficoMargem
+        teto={totalAceitavel}
+        jaPago={totalGastoPago}
+        aPagar={totalGastoPendente}
+        comprometido={totalComprometidoNaoLancado}
+        sobra={sobraReal}
+      />
 
       <div className="cartao" style={{ marginTop: 16 }}>
         <div className="linha" style={{ border: 'none', padding: 0 }}>

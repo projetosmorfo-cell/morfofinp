@@ -6,6 +6,7 @@ import { proximaDataRecorrencia } from '../recorrencia'
 import { hojeEfetivoISO } from '../hojeSimulado'
 import BarraMeta from '../components/BarraMeta'
 import SeletorMes from '../components/SeletorMes'
+import { GraficoEntradaSaida } from '../components/Graficos'
 import ListaLancamentosCategoria from '../components/ListaLancamentosCategoria'
 import { fmtBRL as fmt } from '../formatoMoeda'
 import { Icone } from '../icones'
@@ -224,6 +225,8 @@ export default function ResumoDoMes({ mes, aoMudarMes, aoAbrirLancamento, aoAbri
         detailColumns={[{ key: 'item', label: 'Categoria' }, { key: 'grupo', label: 'Grupo' }, { key: 'natureza', label: 'Natureza' }, { key: 'valor', label: 'Valor' }]}
         detailRows={linhasResumoDetalhe}
         onClose={() => setExportOpen(false)} />}
+
+      <GraficoEntradaSaida entrada={entrou} saida={saiu} />
 
       <div className="cartao">
         <div className="linha">

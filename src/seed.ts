@@ -1,5 +1,6 @@
 import { db, type Categoria, type Lancamento } from './db'
 import { comIconePadraoCategoria, comIconePadraoGrupo } from './iconesPadrao'
+import { GRUPO_RECEITA } from './gruposUtil'
 
 // Categorias e metas REAIS do Rafael — extraídas da planilha
 // "Metas vs Real" (Cálculos - Gastos v5, ajustes 30-08-2026), aba de trabalho
@@ -33,10 +34,10 @@ const CATEGORIAS_PADRAO: Omit<Categoria, 'id'>[] = [
   { nome: 'Outros', grupo: 'Variável', natureza: 'Consumo', aceitavelMensal: 0, ativa: true },
   { nome: 'Reembolsável', grupo: 'Variável', natureza: 'Consumo', aceitavelMensal: 0, ativa: true },
   { nome: 'Diferença', grupo: 'Variável', natureza: 'Consumo', aceitavelMensal: 0, ativa: true },
-  { nome: 'Salário', grupo: 'Fixo', natureza: 'Receita', aceitavelMensal: 16712, ativa: true },
-  { nome: 'Reembolso', grupo: 'Variável', natureza: 'Receita', aceitavelMensal: 0, ativa: true },
-  { nome: 'Outras receitas', grupo: 'Variável', natureza: 'Receita', aceitavelMensal: 0, ativa: true },
-  { nome: 'Investimentos', grupo: 'Fixo', natureza: 'Receita', aceitavelMensal: 0, ativa: true },
+  { nome: 'Salário', grupo: GRUPO_RECEITA, natureza: 'Receita', aceitavelMensal: 16712, ativa: true },
+  { nome: 'Reembolso', grupo: GRUPO_RECEITA, natureza: 'Receita', aceitavelMensal: 0, ativa: true },
+  { nome: 'Outras receitas', grupo: GRUPO_RECEITA, natureza: 'Receita', aceitavelMensal: 0, ativa: true },
+  { nome: 'Investimentos', grupo: GRUPO_RECEITA, natureza: 'Receita', aceitavelMensal: 0, ativa: true },
   { nome: '# Objetivos', grupo: 'Objetivos', natureza: 'Aporte', aceitavelMensal: 1671.2, ativa: true },
   { nome: '# Segurança', grupo: 'Segurança', natureza: 'Aporte', aceitavelMensal: 1671.2, ativa: true },
   { nome: '$ Objetivos - Metas', grupo: 'Objetivos', natureza: 'Gasto de cofrinho', aceitavelMensal: 0, ativa: true },
@@ -888,12 +889,18 @@ async function seedCategoriasContasELancamentos() {
     // o Rafael definiu como padrão do sistema (ver `iconesPadrao.ts`) — sem
     // isso, cairia tudo no ícone genérico "outros" até alguém configurar de
     // novo na mão.
+    // 11/09/2026: cada grupo nasce já com o tipo (entrada × saída) e o grupo
+    // "Receita" passa a ser padrão do app, não mais fruto da migração — foi o
+    // pedido do Rafael ao escolher o destino das categorias de receita ("já
+    // aproveita e salva isso tudo como padrão no app pra gerar as próximas
+    // versões com eles"). Ver `src/gruposUtil.ts`.
     await db.grupos.bulkAdd(
       [
-        { nome: 'Fixo', ativo: true },
-        { nome: 'Variável', ativo: true },
-        { nome: 'Objetivos', ativo: true },
-        { nome: 'Segurança', ativo: true },
+        { nome: 'Fixo', ativo: true, tipo: 'saida' as const },
+        { nome: 'Variável', ativo: true, tipo: 'saida' as const },
+        { nome: 'Objetivos', ativo: true, tipo: 'saida' as const },
+        { nome: 'Segurança', ativo: true, tipo: 'saida' as const },
+        { nome: GRUPO_RECEITA, ativo: true, tipo: 'entrada' as const },
       ].map(comIconePadraoGrupo),
     )
     await db.categorias.bulkAdd(CATEGORIAS_PADRAO.map(comIconePadraoCategoria))

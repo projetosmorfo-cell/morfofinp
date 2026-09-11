@@ -28,9 +28,18 @@ import {
 export default function NotificacoesBancarias({
   aoVoltar,
   aoConfirmar,
+  somentePendentes,
 }: {
   aoVoltar: () => void
   aoConfirmar: (n: NotificacaoPendente) => void
+  /* Aberta pelo AVISO do topo ("N notificação(ões) do banco pra confirmar"),
+     a tela mostra SÓ o que aquele aviso prometeu: a lista de pendentes com
+     Confirmar/Descartar (11/09/2026, pedido do Rafael — "quando clico pra ver
+     deve abrir tela só desse tema, e não deve abrir as outras opções que
+     tenho hoje"). Permissões do Android, histórico com limpeza e a ferramenta
+     de teste continuam existindo, na mesma tela completa, alcançada por
+     Configurações → Notificações bancárias. */
+  somentePendentes?: boolean
 }) {
   const nativo = ehNativo()
   const pendentes = useLiveQuery(
@@ -80,10 +89,13 @@ export default function NotificacoesBancarias({
         <h1>Notificações bancárias</h1>
       </div>
       <p className="texto-fraco">
-        O app lê as notificações do banco/cartão no seu celular e te avisa. Nada vira lançamento sozinho — você
-        confirma ou edita cada uma aqui antes de gravar.
+        {somentePendentes
+          ? 'Cada movimentação detectada espera a sua confirmação — nada vira lançamento sozinho.'
+          : 'O app lê as notificações do banco/cartão no seu celular e te avisa. Nada vira lançamento sozinho — você confirma ou edita cada uma aqui antes de gravar.'}
       </p>
 
+      {!somentePendentes && (
+      <>
       <h2>Leitura no celular</h2>
       <div className="cartao" data-testid="notif-status">
         {!nativo ? (
@@ -137,6 +149,8 @@ export default function NotificacoesBancarias({
         )}
         {aviso && <p className="texto-fraco" style={{ fontSize: 13, marginBottom: 0 }}>{aviso}</p>}
       </div>
+      </>
+      )}
 
       <h2>
         Pendentes {pendentes && pendentes.length > 0 && <span className="texto-fraco" style={{ fontWeight: 400 }}>({pendentes.length})</span>}
@@ -182,6 +196,8 @@ export default function NotificacoesBancarias({
         ))}
       </div>
 
+      {!somentePendentes && (
+      <>
       <h2>
         <button
           type="button"
@@ -234,6 +250,8 @@ export default function NotificacoesBancarias({
           Simular notificação do banco
         </button>
       </div>
+      </>
+      )}
     </>
   )
 }

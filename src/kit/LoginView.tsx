@@ -51,8 +51,7 @@ import { CARIMBO_BUILD } from '../buildInfo'
 // `LoginView`/`LoginViewKit`, `planFeaturesAuto`, `PlanoCard`, `ContratarPacoteFlow`
 // comparados função a função: sem divergência nova — as únicas diferenças
 // continuam sendo as ADAPTAÇÕES já marcadas neste arquivo (login normalizado,
-// `acessoAberto`, cadastro de pessoa física em vez de empresa, carimbo de
-// build). O recurso de convite por LINK real do Projeto Modelo (`gerarLinkPreCadastro`,
+// cadastro de pessoa física em vez de empresa, carimbo de build). O recurso de convite por LINK real do Projeto Modelo (`gerarLinkPreCadastro`,
 // item 220 de lá) não tem equivalente aqui por desenho — o MorfoFinP cadastra
 // o pré-cadastro direto pelo N0 (`NovoClienteSheet`, `DevApp.tsx`), sem
 // backend nem roteamento por URL (Decisão 6, Backlog #028); `AceitarConviteSheet`
@@ -295,14 +294,11 @@ function LoginViewKit({ platform, setPlatform, areaWeb, onLogin, onSelfRegister 
     setError('Login ou senha inválidos')
   }
   const onEnterKey = (e: React.KeyboardEvent) => { if (e.key === 'Enter') submit() }
-  /* "Ninguém cadastrou acesso de verdade ainda" — enquanto isso for verdade,
-     o site oferece contratação e os atalhos de teste (ver bloco comentado
-     abaixo). O ambiente do app (`tenants[0]`, o `t0`) NUNCA fica com a lista
-     vazia: ele nasce com o usuário de demonstração da massa do Kit, marcado
-     `demo: true` — por isso a conta aqui é "existe algum usuário SEM a marca
-     de demonstração?", não "a lista está vazia?". */
-  const usuariosDoApp = platform.tenants[0]?.users || []
-  const acessoAberto = !usuariosDoApp.some((u) => !u.demo)
+  /* Nada no cartão de login é mais condicionado a "já existe acesso cadastrado"
+     (11/09/2026): contratação e atalhos de teste aparecem sempre, como no Kit.
+     A marca `demo: true` do usuário de demonstração continua existindo no dado
+     (é ela que distingue o acesso da massa do Kit de um acesso de verdade), só
+     não decide mais o que a tela mostra. */
   const sc = platform.siteConfig || {}
   const gradienteSite = sc.cor1 && sc.cor2 ? `linear-gradient(160deg, ${sc.cor1}, ${sc.cor2})` : `linear-gradient(160deg, ${CORAL}, ${PURPLE} 40%, ${PURPLE_DEEP})`
   const cartaoLogin = <div style={{ background: BRANCO, borderRadius: 18, padding: 20 }}>
@@ -311,24 +307,26 @@ function LoginViewKit({ platform, setPlatform, areaWeb, onLogin, onSelfRegister 
     <button onClick={() => setForgotOpen(true)} style={{ ...linkBtnSmall, display: 'block', color: PURPLE, fontSize: 12, fontWeight: 700, padding: 0, marginBottom: 14 }}>Esqueci minha senha</button>
     {error && <div style={{ fontSize: 12.5, color: RED, marginBottom: 10, fontWeight: 600 }}>{error}</div>}
     <button style={{ ...primaryBtn, width: '100%', marginBottom: 8 }} onClick={submit}><KeyRound size={16} /> Entrar</button>
-    {/* ADAPTAÇÃO (11/09/2026, Decisão 67 — pedido do Rafael: "não quero que o
-        demo consiga ver"). No Kit, "Contratar um plano" e os 3 atalhos de teste
-        aparecem SEMPRE. Aqui o app é de uso individual e os lançamentos ficam no
-        próprio aparelho, não dentro do usuário: enquanto existir um atalho que
-        entra sem senha, qualquer pessoa que abra o app vê o movimento de quem já
-        cadastrou acesso. Por isso os dois blocos só existem ENQUANTO NINGUÉM
-        cadastrou acesso ainda (`acessoAberto`) — a partir do 1º usuário do
-        ambiente, login+senha passa a ser o único caminho, inclusive pro N0
-        (login/senha do administrador Morfo, editável em N0 › Parâmetros ›
-        Usuários Morfo). Nada foi apagado: os botões voltam sozinhos se o acesso
-        for redefinido/apagado (ex.: "Apagar tudo" em Manutenção e dados). */}
-    {acessoAberto && <>
-      <button style={{ ...primaryBtn, width: '100%', marginBottom: 14, background: CORAL }} onClick={() => setSelfOpen(true)}><UserPlus size={16} /> Contratar um plano</button>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '4px 0 14px' }}><div style={{ flex: 1, height: 1, background: LINE }} /><span style={{ fontSize: 11, color: TXT3, fontWeight: 700 }}>ACESSO RÁPIDO PARA TESTE</span><div style={{ flex: 1, height: 1, background: LINE }} /></div>
-      <button style={{ ...secondaryBtn, width: '100%', marginBottom: 8 }} onClick={() => onLogin('tenant', platform.tenants[0].id)}>Entrar como empresa cliente (demo)</button>
-      <button style={{ ...secondaryBtn, width: '100%', marginBottom: 8 }} onClick={() => onLogin('dev', null)}><Building size={16} /> Entrar como Admin Morfo (demo)</button>
-      <button style={{ ...secondaryBtn, width: '100%' }} onClick={() => setAceitarConviteOpen(true)}><Mail size={16} /> Aceitar convite de usuário (demo)</button>
-    </>}
+    {/* "Contratar um plano" — SEMPRE visível, como no Kit (11/09/2026, pedido do
+        Rafael: "sim quero de volte, pois uma coisa não tem relação com a outra,
+        posso querer contratar com outro acesso, nunca deveria ter deduzido
+        nada"). A build 036 (Decisão 67) escondia este botão a partir do 1º
+        acesso cadastrado, por dedução de que "ambiente individual = um plano
+        só"; contratar de novo com outro acesso é caso de uso legítimo. */}
+    <button style={{ ...primaryBtn, width: '100%', marginBottom: 14, background: CORAL }} onClick={() => setSelfOpen(true)}><UserPlus size={16} /> Contratar um plano</button>
+    {/* ACESSO RÁPIDO PARA TESTE — SEMPRE visível, como no Kit (11/09/2026,
+        pedido do Rafael: "pq não tem mais o botão de acesso pra teste? os de
+        acesso sem login do n0 e do n1? quero que volte"). A build 036 escondia
+        esta seção junto com o botão de contratação assim que existisse um acesso
+        de verdade, e o botão de contratação junto; os dois voltaram a ser fixos.
+        CONSEQUÊNCIA, registrada de propósito: estes botões entram SEM SENHA, e o
+        movimento vive no aparelho (não dentro do usuário), então quem abrir o
+        app aqui entra e vê tudo mesmo sem saber a senha. É o preço de ter o
+        atalho sempre à mão, e é reversível a qualquer momento. */}
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '4px 0 14px' }}><div style={{ flex: 1, height: 1, background: LINE }} /><span style={{ fontSize: 11, color: TXT3, fontWeight: 700 }}>ACESSO RÁPIDO PARA TESTE</span><div style={{ flex: 1, height: 1, background: LINE }} /></div>
+    <button style={{ ...secondaryBtn, width: '100%', marginBottom: 8 }} onClick={() => onLogin('tenant', platform.tenants[0].id)}>Entrar como empresa cliente (demo)</button>
+    <button style={{ ...secondaryBtn, width: '100%', marginBottom: 8 }} onClick={() => onLogin('dev', null)}><Building size={16} /> Entrar como Admin Morfo (demo)</button>
+    <button style={{ ...secondaryBtn, width: '100%' }} onClick={() => setAceitarConviteOpen(true)}><Mail size={16} /> Aceitar convite de usuário (demo)</button>
   </div>
   const rodapeInfo = <>
     <div style={{ textAlign: 'center', fontSize: 11, color: 'rgba(255,255,255,0.6)', marginTop: 18 }}>Protótipo MVP · dados de demonstração · <strong>{KIT_BUILD}</strong></div>
@@ -460,11 +458,10 @@ export default function LoginView() {
   // migração da credencial única antiga. Continua vazia até "Contratar um
   // plano" (ou o atalho demo) criar o 1º usuário.
   const t0Persistido = platformN0Persistida.tenants.find(t => t.id === TENANT_N1_ID)
-  // `demo` vai junto de propósito: é ele que diz se JÁ existe acesso de
-  // verdade neste ambiente — ver `acessoAberto` acima (Decisão 67). Sem
-  // carregar a marca aqui, o Login leria o usuário de demonstração como se
-  // fosse um acesso real e esconderia contratação/atalhos numa instalação
-  // recém-aberta, onde eles são o único caminho pra entrar.
+  // `demo` vai junto de propósito: é ele que distingue o usuário de
+  // demonstração da massa do Kit de um acesso de verdade (Decisão 67). Hoje
+  // nenhuma parte da TELA depende disso — contratação e atalhos são fixos —,
+  // mas a marca continua sendo o dado que diz qual acesso é qual.
   const tenantUsers: KitUser[] = tenantUsersComMigracao(t0Persistido?.users, config)
     .map(u => ({ id: u.id, name: u.name, login: u.login, senha: u.senha, email: u.email, status: u.status, demo: u.demo }))
   // --- platform.plans: catálogo real do N0 (Gerenciar Planos, Dexie), na
