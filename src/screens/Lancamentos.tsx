@@ -12,7 +12,7 @@ import { useHojeSimuladoISO } from '../hojeSimulado'
 import TituloTelaN1 from '../kit/CabecalhoN1'
 import { ExportSheet, type ExportRow } from '../kit/ExportSheet'
 import {
-  useSelecao, BarraSelecao, TotaisEntradaSaida, MarcadorLinha, separarPorHoje, RodapeTotais,
+  useSelecao, BarraSelecao, TotaisEntradaSaida, MarcadorLinha, blocosPorCorte, RodapeTotais,
 } from '../components/SelecaoETotais'
 
 // Tela "Lançamentos" (antes "Lançar") — 30/08/2026: lista-primeiro, agrupada
@@ -89,15 +89,9 @@ export default function Lancamentos({ mes, aoMudarMes, aoAbrirLancamento }: Tela
 
   /* Corte "até Hoje" × "dias futuros" (10/09/2026) — só existe quando de fato
      há registro futuro na lista; num mês passado inteiro, a lista continua
-     exatamente como sempre foi, num bloco só. */
-  const { ateHoje, futuros } = separarPorHoje(ordenados)
-  const blocos = (futuros.length > 0 && ateHoje.length > 0
-    ? [
-        { chave: 'ate-hoje', titulo: 'Até hoje', itens: ateHoje },
-        { chave: 'futuros', titulo: 'Dias futuros', itens: futuros },
-      ]
-    : [{ chave: 'tudo', titulo: futuros.length > 0 ? 'Dias futuros' : 'Até hoje', itens: ordenados }]
-  ).map((b) => ({ ...b, sessoes: agrupar(b.itens) }))
+     exatamente como sempre foi, num bloco só. A ORDEM DOS BLOCOS segue a
+     ordenação escolhida (11/09/2026) — ver `blocosPorCorte`. */
+  const blocos = blocosPorCorte(ordenados, ordemDesc).map((b) => ({ ...b, sessoes: agrupar(b.itens) }))
 
   return (
     <>

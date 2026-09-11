@@ -56,6 +56,28 @@ export function separarPorHoje<T extends { dataCompetencia: string }>(itens: T[]
   return { ateHoje, futuros, hoje }
 }
 
+/* Monta os blocos "Até hoje" × "Dias futuros" JÁ na ordem certa — 11/09/2026,
+   pedido do Rafael: "a ordenação está desobedecendo em nível de agrupamento".
+   Até aqui a ordenação virava só os registros DENTRO de cada bloco; a ordem
+   dos blocos era fixa (até hoje e depois futuros), então em decrescente a
+   tela mostrava a data mais nova de cada bloco, mas com o bloco mais antigo
+   em cima — o oposto do que a ordenação diz.
+   Regra: crescente = Até hoje → Dias futuros; decrescente = Dias futuros →
+   Até hoje. O corte só existe quando há registro dos dois lados; num mês
+   inteiro passado (ou inteiro futuro) continua tudo num bloco só, como
+   sempre foi.
+   Vive aqui, não na tela, porque Lançamentos e o detalhe da Carteira usam a
+   MESMA montagem — duplicar era o que deixaria as duas divergirem de novo. */
+export function blocosPorCorte<T extends { dataCompetencia: string }>(itens: T[], ordemDesc: boolean) {
+  const { ateHoje, futuros } = separarPorHoje(itens)
+  if (futuros.length === 0 || ateHoje.length === 0) {
+    return [{ chave: 'tudo', titulo: futuros.length > 0 ? 'Dias futuros' : 'Até hoje', itens }]
+  }
+  const blocoAteHoje = { chave: 'ate-hoje', titulo: 'Até hoje', itens: ateHoje }
+  const blocoFuturos = { chave: 'futuros', titulo: 'Dias futuros', itens: futuros }
+  return ordemDesc ? [blocoFuturos, blocoAteHoje] : [blocoAteHoje, blocoFuturos]
+}
+
 export function useSelecao(idsVisiveis: number[]) {
   const [ativa, setAtiva] = useState(false)
   const [marcados, setMarcados] = useState<Set<number>>(new Set())

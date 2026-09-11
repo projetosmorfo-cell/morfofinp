@@ -6,7 +6,7 @@ import SeletorMes from '../components/SeletorMes'
 import LinhaLancamentoCompleta from '../components/LinhaLancamentoCompleta'
 import SeloInstituicao from '../components/SeloInstituicao'
 import {
-  useSelecao, BarraSelecao, TotaisEntradaSaida, MarcadorLinha, separarPorHoje, RodapeTotais,
+  useSelecao, BarraSelecao, TotaisEntradaSaida, MarcadorLinha, blocosPorCorte, RodapeTotais,
 } from '../components/SelecaoETotais'
 import { CampoBusca, FolhaFiltros, FILTROS_VAZIOS, aplicarFiltros, contarFiltrosAtivos, type FiltrosAvancados } from '../components/BuscaEFiltros'
 import { obterOuCriarCategoriaPagamentoFatura } from '../categoriasSistema'
@@ -444,14 +444,7 @@ function DetalheConta({
      (`src/components/SelecaoETotais.tsx`), nada duplicado aqui. O corte só
      aparece quando de fato existe registro dos dois lados. */
   const selecao = useSelecao(doPeriodo.map((l) => l.id!).filter(Boolean))
-  const { ateHoje, futuros } = separarPorHoje(doPeriodo)
-  const blocos = (futuros.length > 0 && ateHoje.length > 0
-    ? [
-        { chave: 'ate-hoje', titulo: 'Até hoje', itens: ateHoje },
-        { chave: 'futuros', titulo: 'Dias futuros', itens: futuros },
-      ]
-    : [{ chave: 'tudo', titulo: futuros.length > 0 ? 'Dias futuros' : 'Até hoje', itens: doPeriodo }]
-  ).map((b) => ({ ...b, sessoes: agrupar(b.itens) }))
+  const blocos = blocosPorCorte(doPeriodo, ordemDesc).map((b) => ({ ...b, sessoes: agrupar(b.itens) }))
   const sessoes = blocos.flatMap((b) => b.sessoes)
 
   function linhaDe(l: Lancamento) {
