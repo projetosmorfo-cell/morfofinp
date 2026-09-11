@@ -1276,37 +1276,50 @@ function SubParametrosSite({ onVoltarSub }: { onVoltarSub: () => void }) {
 // acesso, status). `db.usuariosN0` fica retirado desta tela (a tabela em si
 // segue no schema, sem uso — não é removida do Dexie, só não gerenciada mais
 // por aqui, mesmo padrão de "campo aditivo abandonado" já usado no projeto).
-function SubParametrosUsuarios({ onVoltarSub }: { onVoltarSub: () => void }) {
-  const platform = usePlatformN0()
-  const devUsers = platform.devUsers ?? []
-  const perfis = platform.perfisMorfo ?? perfisPadraoN0()
-  const [editando, setEditando] = useState<DevUserN0 | 'novo' | null>(null)
-  const [nome, setNome] = useState('')
-  const [login, setLogin] = useState('')
-  const [senha, setSenha] = useState('')
-  const [perfilId, setPerfilId] = useState('admin')
+/* Formulário de um administrador Morfo — usado em DOIS lugares: por
+   "Usuários Morfo" (a lista, onde a Morfo cadastra/edita qualquer
+   administrador) e por "Meus Dados" (11/09/2026, pedido do Rafael: "usuário
+   adm morfo não tá permitindo editar dados e deve permitir ... dados dele
+   como usuário"), onde o administrador logado edita o próprio cadastro sem
+   passar pela lista. Mesma tela, mesmos campos e mesmas validações; muda só
+   quem pode trocar o perfil de acesso (em Meus Dados o campo aparece
+   somente leitura — mudar o próprio nível é decisão de quem administra a
+   plataforma, não de quem está logado). */
+function FormularioDevUser({ alvo, devUsers, tenants, perfis, podeTrocarPerfil = true, titulo, onFechar }: {
+  alvo: DevUserN0 | 'novo'
+  devUsers: DevUserN0[]
+  tenants: TenantKit[]
+  perfis: ReturnType<typeof perfisPadraoN0>
+  podeTrocarPerfil?: boolean
+  titulo: string
+  onFechar: () => void
+}) {
+  const base = alvo === 'novo' ? null : alvo
+  const [nome, setNome] = useState(base?.name ?? '')
+  const [login, setLogin] = useState(base?.login ?? '')
+  const [senha, setSenha] = useState(base?.senha ?? '')
+  const [perfilId, setPerfilId] = useState(base?.perfilId || 'admin')
+  const [cpf, setCpf] = useState(base?.cpf ?? '')
+  const [email, setEmail] = useState(base?.email ?? '')
+  const [telefone, setTelefone] = useState(base?.phone ?? '')
+  const [endereco, setEndereco] = useState<Endereco>(normalizeAddress(base?.address ?? null))
   const [erro, setErro] = useState('')
-  // CPF / E-mail / Telefone / Endereço (10/09/2026, Decisão 58): o Kit
-  // (`DevUserMorfoSheet`, L1471) sempre teve os quatro, com validação de
-  // máscara; aqui só existiam nome/login/senha/perfil.
-  const [cpf, setCpf] = useState('')
-  const [email, setEmail] = useState('')
-  const [telefone, setTelefone] = useState('')
-  const [endereco, setEndereco] = useState<Endereco>(normalizeAddress(null))
 
-  function abrirEdicao(u: DevUserN0) {
-    setEditando(u); setNome(u.name); setLogin(u.login); setSenha(u.senha); setPerfilId(u.perfilId || 'admin'); setErro('')
-    setCpf(u.cpf || ''); setEmail(u.email || ''); setTelefone(u.phone || ''); setEndereco(normalizeAddress(u.address))
-  }
-  function abrirNovo() {
-    setEditando('novo'); setNome(''); setLogin(''); setSenha(''); setPerfilId('admin'); setErro('')
-    setCpf(''); setEmail(''); setTelefone(''); setEndereco(normalizeAddress(null))
-  }
-
-  const cpfOk = validaCPF(cpf)
-  const telOk = !!telefone.trim() && validaTelefone(telefone)
-  const mailOk = validaEmailEnvio(email)
-  const endOk = !!(endereco.cep.trim() && endereco.logradouro.trim() && endereco.cidade.trim() && endereco.uf.trim())
+  /* 11/09/2026 — Rafael, usando a build 036: "usuário adm morfo não tá
+     permitindo editar dados e deve permitir". Causa real: a Decisão 58 portou
+     a regra de gravação do Kit (`canSave`, L1485), que EXIGE CPF + e-mail +
+     telefone + endereço completo pra salvar. O administrador padrão (o do
+     Kit, `morfomod`) não tem nenhum desses campos — então abrir "Editar",
+     trocar o nome ou a senha e salvar sempre parava em "CPF inválido.". Na
+     prática, o acesso do painel era ineditável.
+     ADAPTAÇÃO: obrigatórios aqui são só nome, login e senha (o que de fato
+     forma uma credencial). CPF, e-mail, telefone e endereço continuam no
+     formulário e continuam validados — mas só quando preenchidos, e um campo
+     vazio nunca impede de salvar. O Kit exige porque o cadastro dele alimenta
+     documento fiscal; aqui não alimenta nada disso ainda. */
+  const cpfOk = !cpf.trim() || validaCPF(cpf)
+  const telOk = !telefone.trim() || validaTelefone(telefone)
+  const mailOk = !email.trim() || validaEmailEnvio(email)
 
   // Última proteção de admin (G59/Kit `contaAdminsAtivos`): nunca deixar o
   // painel N0 sem NENHUM administrador ativo — sem backend/recuperação de
@@ -1318,25 +1331,96 @@ function SubParametrosUsuarios({ onVoltarSub }: { onVoltarSub: () => void }) {
   async function salvar() {
     const loginN = login.trim().toLowerCase()
     if (!nome.trim() || !loginN || !senha.trim()) { setErro('Preencha nome, login e senha.'); return }
-    // Mesma regra de gravação do Kit (`canSave`, L1485): nome + CPF + e-mail
-    // + telefone + endereço + login + senha + perfil.
-    if (!cpfOk) { setErro('CPF inválido.'); return }
-    if (!mailOk) { setErro('E-mail inválido.'); return }
-    if (!telOk) { setErro('Telefone inválido (use DDD + número).'); return }
-    if (!endOk) { setErro('Preencha CEP, logradouro, cidade e UF.'); return }
-    const idAtual = editando !== 'novo' && editando ? editando.id : undefined
-    if (loginJaEmUsoGlobalmente({ devUsers, tenants: platform.tenants }, loginN, { devUserId: idAtual })) {
+    if (!cpfOk) { setErro('CPF inválido — corrija ou deixe o campo vazio.'); return }
+    if (!mailOk) { setErro('E-mail inválido — corrija ou deixe o campo vazio.'); return }
+    if (!telOk) { setErro('Telefone inválido (use DDD + número) — corrija ou deixe o campo vazio.'); return }
+    if (loginJaEmUsoGlobalmente({ devUsers, tenants }, loginN, { devUserId: base?.id })) {
       setErro('Esse login já está em uso (N0 ou N1).'); return
     }
-    if (editando !== 'novo' && editando && ehUltimoAdminAtivo(editando) && perfilId !== 'admin') {
+    if (base && ehUltimoAdminAtivo(base) && perfilId !== 'admin') {
       setErro('Este é o único administrador ativo — mude o perfil de outro usuário antes, ou crie um 2º administrador.'); return
     }
     const campos = { name: nome.trim(), login: loginN, senha, perfilId, cpf: cpf.trim(), email: email.trim(), phone: telefone.trim(), address: endereco }
     await atualizarDevUsersN0((lista) => {
-      if (editando === 'novo') return [...lista, { id: `dev-${Date.now().toString(36)}`, ...campos, status: 'ativo', createdAt: new Date().toISOString() }]
-      return lista.map((u) => (u.id === editando?.id ? { ...u, ...campos } : u))
+      if (!base) return [...lista, { id: `dev-${uid()}`, ...campos, status: 'ativo', createdAt: new Date().toISOString() }]
+      return lista.map((u) => (u.id === base.id ? { ...u, ...campos } : u))
     })
-    setEditando(null)
+    onFechar()
+  }
+
+  return (
+    <div>
+      <TopoN0 titulo={titulo} onVoltarSub={onFechar} />
+      <label style={labelN0Style} htmlFor="devuser-nome">Nome completo</label>
+      <input id="devuser-nome" style={campoN0Style} value={nome} onChange={(e) => setNome(e.target.value)} />
+      <label style={labelN0Style} htmlFor="devuser-cpf">CPF (opcional)</label>
+      <input id="devuser-cpf" style={campoN0Style} value={cpf} onChange={(e) => setCpf(e.target.value)} placeholder="000.000.000-00" />
+      {cpf.trim() !== '' && !cpfOk && <div style={{ fontSize: 11, color: '#F5615C', fontWeight: 700, marginTop: 4 }}>CPF inválido</div>}
+      <label style={labelN0Style} htmlFor="devuser-email">E-mail (opcional)</label>
+      <input id="devuser-email" type="email" style={campoN0Style} value={email} onChange={(e) => setEmail(e.target.value)} placeholder="usuario@morfo.com.br" />
+      {email.trim() !== '' && !mailOk && <div style={{ fontSize: 11, color: '#F5615C', fontWeight: 700, marginTop: 4 }}>E-mail inválido</div>}
+      <label style={labelN0Style} htmlFor="devuser-tel">Telefone (opcional)</label>
+      <input id="devuser-tel" style={campoN0Style} value={telefone} onChange={(e) => setTelefone(e.target.value)} placeholder="(11) 90000-0000" />
+      {telefone.trim() !== '' && !telOk && <div style={{ fontSize: 11, color: '#F5615C', fontWeight: 700, marginTop: 4 }}>Telefone inválido (use DDD + número)</div>}
+      <SectionLabel dark>Endereço (opcional)</SectionLabel>
+      <AddressFieldsBasic dark value={endereco} onChange={setEndereco} />
+      <label style={labelN0Style} htmlFor="devuser-login">Usuário (login)</label>
+      <input id="devuser-login" style={campoN0Style} value={login} onChange={(e) => setLogin(e.target.value)} />
+      <label style={labelN0Style} htmlFor="devuser-senha">Senha</label>
+      <input id="devuser-senha" style={campoN0Style} value={senha} onChange={(e) => setSenha(e.target.value)} />
+      <label style={labelN0Style} htmlFor="devuser-perfil">Perfil de acesso</label>
+      {podeTrocarPerfil ? (
+        <select id="devuser-perfil" style={campoN0Style} value={perfilId} onChange={(e) => setPerfilId(e.target.value)}>
+          {perfis.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
+        </select>
+      ) : (
+        <>
+          <input id="devuser-perfil" style={{ ...campoN0Style, opacity: 0.7 }} value={perfis.find((p) => p.id === perfilId)?.nome ?? perfilId} readOnly />
+          <div style={{ fontSize: 11, color: DEV_TXT3, marginTop: 4, lineHeight: 1.5 }}>
+            O seu próprio nível de acesso é definido em Parâmetros › Usuários Morfo.
+          </div>
+        </>
+      )}
+      {erro && <div style={{ fontSize: 12, color: '#F5615C', marginTop: 10, fontWeight: 700 }}>{erro}</div>}
+      <button type="button" data-testid="n0-salvar-usuario" onClick={() => void salvar()} style={{ width: '100%', marginTop: 16, background: DEV_ACCENT, border: 'none', borderRadius: 10, padding: 12, color: '#fff', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
+        Salvar
+      </button>
+    </div>
+  )
+}
+
+/* N0 → Parâmetros → Meus Dados (11/09/2026): o administrador logado editando
+   o próprio cadastro — o equivalente, no painel da Morfo, ao "Meus Dados" que
+   o ambiente do cliente já tinha. Antes disso o único caminho era Usuários
+   Morfo → achar a si mesmo na lista → Editar. */
+function SubParametrosMeusDadosN0({ onVoltarSub }: { onVoltarSub: () => void }) {
+  const platform = usePlatformN0()
+  const config = useLiveQuery(() => db.configuracoes.get(1), [])
+  const devUsers = platform.devUsers ?? []
+  const perfis = platform.perfisMorfo ?? perfisPadraoN0()
+  const eu = devUsers.find((u) => u.id === config?.loggedDevUserId) ?? devUsers[0]
+  if (!eu) {
+    return (
+      <div>
+        <TopoN0 titulo="Meus Dados" onVoltarSub={onVoltarSub} />
+        <p style={{ fontSize: 12.5, color: DEV_TXT3, lineHeight: 1.6 }}>
+          Não foi possível identificar o administrador logado nesta sessão. Saia e entre de novo para editar os seus dados.
+        </p>
+      </div>
+    )
+  }
+  return <FormularioDevUser alvo={eu} devUsers={devUsers} tenants={platform.tenants} perfis={perfis} podeTrocarPerfil={false} titulo="Meus Dados" onFechar={onVoltarSub} />
+}
+
+function SubParametrosUsuarios({ onVoltarSub }: { onVoltarSub: () => void }) {
+  const platform = usePlatformN0()
+  const devUsers = platform.devUsers ?? []
+  const perfis = platform.perfisMorfo ?? perfisPadraoN0()
+  const [editando, setEditando] = useState<DevUserN0 | 'novo' | null>(null)
+  const [erro, setErro] = useState('')
+
+  function ehUltimoAdminAtivo(u: DevUserN0): boolean {
+    return (u.perfilId || 'admin') === 'admin' && u.status !== 'inativo' && contaAdminsAtivos(devUsers) <= 1
   }
 
   async function alternarAtivo(u: DevUserN0) {
@@ -1345,36 +1429,8 @@ function SubParametrosUsuarios({ onVoltarSub }: { onVoltarSub: () => void }) {
   }
 
   if (editando !== null) {
-    return (
-      <div>
-        <TopoN0 titulo={editando === 'novo' ? 'Novo administrador' : 'Editar administrador'} onVoltarSub={() => setEditando(null)} />
-        <label style={labelN0Style} htmlFor="devuser-nome">Nome completo</label>
-        <input id="devuser-nome" style={campoN0Style} value={nome} onChange={(e) => setNome(e.target.value)} />
-        <label style={labelN0Style} htmlFor="devuser-cpf">CPF</label>
-        <input id="devuser-cpf" style={campoN0Style} value={cpf} onChange={(e) => setCpf(e.target.value)} placeholder="000.000.000-00" />
-        {cpf.trim() !== '' && !cpfOk && <div style={{ fontSize: 11, color: '#F5615C', fontWeight: 700, marginTop: 4 }}>CPF inválido</div>}
-        <label style={labelN0Style} htmlFor="devuser-email">E-mail</label>
-        <input id="devuser-email" type="email" style={campoN0Style} value={email} onChange={(e) => setEmail(e.target.value)} placeholder="usuario@morfo.com.br" />
-        {email.trim() !== '' && !mailOk && <div style={{ fontSize: 11, color: '#F5615C', fontWeight: 700, marginTop: 4 }}>E-mail inválido</div>}
-        <label style={labelN0Style} htmlFor="devuser-tel">Telefone</label>
-        <input id="devuser-tel" style={campoN0Style} value={telefone} onChange={(e) => setTelefone(e.target.value)} placeholder="(11) 90000-0000" />
-        {telefone.trim() !== '' && !telOk && <div style={{ fontSize: 11, color: '#F5615C', fontWeight: 700, marginTop: 4 }}>Telefone inválido (use DDD + número)</div>}
-        <SectionLabel dark>Endereço</SectionLabel>
-        <AddressFieldsBasic dark value={endereco} onChange={setEndereco} />
-        <label style={labelN0Style} htmlFor="devuser-login">Usuário (login)</label>
-        <input id="devuser-login" style={campoN0Style} value={login} onChange={(e) => setLogin(e.target.value)} />
-        <label style={labelN0Style} htmlFor="devuser-senha">Senha</label>
-        <input id="devuser-senha" style={campoN0Style} value={senha} onChange={(e) => setSenha(e.target.value)} />
-        <label style={labelN0Style} htmlFor="devuser-perfil">Perfil de acesso</label>
-        <select id="devuser-perfil" style={campoN0Style} value={perfilId} onChange={(e) => setPerfilId(e.target.value)}>
-          {perfis.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
-        </select>
-        {erro && <div style={{ fontSize: 12, color: '#F5615C', marginTop: 10, fontWeight: 700 }}>{erro}</div>}
-        <button type="button" onClick={salvar} style={{ width: '100%', marginTop: 16, background: DEV_ACCENT, border: 'none', borderRadius: 10, padding: 12, color: '#fff', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
-          Salvar administrador
-        </button>
-      </div>
-    )
+    return <FormularioDevUser alvo={editando} devUsers={devUsers} tenants={platform.tenants} perfis={perfis}
+      titulo={editando === 'novo' ? 'Novo administrador' : 'Editar administrador'} onFechar={() => setEditando(null)} />
   }
 
   return (
@@ -1394,12 +1450,12 @@ function SubParametrosUsuarios({ onVoltarSub }: { onVoltarSub: () => void }) {
               <div style={{ fontSize: 12.5, fontWeight: 700, color: u.status !== 'inativo' ? '#fff' : DEV_TXT3 }}>{u.name}</div>
               <div style={{ fontSize: 11, color: DEV_TXT2 }}>{u.login} · {perfilDoUsuario(perfis, u)?.nome ?? '—'}</div>
             </div>
-            <button type="button" onClick={() => abrirEdicao(u)} style={{ background: 'rgba(255,255,255,0.08)', border: 'none', borderRadius: 8, color: '#fff', padding: '5px 10px', fontSize: 11, cursor: 'pointer' }}>
+            <button type="button" onClick={() => setEditando(u)} style={{ background: 'rgba(255,255,255,0.08)', border: 'none', borderRadius: 8, color: '#fff', padding: '5px 10px', fontSize: 11, cursor: 'pointer' }}>
               Editar
             </button>
             <button
               type="button"
-              onClick={() => alternarAtivo(u)}
+              onClick={() => void alternarAtivo(u)}
               style={{ background: 'rgba(255,255,255,0.08)', border: 'none', borderRadius: 8, color: '#fff', padding: '5px 10px', fontSize: 11, cursor: 'pointer' }}
             >
               {u.status !== 'inativo' ? 'Ativo' : 'Inativo'}
@@ -1407,7 +1463,7 @@ function SubParametrosUsuarios({ onVoltarSub }: { onVoltarSub: () => void }) {
           </div>
         ))}
       </div>
-      <button type="button" onClick={abrirNovo} style={{ width: '100%', background: 'rgba(255,255,255,0.08)', border: `1px dashed ${DEV_ACCENT}66`, borderRadius: 10, padding: 12, color: DEV_ACCENT, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+      <button type="button" onClick={() => setEditando('novo')} style={{ width: '100%', background: 'rgba(255,255,255,0.08)', border: `1px dashed ${DEV_ACCENT}66`, borderRadius: 10, padding: 12, color: DEV_ACCENT, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
         + Novo administrador
       </button>
     </div>
@@ -1440,7 +1496,7 @@ function SubParametrosPermissoes({ onVoltarSub }: { onVoltarSub: () => void }) {
   )
 }
 
-type SubParametros = 'alertas' | 'assinatura' | 'ambiente' | 'chat' | 'testesCliente' | 'limpezasCliente'
+type SubParametros = 'meusDados' | 'alertas' | 'assinatura' | 'ambiente' | 'chat' | 'testesCliente' | 'limpezasCliente'
   | 'marca' | 'planos' | 'usuarios' | 'permissoes' | 'testesMorfo' | 'limpezasMorfo' | 'layout' | 'site' | null
 
 // Casca comum das telas novas de Parâmetros (10/09/2026, Decisão 55 — Parte
@@ -1468,6 +1524,7 @@ function AbaParametros({ podeVerFuncN0 }: { podeVerFuncN0: (k: string) => boolea
   const voltar = () => setSub(null)
   if (sub === 'planos') return <SubParametrosPlanos onVoltarSub={voltar} />
   if (sub === 'site') return <SubParametrosSite onVoltarSub={voltar} />
+  if (sub === 'meusDados') return <SubParametrosMeusDadosN0 onVoltarSub={voltar} />
   if (sub === 'usuarios') return <SubParametrosUsuarios onVoltarSub={voltar} />
   if (sub === 'permissoes') return <SubParametrosPermissoes onVoltarSub={voltar} />
   // Telas novas da Decisão 55 (Parte B) — cada uma é a transcrição do grupo
@@ -1486,6 +1543,7 @@ function AbaParametros({ podeVerFuncN0 }: { podeVerFuncN0: (k: string) => boolea
   // Kit L509-L513 / L1600-L1700: os itens de Parâmetros agrupados pelas MESMAS
   // 3 sessões da árvore de permissão (`FUNCOES_PERFIL_N0`), na ordem do Kit.
   const todosItens: { chave: Exclude<SubParametros, null>; titulo: string; hint: string; sessao: string }[] = [
+    { sessao: 'Meus Dados/Ambiente', chave: 'meusDados', titulo: 'Meus Dados', hint: 'Seu cadastro de administrador: nome, contato, login e senha' },
     { sessao: 'Meus Dados/Ambiente', chave: 'alertas', titulo: 'Meus Alertas', hint: 'Avisos de vencimento, atraso e resumo financeiro das assinaturas' },
     { sessao: 'Ambiente do Cliente', chave: 'assinatura', titulo: 'Assinatura e Bloqueio', hint: 'Tolerância, dia de vencimento, dias de teste e aviso de fim de teste' },
     { sessao: 'Ambiente do Cliente', chave: 'ambiente', titulo: 'Ambiente dos Clientes', hint: 'Pré-cadastro, acesso de suporte (autorização e modo) e retenção de dados' },

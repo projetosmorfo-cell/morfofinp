@@ -421,6 +421,10 @@ export const FUNCOES_PERFIL_N0: FuncaoPerfil[] = [
      renomeá-las pras do Kit (usuariosMorfo/permissoesMorfo) apagaria em
      silêncio a permissão já configurada; as 9 novas usam o nome do Kit. ---- */
   { k: 'parametros', l: 'Parâmetros', sub: [
+    /* `parametros.meusDados` (11/09/2026): o administrador logado editando o
+       próprio cadastro — no Kit esse grupo existe só do lado do cliente; aqui
+       o painel da Morfo também precisava dele (pedido do Rafael). */
+    { k: 'parametros.meusDados', l: 'Meus Dados', sessao: 'Meus Dados/Ambiente' },
     { k: 'parametros.alertas', l: 'Meus Alertas', sessao: 'Meus Dados/Ambiente' },
     { k: 'parametros.assinatura', l: 'Assinatura e Bloqueio', sessao: 'Ambiente do Cliente' },
     { k: 'parametros.ambiente', l: 'Ambiente dos Clientes', sessao: 'Ambiente do Cliente' },

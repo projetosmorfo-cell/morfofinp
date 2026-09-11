@@ -319,15 +319,29 @@ export default function Planejamento({ mes, aoMudarMes, aoAbrirLancamento }: Tel
           (x) => x.totais.planejado === 0 && !temMovimento(x.totais),
         )
 
-        // Cabeçalho de grupo simplificado (30/08/2026, rodada seguinte): uma
-        // única barra combinada em vez de duas separadas (Saídas/Entradas) —
-        // esse detalhamento já aparece nos níveis internos (Categoria/
-        // Lançamento), repetir aqui só duplicava informação. 'saida' é a
-        // classe visual padrão (a maioria dos grupos só tem categoria de
-        // saída); um grupo só de receita usa 'entrada' pra não pintar de
-        // vermelho um resultado que na verdade é bom.
-        const classeGrupoUnico: Classe = temSaida ? 'saida' : 'entrada'
-        const totalGrupoUnico = somaTotais(itens.map((x) => x.totais))
+        /* BUG REAL corrigido em 11/09/2026 (reproduzido na tela com os dados
+           da planilha, não deduzido do código): de 30/08/2026 até aqui, o
+           cabeçalho do grupo mostrava UMA barra só, somando entrada e saída
+           no mesmo balde (`somaTotais` de todos os itens). Isso nunca doeu
+           enquanto nenhum grupo tinha categoria de RECEITA com movimento —
+           mas o Salário é natureza Receita dentro do grupo Fixo, e em
+           agosto/2026 o cabeçalho do Fixo aparecia como "R$ 24.409,09 de
+           R$ 7.902,00" (estourado), quando o gasto real do grupo foi
+           R$ 7.185,32: os R$ 17.223,77 do salário estavam entrando como se
+           fossem mais um gasto.
+
+           O teto do grupo é de GASTO — é com ele que o Rafael acompanha a
+           margem do mês. Então a barra passou a medir só as saídas, e as
+           receitas do grupo viram uma linha própria logo abaixo, sem teto e
+           sem semântica de estouro (a mesma linha de 'entrada' que os níveis
+           internos já usam: barra neutra + "já recebido X · previsto Y").
+           A receita continua vinculada ao grupo — a premissa do Rafael de
+           "todo movimento categorizado e dentro de um grupo" não muda, e ele
+           continua vendo, aqui mesmo, se ela já foi realizada ou não.
+
+           Um grupo só de receita (sem nenhuma saída) mostra apenas a linha de
+           entradas; um grupo só de gasto, apenas a barra — ninguém ganha
+           linha vazia. */
 
         function linhaCategoria({ cat, classe, totais }: (typeof itens)[number]) {
           const catExpandida = categoriaAberta === cat.id
@@ -380,12 +394,19 @@ export default function Planejamento({ mes, aoMudarMes, aoAbrirLancamento }: Tel
                   <span className="texto-fraco">{itens.length} categoria(s)</span>
                 </div>
                 {/* Barra de verdade em vez de só texto (30/08/2026) — reusa a
-                    mesma linhaTotais() do nível Geral/Categoria. Uma única
-                    barra combinada (não mais Saídas e Entradas separadas) —
-                    esse detalhamento já aparece nos níveis internos. */}
-                {(temSaida || temEntrada) && (
+                    mesma linhaTotais() do nível Geral/Categoria. Desde
+                    11/09/2026 são DUAS linhas, nunca somadas: a barra de
+                    gastos (o teto do grupo) e, quando o grupo tem categoria
+                    de receita, a linha de entradas sem teto — ver o bloco
+                    comentado acima. */}
+                {temSaida && (
                   <div className="total-geral" style={{ marginTop: 8 }}>
-                    {linhaTotais('Total do grupo', classeGrupoUnico, totalGrupoUnico)}
+                    {linhaTotais('Gastos do grupo', 'saida', saidasGrupo)}
+                  </div>
+                )}
+                {temEntrada && (
+                  <div className="total-geral" style={{ marginTop: 8 }}>
+                    {linhaTotais('Entradas neste grupo', 'entrada', entradasGrupo)}
                   </div>
                 )}
               </div>
