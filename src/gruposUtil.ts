@@ -19,6 +19,7 @@
 import { db, tipoDoGrupoPelaNatureza, type Categoria, type GrupoRegistro, type Natureza, type TipoGrupo } from './db'
 import { ICONES_PADRAO_GRUPO } from './iconesPadrao'
 import { salvarConfiguracaoIcones } from './configuracaoIcones'
+import { doAmbiente, marcaDoAmbiente, ambienteDoBanco } from './ambiente'
 
 /* Nome do grupo de entrada criado pela migração e semeado em instalação nova
    (escolha do Rafael: "vão pra um grupo novo chamado 'Receita'"). */
@@ -76,9 +77,13 @@ export async function migrarTipoDosGrupos(): Promise<{ tipados: number; movidas:
 
   const resultado = { tipados: 0, movidas: 0, criouGrupo: false }
 
+  /* Ambiente resolvido FORA da transação: ler `configuracoes` de dentro dela
+     derruba tudo com NotFoundError (o Dexie só libera as tabelas declaradas
+     no `transaction`). Bug real achado no teste da build 050. */
+  const amb = await ambienteDoBanco()
   await db.transaction('rw', db.grupos, db.categorias, async () => {
-    const grupos = await db.grupos.toArray()
-    const categorias = await db.categorias.toArray()
+    const grupos = doAmbiente(await db.grupos.toArray(), amb)
+    const categorias = doAmbiente(await db.categorias.toArray(), amb)
 
     for (const g of grupos) {
       if (g.tipo) continue
@@ -96,6 +101,7 @@ export async function migrarTipoDosGrupos(): Promise<{ tipados: number; movidas:
       if (!destino) {
         const padrao = ICONES_PADRAO_GRUPO[GRUPO_RECEITA]
         const id = await db.grupos.add({
+          ...marcaDoAmbiente(),
           nome: GRUPO_RECEITA,
           ativo: true,
           tipo: 'entrada',

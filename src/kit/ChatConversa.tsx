@@ -70,8 +70,16 @@ export default function ChatConversa({
   useEffect(() => {
     const ts = chatReadTs(tenant.supportMessages)
     const campo = perspectiva === 'cliente' ? 'chatLastReadTenant' : 'chatLastReadMorfo'
-    if (tenant[campo] !== ts) {
-      void atualizarTenantN0(tenant.id, (t) => ({ ...t, [campo]: ts }))
+    /* Abrir a conversa também desfaz a marcação manual de "não lida" do lado da
+       Morfo (12/09/2026) — senão a conversa voltaria da tela já marcada de
+       novo, e o selo nunca apagaria. */
+    const limparMarca = perspectiva === 'suporte'
+    if (tenant[campo] !== ts || (limparMarca && tenant.chatMarcadaNaoLidaMorfo)) {
+      void atualizarTenantN0(tenant.id, (t) => ({
+        ...t,
+        [campo]: ts,
+        ...(limparMarca ? { chatMarcadaNaoLidaMorfo: false } : {}),
+      }))
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenant.id, tenant.supportMessages.length])

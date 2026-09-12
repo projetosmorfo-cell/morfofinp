@@ -23,6 +23,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { db, type Lancamento } from '../db'
 import { useMemoriaDescricaoDias } from '../configuracaoIcones'
 import { hojeEfetivoISO } from '../hojeSimulado'
+import { lerDoAmbiente } from '../ambiente'
 
 export interface SugestaoMemoria {
   descricao: string
@@ -57,11 +58,11 @@ export default function MemoriaDescricao({
 
   const desde = dias > 0 ? diasAtras(hojeEfetivoISO(), dias) : null
   const recentes = useLiveQuery<Lancamento[]>(
-    () => (desde ? db.lancamentos.where('dataCompetencia').aboveOrEqual(desde).toArray() : Promise.resolve([] as Lancamento[])),
+    () => (desde ? lerDoAmbiente(db.lancamentos.where('dataCompetencia').aboveOrEqual(desde).toArray()) : Promise.resolve([] as Lancamento[])),
     [desde]
   )
-  const categorias = useLiveQuery(() => db.categorias.toArray(), [])
-  const contas = useLiveQuery(() => db.contas.toArray(), [])
+  const categorias = useLiveQuery(() => lerDoAmbiente(db.categorias.toArray()), [])
+  const contas = useLiveQuery(() => lerDoAmbiente(db.contas.toArray()), [])
 
   const base = useMemo<SugestaoMemoria[]>(() => {
     if (!recentes || !recentes.length) return []

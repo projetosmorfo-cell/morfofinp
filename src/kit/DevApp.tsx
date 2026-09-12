@@ -3,7 +3,9 @@
    `#8B7CF6` — o Kit usa `#6C3FFF` (L53-L55), e como token CSS
    (`var(--mloc-dev-*)`), não hex solto. Agora vem de `kitBase.tsx`, que é a
    transcrição do Kit: mesma cor, e passa a acompanhar o `shell.css`. */
-import { useState, type ComponentType, type ReactNode } from 'react'
+import { useRef, useState, type ComponentType, type ReactNode, useEffect } from 'react'
+import { aplicarMascaraValor, formatarMoeda, paraNumero } from '../formatoMoeda'
+import { emTituloCaso } from '../tituloCaso'
 import { useLiveQuery } from 'dexie-react-hooks'
 import {
   HomeIcon,
@@ -21,6 +23,8 @@ import { db } from '../db'
 import { sairN0 } from './authN0'
 import { useTodosPlanos, criarPlano, atualizarPlano, inativarPlano, reativarPlano, recursosAutomaticos, PLANO_PADRAO_KIT, type Plano } from './planos'
 import SiteParametrosN0 from './SiteParametrosN0'
+import PadraoCategoriasN0 from './PadraoCategoriasN0'
+import { contarLancamentosFicticios, apagarTodosDadosDeTeste, temDadosDeTesteNaPlataforma } from './massaTeste'
 import RodapeAbas from './RodapeAbas'
 import IndicadoresDevScreen from './indicadoresKit'
 import ChatConversa from './ChatConversa'
@@ -29,6 +33,7 @@ import {
   tenantCanceledExpired,
   tenantBlocked,
   installmentDisplayStatus,
+  confirmarPagamento,
   fmtDate,
   hasUnreadMorfo,
   chatDiaLabel,
@@ -44,10 +49,15 @@ import {
   atualizarDevUsersN0,
   atualizarTenantN0,
   lerPlatformN0Persistida,
+  gerarParcelasPendentes,
+  paramsGlobais,
+  instCobravel,
+  forcarPagamentoMVP,
   salvarPlatformN0,
   TENANT_N1_ID,
   daysUntil,
   addDays,
+  todayISO,
   normalizarMenuPosModo,
   posicaoMenuDe,
   ITENS_NAV_N0,
@@ -56,18 +66,26 @@ import {
   type FiltroDados,
   type TenantKit,
   type DevUserN0,
+  type UsuarioTenant,
   type Parcela,
+  AUDIT_TIPOS,
+  ATOR_INFO,
+  ehTenantDeTeste,
 } from './kitPlatform'
-import { PerfisAcessoContent } from './PerfisAcesso'
+import { PerfisAcessoContent, ConfirmDeleteSheet } from './PerfisAcesso'
 import { LayoutContext, TopIconMenu, UserHoverIcon, IconesDeTela, type ItemMenuTopo } from './TopoIcones'
 import { ExportSheet, type ExportRow } from './ExportSheet'
-import { RotateCcw, LogOut, AlertTriangle, Timer, ShieldAlert, UserPlus, Plus, FileBadge, Settings, MessageCircle, Pencil, Trash2, Check, Search, Building2, Wallet, Link2, Copy, CheckCircle2, Lock, Unlock } from 'lucide-react'
-import { alpha, uid, GREEN, AMBER, RED, SectionLabel, DEV_BG, DEV_CARD, DEV_ACCENT, Segmented, Sheet, Field, FieldError, inputStyle, primaryBtn, Toggle, PhoneComWhats, AddressFieldsBasic, normalizeAddress, validaCPF, validaTelefone, validaEmailEnvio, EmptyState, type Endereco } from './kitBase'
+import { usarBotaoVoltar } from '../voltarAndroid'
+import { NOME_PRODUTO } from './siteKit'
+import { RotateCcw, LogOut, AlertTriangle, Timer, ShieldAlert, UserPlus, Plus, FileBadge, Settings, MessageCircle, Pencil, Trash2, Check, Search, Building2, Wallet, Link2, Copy, CheckCircle2, Lock, Unlock, Filter, ChevronRight } from 'lucide-react'
+import { alpha, uid, MultiFilterChips, dangerBtn, GREEN, AMBER, RED, SectionLabel, DEV_BG, DEV_CARD, DEV_ACCENT, Segmented, Sheet, Field, FieldError, inputStyle, primaryBtn, secondaryBtn, Toggle, PhoneComWhats, AddressFieldsBasic, normalizeAddress, validaCPF, validaTelefone, validaEmailEnvio, EmptyState, type Endereco } from './kitBase'
 import { ESPACO_LINHA, InfoDot, IndicatorStrip, QuickAction, TotalRegistros, formatMoneyShort, SearchBox } from './PadraoUI'
+import FolhaCompartilhar, { type DadosCompartilhamento } from './FolhaCompartilhar'
+import { montarLinkPreCadastro } from './preCadastroLink'
 // Telas novas de Parâmetros (10/09/2026, Decisão 55 — Parte B)
 import {
   SubParametrosAssinatura, SubParametrosAmbiente, SubParametrosChat,
-  SubParametrosAlertas, SubParametrosMarca, SubParametrosLayout,
+  SubParametrosAlertas, SubParametrosMarca, SubParametrosLayout, SubParametrosUrls,
 } from './ParametrosN0'
 import { SubTesteCliente, SubTesteMorfo, SubLimpezaCliente, SubLimpezaMorfo } from './TesteELimpezaN0'
 
@@ -86,7 +104,7 @@ import { SubTesteCliente, SubTesteMorfo, SubLimpezaCliente, SubLimpezaMorfo } fr
 //    este componente quando `sessaoAtivaN0` está ativa, ponto — nenhuma
 //    prop de "voltar pro ambiente" existe mais (isso era o atalho N0↔N1
 //    proibido). O botão do topo agora é "Sair" (zera só `sessaoAtivaN0`).
-// 2. "Entrar como este tenant" (impersonate) passou de PERMANENTEMENTE
+// 2. "Entrar como este cliente" (impersonate) passou de PERMANENTEMENTE
 //    desabilitado pra REAL pro único tenant de verdade (`t0`) — é o ÚNICO
 //    caminho N0→N1 permitido por G59 (`onEntrarComoTenant`, ver
 //    `AppRoot.tsx`). Continua desabilitado pros 3 tenants de exemplo
@@ -135,7 +153,7 @@ function iconeDeAbaNoMenuN0(Ico: typeof HomeIcon): ComponentType<{ size?: number
 
 const ABAS: { key: AbaN0; label: string; Icone: typeof HomeIcon }[] = [
   { key: 'inicio', label: 'Início', Icone: HomeIcon },
-  { key: 'tenants', label: 'Tenants', Icone: BuildingOffice2Icon },
+  { key: 'tenants', label: 'Clientes', Icone: BuildingOffice2Icon },
   { key: 'financeiro', label: 'Financeiro', Icone: BanknotesIcon },
   { key: 'auditoria', label: 'Auditoria', Icone: ClipboardDocumentListIcon },
   { key: 'parametros', label: 'Parâmetros', Icone: Cog6ToothIcon },
@@ -254,13 +272,22 @@ function TopoN0({ titulo, subtitulo, onVoltarSub, acoes }: { titulo: string; sub
         <button
           type="button"
           onClick={onVoltarSub}
+          /* Item 17 da lista de 12/09/2026: "o botão voltar tem borda e fundo
+             em algumas telas e em outras não — padronize com borda e fundo em
+             todas as telas e popups". Este era o caso sem nenhum dos dois
+             (texto puro). Agora é a mesma pílula com fundo e borda que o N1
+             usa (`.botao-voltar-config`), na paleta escura do painel. */
           style={{
-            background: 'none',
-            border: 'none',
-            color: DEV_TXT2,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            background: 'rgba(255,255,255,0.06)',
+            border: '1px solid rgba(255,255,255,0.18)',
+            borderRadius: 999,
+            color: '#fff',
             fontSize: 12.5,
             fontWeight: 700,
-            padding: 0,
+            padding: '7px 14px 7px 11px',
             marginBottom: 10,
             cursor: 'pointer',
           }}
@@ -269,7 +296,7 @@ function TopoN0({ titulo, subtitulo, onVoltarSub, acoes }: { titulo: string; sub
         </button>
       )}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-        <h2 style={{ fontSize: 17, margin: 0, color: '#fff', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{titulo}</h2>
+        <h2 style={{ fontSize: 17, margin: 0, color: '#fff', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{emTituloCaso(titulo)}</h2>
         {acoes && <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>{acoes}</div>}
       </div>
       {subtitulo && <p style={{ fontSize: 12, color: DEV_TXT2, margin: '4px 0 0' }}>{subtitulo}</p>}
@@ -305,8 +332,8 @@ function Badge({ status }: { status: StatusTenant }) {
 function AvisoDadoFicticio() {
   return (
     <p style={{ fontSize: 11.5, color: DEV_TXT3, lineHeight: 1.6, marginTop: 0, marginBottom: 16 }}>
-      Tenants marcados <strong style={{ color: DEV_TXT2 }}>(exemplo)</strong> são dado fictício (os próprios tenants
-      de demonstração do Kit) — só pra mostrar como esta tela funciona com vários tenants. Nenhuma ação aqui muda
+      Clientes marcados <strong style={{ color: DEV_TXT2 }}>(exemplo)</strong> são dado fictício (os próprios
+      clientes de demonstração do Kit) — só pra mostrar como esta tela funciona com vários. Nenhuma ação aqui muda
       dado real (sem backend ainda, Backlog #028).
     </p>
   )
@@ -319,7 +346,12 @@ function AvisoDadoFicticio() {
 // Financeiro, Indicadores) — Auditoria fica de fora, igual ao Kit.
 // Adaptação única: o "ⓘ" do Kit (`InfoDot`) virou um `title` nativo do
 // navegador — mesmo texto, sem portar o componente de popover só pra isso.
-function FiltroDadosBar({ filtroDados, setFiltroDados }: { filtroDados: FiltroDados; setFiltroDados: (v: FiltroDados) => void }) {
+/* 12/09/2026 — a barra só existe quando há dado de teste DE VERDADE, e agora
+   com a saída junto (bug reportado pelo Rafael: "diz que tem dados de teste
+   gerados, mas não tem, nem me dá opção de apagar"). Antes ela era fixa em
+   toda aba, usando um critério diferente do da tela de limpeza — ver
+   `ehTenantDeTeste` em `kitPlatform.ts`. */
+function FiltroDadosBar({ filtroDados, setFiltroDados, onLimpar }: { filtroDados: FiltroDados; setFiltroDados: (v: FiltroDados) => void; onLimpar: () => void }) {
   return (
     <div
       style={{
@@ -354,24 +386,44 @@ function FiltroDadosBar({ filtroDados, setFiltroDados }: { filtroDados: FiltroDa
           {opt.l}
         </button>
       ))}
+      <button
+        type="button"
+        data-testid="n0-apagar-dados-teste"
+        onClick={onLimpar}
+        title="Apaga ambientes, usuários, planos e lançamentos de teste"
+        style={{ marginLeft: 'auto', padding: '5px 10px', borderRadius: 999, border: '1px solid rgba(255,255,255,0.28)', background: 'transparent', color: '#fff', fontWeight: 800, fontSize: 11, cursor: 'pointer' }}
+      >
+        Apagar dados de teste
+      </button>
     </div>
   )
 }
 
+/* Campo e rótulo dos FORMULÁRIOS do N0 (Usuários Morfo, Meus Dados, Planos).
+   12/09/2026, itens 20 e 24 do Rafael ("campos editáveis despadronizados",
+   "campos fora do padrão"): eram fundo quase preto com borda roxa fininha e
+   fonte 13.5 — diferentes de TODO o resto do painel, onde o campo editável é
+   `rgba(255,255,255,0.05)` com borda clara (ver `LinhaParam`/`CampoTextoDev`
+   em ParametrosN0.tsx, e os campos de horário do Chat). Agora é o mesmo
+   desenho em todos: a borda mais clara é o que faz o campo parecer editável,
+   que era a reclamação. Os 3 formulários usam estas duas constantes, então a
+   padronização vale para os três de uma vez. */
 const campoN0Style: React.CSSProperties = {
   width: '100%',
-  background: '#141319',
-  border: `1px solid ${DEV_ACCENT}44`,
+  boxSizing: 'border-box',
+  background: 'rgba(255,255,255,0.05)',
+  border: '1.5px solid rgba(255,255,255,0.18)',
   borderRadius: 10,
-  padding: '10px 12px',
+  padding: '11px 12px',
   color: '#fff',
-  fontSize: 13.5,
+  fontSize: 14,
+  outline: 'none',
 }
 const labelN0Style: React.CSSProperties = {
   display: 'block',
-  fontSize: 11.5,
+  fontSize: 12,
   color: DEV_TXT2,
-  margin: '10px 0 4px',
+  margin: '12px 0 6px',
   fontWeight: 700,
 }
 
@@ -480,7 +532,7 @@ function BuscaGlobalN0Sheet({ onClose, onAbrirTenant, onAbrirParcela }: {
    O que existia antes: 4 KPIs numa grade 2×2 e nada mais — sem atalhos, sem a
    seção de atenção. A grade 2×2 é justamente o que o Padrão de Interface (seção
    3) manda trocar pela faixa de indicadores de uma linha. ---- */
-function AbaInicio({ filtroDados, onIrPara, onAbrirSuporte }: { filtroDados: FiltroDados; onIrPara: (aba: AbaN0) => void; onAbrirSuporte: () => void }) {
+function AbaInicio({ filtroDados, onIrPara, onAbrirSuporte }: { filtroDados: FiltroDados; onIrPara: (aba: AbaN0, opcoes?: { sub?: SubParametros; acaoTenants?: AcaoTenants }) => void; onAbrirSuporte: () => void }) {
   const platform = usePlatformN0()
   const tenants = filtrarTenantsPorDados(platform.tenants, filtroDados)
   const [exportOpen, setExportOpen] = useState(false)
@@ -581,13 +633,23 @@ function AbaInicio({ filtroDados, onIrPara, onAbrirSuporte }: { filtroDados: Fil
       {/* Kit L5718-L5742: os atalhos. */}
       <SectionLabel dark>Atalhos</SectionLabel>
       <div style={{ display: 'flex', gap: 10, marginBottom: 8 }}>
-        <QuickAction dark icon={Plus} label="Criar ambiente de teste" onClick={() => onIrPara('tenants')}
+        {/* 12/09/2026 (pedido do Rafael): cada atalho leva ao DESTINO, não à
+            aba genérica — "Criar ambiente de teste" abre a folha de cadastro
+            de cliente em Período de teste, e "Pré-cadastros" abre a MESMA
+            folha já marcada como Pré-cadastro (item 2, 12/09/2026; antes este
+            atalho abria a lista filtrada em quem aguarda liberação — essa
+            lista continua alcançável pelo filtro da própria aba Tenants). */}
+        {/* Build 056 (12/09/2026, pedido do Rafael): "inverter posição dos
+            cards de gerar ambiente de testes com o de pré-cadastro" — o
+            pré-cadastro vem primeiro, que é a porta de entrada mais comum
+            (registrar interesse) e a que tem contador de pendência. */}
+        <QuickAction dark icon={ShieldAlert} label={`Pré-cadastros${pendLiberacao.length ? ` (${pendLiberacao.length})` : ''}`} onClick={() => onIrPara('tenants', { acaoTenants: 'novoPreCadastro' })}
+          info="Registra o interesse de um cliente com o mínimo: e-mail, telefone, login e senha. O acesso fica aguardando liberação." />
+        <QuickAction dark icon={Plus} label="Criar ambiente de teste" onClick={() => onIrPara('tenants', { acaoTenants: 'novo' })}
           info="Cria uma empresa em período de avaliação, com login e senha definidos por você." />
-        <QuickAction dark icon={ShieldAlert} label={`Pré-cadastros${pendLiberacao.length ? ` (${pendLiberacao.length})` : ''}`} onClick={() => onIrPara('tenants')}
-          info="Ambientes que se cadastraram sozinhos pela tela de Login e escolheram pagar por boleto — ficam aguardando a compensação. Pix e cartão liberam na hora." />
       </div>
       <div style={{ display: 'flex', gap: 10, marginBottom: 8 }}>
-        <QuickAction dark icon={FileBadge} label="Gerenciar planos" onClick={() => onIrPara('parametros')}
+        <QuickAction dark icon={FileBadge} label="Gerenciar planos" onClick={() => onIrPara('parametros', { sub: 'planos' })}
           info="Cria e edita os planos de assinatura vendidos às empresas clientes: preço, limites e recursos." />
         <QuickAction dark icon={Settings} label="Parâmetros gerais" onClick={() => onIrPara('parametros')}
           info="Valores padrão aplicados aos ambientes: tolerância, vencimento, teste grátis, retenção e mais." />
@@ -597,10 +659,16 @@ function AbaInicio({ filtroDados, onIrPara, onAbrirSuporte }: { filtroDados: Fil
             entrava na aba Tenants inteira (achar o cliente certo era manual)
             — o Kit abre direto a caixa de entrada agregada de conversas
             (`DevChatGeralScreen`, L6370). Agora abre `CentralSuporteN0`. */}
+        {/* Item 21 da lista de 12/09/2026: "o atalho de suporte não anima
+            quando há mensagens não lidas e deveria". O selo com a contagem já
+            existia, mas parado — agora o atalho treme (`mloc-shake`) e o selo
+            pulsa (`mloc-badge-pulse`), as mesmas duas classes que o resto do
+            app já usa pra mensagem não lida. */}
         <QuickAction dark icon={MessageCircle} label="Suporte" onClick={onAbrirSuporte}
+          shake={suporteNaoLido > 0}
           info="Fale com as empresas clientes pelo chat de suporte."
           badge={suporteNaoLido > 0
-            ? <span style={{ fontSize: 10, fontWeight: 800, color: '#fff', background: RED, padding: '2px 7px', borderRadius: 999, whiteSpace: 'nowrap' }}>{suporteNaoLido} Nova{suporteNaoLido > 1 ? 's' : ''}</span>
+            ? <span className="mloc-badge-pulse" style={{ fontSize: 10, fontWeight: 800, color: '#fff', background: RED, padding: '2px 7px', borderRadius: 999, whiteSpace: 'nowrap' }}>{suporteNaoLido} Nova{suporteNaoLido > 1 ? 's' : ''}</span>
             : null} />
       </div>
 
@@ -723,7 +791,7 @@ function CentralSuporteN0({ onClose }: { onClose: () => void }) {
                 type="button"
                 title="Marcar como não lida"
                 aria-label="Marcar como não lida"
-                onClick={() => void atualizarTenantN0(t.id, (tt) => ({ ...tt, chatLastReadMorfo: null }))}
+                onClick={() => void atualizarTenantN0(t.id, (tt) => ({ ...tt, chatLastReadMorfo: null, chatMarcadaNaoLidaMorfo: true }))}
                 style={{ width: 34, height: 34, borderRadius: 10, border: 'none', background: 'rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}
               >
                 <MessageCircle size={15} color={DEV_ACCENT} />
@@ -761,14 +829,41 @@ function CentralSuporteN0({ onClose }: { onClose: () => void }) {
      no Dexie do aparelho (ver `massaTeste.ts`), não dentro do tenant — gerar
      massa por aqui escreveria em cima do movimento real de quem estiver
      usando o app. Massa continua onde já estava: Parâmetros › Gerar Teste. */
-function NovoClienteSheet({ diasTestePadrao, onClose }: { diasTestePadrao: number; onClose: () => void }) {
+function sugerirLogin(email: string, telefone: string, nome: string): string {
+  const base = (email.split('@')[0] || telefone.replace(/\D/g, '') || nome)
+    .toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '')
+  return base.slice(0, 18) || `cliente${Math.floor(Math.random() * 900 + 100)}`
+}
+function sugerirSenha(): string {
+  return String(Math.floor(Math.random() * 900000) + 100000)
+}
+
+function NovoClienteSheet({ diasTestePadrao, modoInicial, urls, onClose, notify, aoCompartilhar }: {
+  diasTestePadrao: number
+  /* Com qual opção de "Como este cliente entra" a folha abre (item 2,
+     12/09/2026): o atalho "Pré-cadastros" da tela Início abre em
+     'precadastro'; "Criar ambiente de teste" abre em 'trial'; o botão de
+     incluir da lista abre no padrão. A folha é a MESMA nos três caminhos — ele
+     pediu explicitamente que ela mostre a escolha no topo "independente de
+     quando for aberta", pra dar pra mudar de ideia sem sair e voltar. */
+  modoInicial?: 'precadastro' | 'trial' | 'pagante'
+  urls: { apk?: string; site?: string; appWeb?: string }
+  onClose: () => void
+  notify: (m: string) => void
+  /* Abre a folha de compartilhamento com a mensagem do cenário certo
+     (12/09/2026, build 053) — quem monta o texto é `FolhaCompartilhar`. */
+  aoCompartilhar: (dados: DadosCompartilhamento) => void
+}) {
   const planos = useTodosPlanos().filter((p) => p.ativo)
   const [nome, setNome] = useState('')
   const [phone, setPhone] = useState('')
-  const [hasWhatsapp, setHasWhatsapp] = useState(true)
+  /* 12/09/2026 (build 054), pedido do Rafael: a flag "Tem WhatsApp" nasce
+     DESMARCADA. Marcada por padrão, ela afirmava uma coisa que ninguém
+     conferiu — e é ela que decide se o convite pode sair por WhatsApp. */
+  const [hasWhatsapp, setHasWhatsapp] = useState(false)
   const [email, setEmail] = useState('')
   const [doc, setDoc] = useState('')
-  const [tipoPlano, setTipoPlano] = useState<'trial' | 'pagante'>('trial')
+  const [tipoPlano, setTipoPlano] = useState<'precadastro' | 'trial' | 'pagante'>(modoInicial ?? 'trial')
   const [planoId, setPlanoId] = useState<string>(planos[0]?.id ? String(planos[0].id) : '')
   const [dias, setDias] = useState(String(diasTestePadrao))
   const [login, setLogin] = useState('')
@@ -776,38 +871,82 @@ function NovoClienteSheet({ diasTestePadrao, onClose }: { diasTestePadrao: numbe
   const [liberar, setLiberar] = useState(true)
   const [erro, setErro] = useState('')
 
-  const phoneOk = validaTelefone(phone)
-  const docOk = !doc.trim() || validaCPF(doc)
-  const emailOk = validaEmailEnvio(email)
-  const planoEscolhido = planos.find((p) => String(p.id) === planoId)
-  const podeSalvar = !!nome.trim() && phoneOk && emailOk && docOk && !!login.trim() && senha.trim().length >= 4
-    && (tipoPlano === 'trial' || !!planoEscolhido)
+  const ehPrecadastro = tipoPlano === 'precadastro'
 
-  async function salvar() {
-    const loginN = login.trim().toLowerCase()
+  /* FICHA ENXUTA POR TIPO (12/09/2026, build 053). O Rafael, revendo a versão
+     anterior: "eu pedi pra ser ficha enxuta e não pra só tirar a
+     obrigatoriedade, tire os campos da tela conforme seleciono tipo de
+     cadastro (nome pode voltar a ser obrigatório e em todos tipos de
+     cadastro), se for Pré-Cadastro pedir somente telefone e e-mail e obrigar
+     apenas um deles, isso apenas pra o N0, já pro usuário quando entrar deve
+     preencher todo o resto, se for Ambiente de Teste, pedir ficha normal com
+     os campos obrigatórios".
+
+     Então, no pré-cadastro, CPF / plano / login / senha / "liberar agora" não
+     ficam opcionais: eles SOMEM. O login e a senha nascem sugeridos por aqui
+     (ver `sugerirLogin`/`sugerirSenha`) porque o ambiente precisa de um
+     usuário pra existir — mas ninguém entra com eles enquanto o acesso não
+     for liberado, e a Morfo pode trocá-los na ficha antes de liberar. */
+  const phoneOk = ehPrecadastro
+    ? (!phone.trim() || validaTelefone(phone))
+    : (!!phone.trim() && validaTelefone(phone))
+  const emailOk = ehPrecadastro ? (!email.trim() || validaEmailEnvio(email)) : validaEmailEnvio(email)
+  /* "obrigar apenas um deles" — telefone OU e-mail, nunca os dois. */
+  const contatoOk = ehPrecadastro ? (!!phone.trim() || !!email.trim()) : true
+  const planoEscolhido = planos.find((p) => String(p.id) === planoId)
+  const docOk = ehPrecadastro ? true : (!!doc.trim() && validaCPF(doc))
+  /* "nome pode voltar a ser obrigatório e em todos tipos de cadastro". */
+  const nomeOk = !!nome.trim()
+  const acessoOk = ehPrecadastro ? true : (!!login.trim() && senha.trim().length >= 4)
+  const podeSalvar = nomeOk && phoneOk && emailOk && contatoOk && docOk && acessoOk
+    && (tipoPlano !== 'pagante' || !!planoEscolhido)
+
+  async function salvar(compartilhar: boolean) {
     const platform = await lerPlatformN0Persistida()
-    if (loginJaEmUsoGlobalmente(platform, loginN)) { setErro('Esse login já está em uso (N0 ou N1).'); return }
+    let loginN = login.trim().toLowerCase()
+    let senhaFinal = senha
+    if (ehPrecadastro) {
+      /* Login sugerido: se o sugerido já existir, acrescenta um sufixo até
+         achar um livre — nunca deixa dois acessos com o mesmo login (a mesma
+         regra que `loginJaEmUsoGlobalmente` impõe no cadastro manual). */
+      const base = sugerirLogin(email.trim(), phone.trim(), nome.trim())
+      loginN = base
+      let n = 1
+      while (loginJaEmUsoGlobalmente(platform, loginN)) { loginN = `${base}${n}`; n++ }
+      senhaFinal = sugerirSenha()
+    } else if (loginJaEmUsoGlobalmente(platform, loginN)) {
+      setErro('Esse login já está em uso (N0 ou N1).'); return
+    }
     const hoje = new Date().toISOString().slice(0, 10)
     const mensalidade = tipoPlano === 'pagante' ? (planoEscolhido?.valorMensal ?? 0) : 0
+    /* Pré-cadastro nasce SEM acesso liberado, por definição — é isso que o
+       estado 'pendente_liberacao' significa na aba Início. */
+    const liberarAgora = ehPrecadastro ? false : liberar
+    /* Um pré-cadastro ainda não escolheu plano: entra como período de teste
+       (o mesmo que o Kit faz), e a conversão pra pagante acontece na ficha
+       dele, pelo botão que já existe. */
+    const planoDoTenant: 'trial' | 'pagante' = tipoPlano === 'pagante' ? 'pagante' : 'trial'
+    const nomeFinal = nome.trim()
+    const idTenant = `t-${uid()}`
     const novo: TenantKit = {
-      id: `t-${uid()}`,
-      companyName: nome.trim(),
-      ownerName: nome.trim(),
+      id: idTenant,
+      companyName: nomeFinal,
+      ownerName: nomeFinal,
       phone: phone.trim(),
       hasWhatsapp,
       email: email.trim(),
       doc: doc.trim() || undefined,
       createdAt: hoje,
-      plan: tipoPlano,
+      plan: planoDoTenant,
       planId: tipoPlano === 'pagante' && planoEscolhido ? String(planoEscolhido.id) : null,
       manualBlock: false,
-      onboarding: liberar ? 'completo' : 'pendente_liberacao',
+      onboarding: liberarAgora ? 'completo' : 'pendente_liberacao',
       /* Achado 11/09/2026 (reconciliação `kitPlatform.ts`): grava desde
          quando este pré-cadastro está pendente, pro housekeeping automático
          (`verificarVencimentoPrecadastro`) saber quando o prazo do parâmetro
          "Prazo do pré-cadastro" (Parâmetros N0) vence e encerrar sozinho. */
-      onboardingSince: liberar ? undefined : hoje,
-      trial: tipoPlano === 'trial' ? { days: Number(dias) || diasTestePadrao, startDate: hoje } : null,
+      onboardingSince: liberarAgora ? undefined : hoje,
+      trial: planoDoTenant === 'trial' ? { days: Number(dias) || diasTestePadrao, startDate: hoje } : null,
       billing: tipoPlano === 'pagante' && mensalidade > 0
         ? { monthlyValue: mensalidade, dueDay: platform.defaultParams?.dueDay ?? 5, toleranceDays: platform.defaultParams?.toleranceDays ?? 5, installments: [] }
         : null,
@@ -819,60 +958,126 @@ function NovoClienteSheet({ diasTestePadrao, onClose }: { diasTestePadrao: numbe
          o único. `demo` fica de fora de propósito — é acesso de verdade. */
       users: [{
         id: `u-${uid()}`,
-        name: nome.trim(), login: loginN, senha, email: email.trim(), phone: phone.trim(),
-        status: liberar ? 'ativo' : 'pendente_aprovacao', perfilId: 'admin', createdAt: hoje,
+        name: nomeFinal, login: loginN, senha: senhaFinal, email: email.trim(), phone: phone.trim(),
+        status: liberarAgora ? 'ativo' : 'pendente_aprovacao', perfilId: 'admin', createdAt: hoje,
       }],
       userLimit: 1,
-      // `ator: 'suporte'` (achado no diff desta rodada, 11/09/2026): marca a
+      // `ator: 'admin'` (achado no diff desta rodada, 11/09/2026): marca a
       // entrada como ação da Morfo, não do cliente — é o que faz o bloco
       // "Ações do suporte no meu ambiente" (SuporteChat.tsx) listar isso.
-      accessLog: [{ id: uid(), ts: new Date().toISOString().slice(0, 19), action: liberar ? 'Cliente cadastrado pela Morfo, com acesso liberado' : 'Cliente cadastrado pela Morfo, aguardando liberação', ator: 'suporte' }],
+      accessLog: [{ id: uid(), ts: new Date().toISOString().slice(0, 19), action: ehPrecadastro ? 'Pré-cadastro criado pela Morfo, aguardando liberação' : liberarAgora ? 'Cliente cadastrado pela Morfo, com acesso liberado' : 'Cliente cadastrado pela Morfo, aguardando liberação', ator: 'admin' }],
       real: true,
     }
     await salvarPlatformN0({ ...platform, tenants: [...platform.tenants, novo] })
+    if (compartilhar) {
+      /* Dois cenários bem diferentes, é isso que o Rafael descreveu:
+         pré-cadastro manda o LINK pra completar o cadastro; ambiente de teste
+         "já pula a etapa de pré-cadastro e envia mensagem e-mail ou whatsapp
+         já com url pra download liberando acesso". */
+      aoCompartilhar(ehPrecadastro
+        ? {
+            cenario: 'convite',
+            nomeProduto: NOME_PRODUTO,
+            nomeCliente: nomeFinal,
+            telefone: phone.trim(),
+            email: email.trim(),
+            linkPreCadastro: montarLinkPreCadastro(urls.appWeb ?? '', {
+              tenantId: idTenant, nome: nomeFinal, telefone: phone.trim(), email: email.trim(), login: loginN,
+            }),
+            linkSite: urls.site,
+          }
+        : {
+            cenario: 'testeDireto',
+            nomeProduto: NOME_PRODUTO,
+            nomeCliente: nomeFinal,
+            telefone: phone.trim(),
+            email: email.trim(),
+            login: loginN,
+            senha: senhaFinal,
+            contexto: planoDoTenant === 'trial'
+              ? `Você tem ${Number(dias) || diasTestePadrao} dias de teste a partir de hoje.`
+              : `Plano contratado: ${planoEscolhido?.nome ?? ''}.`,
+            linkApp: urls.apk,
+            linkSite: urls.site,
+          })
+    } else {
+      notify(ehPrecadastro ? 'Pré-cadastro criado' : 'Cliente cadastrado')
+    }
     onClose()
   }
 
-  return <Sheet dark title="Novo cliente" onClose={onClose}>
+  return <Sheet dark title={ehPrecadastro ? 'Novo pré-cadastro' : 'Novo cliente'} onClose={onClose}>
+    {/* Item 2 (12/09/2026): a escolha de COMO o cliente entra aparece logo no
+        topo, "independente de quando for aberta" — inclusive quando a folha
+        veio de um atalho que já escolheu por ela. Assim dá pra corrigir a
+        escolha sem fechar e reabrir por outro caminho. */}
+    <Field dark label="Como este cliente entra">
+      <Segmented value={tipoPlano} onChange={setTipoPlano} options={[
+        { value: 'precadastro' as const, label: 'Pré-cadastro' },
+        { value: 'trial' as const, label: 'Período de teste' },
+        { value: 'pagante' as const, label: 'Plano pago' },
+      ]} />
+    </Field>
+    {ehPrecadastro && (
+      <p style={{ fontSize: 12, color: '#C9C4D4', margin: '-6px 0 14px', lineHeight: 1.5 }}>
+        Aqui só o essencial: nome e uma forma de falar com a pessoa (telefone
+        <strong style={{ color: '#fff' }}> ou </strong>e-mail). O resto do cadastro quem preenche é ela, pelo link
+        que você manda em seguida. O acesso fica <strong style={{ color: '#fff' }}>aguardando liberação</strong>.
+      </p>
+    )}
     <Field dark label="Nome do cliente"><input style={inputStyle} value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Ex: Maria Silva" /></Field>
-    <PhoneComWhats phone={phone} setPhone={setPhone} hasWhatsapp={hasWhatsapp} setHasWhatsapp={setHasWhatsapp} />
-    <FieldError show={phone.trim() && !phoneOk} text="Telefone inválido (use DDD + número)" />
+    <FieldError show={!nomeOk} text="Informe o nome do cliente (obrigatório)" />
+    <PhoneComWhats phone={phone} setPhone={setPhone} hasWhatsapp={hasWhatsapp} setHasWhatsapp={setHasWhatsapp}
+      label={ehPrecadastro ? 'Telefone (WhatsApp)' : 'Telefone'} />
+    <FieldError show={!phoneOk} text={phone.trim() ? 'Telefone inválido (use DDD + número)' : 'Informe o telefone (obrigatório)'} />
     <Field dark label="E-mail"><input style={inputStyle} inputMode="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="cliente@email.com" /></Field>
-    <FieldError show={email.trim() && !emailOk} text="E-mail inválido" />
-    <Field dark label="CPF (opcional)"><input style={inputStyle} inputMode="numeric" value={doc} onChange={(e) => setDoc(e.target.value)} placeholder="000.000.000-00" /></Field>
-    <FieldError show={doc.trim() && !docOk} text="CPF inválido" />
+    <FieldError show={!emailOk} text={email.trim() ? 'E-mail inválido' : 'Informe o e-mail (obrigatório)'} />
+    <FieldError show={!contatoOk} text="Preencha pelo menos o telefone ou o e-mail" />
+    {!ehPrecadastro && <>
+      <Field dark label="CPF"><input style={inputStyle} inputMode="numeric" value={doc} onChange={(e) => setDoc(e.target.value)} placeholder="000.000.000-00" /></Field>
+      <FieldError show={!docOk} text={doc.trim() ? 'CPF inválido' : 'Informe o CPF (obrigatório)'} />
+    </>}
 
-    <SectionLabel dark>Plano</SectionLabel>
-    <Field dark label="Como este cliente entra"><Segmented value={tipoPlano} onChange={setTipoPlano} options={[{ value: 'trial' as const, label: 'Período de teste' }, { value: 'pagante' as const, label: 'Plano pago' }]} /></Field>
+    {!ehPrecadastro && <SectionLabel dark>Plano</SectionLabel>}
     {tipoPlano === 'trial'
       ? <Field dark label="Dias de teste"><input style={inputStyle} type="number" value={dias} onChange={(e) => setDias(e.target.value)} /></Field>
-      : planos.length === 0
-        ? <p style={{ fontSize: 12, color: AMBER, margin: '0 0 14px', lineHeight: 1.5 }}>Nenhum plano ativo cadastrado. Cadastre um em Parâmetros › Gerenciar Planos, ou cadastre este cliente em período de teste.</p>
-        : <Field dark label="Plano contratado"><select style={inputStyle} value={planoId} onChange={(e) => setPlanoId(e.target.value)}>
-            {planos.map((p) => <option key={p.id} value={String(p.id)}>{p.nome} — {p.gratuito ? 'gratuito' : fmtBRL(p.valorMensal)}</option>)}
-          </select></Field>}
+      : tipoPlano === 'pagante'
+        ? (planos.length === 0
+            ? <p style={{ fontSize: 12, color: AMBER, margin: '0 0 14px', lineHeight: 1.5 }}>Nenhum plano ativo cadastrado. Cadastre um em Parâmetros › Gerenciar Planos, ou cadastre este cliente em período de teste.</p>
+            : <Field dark label="Plano contratado"><select style={inputStyle} value={planoId} onChange={(e) => setPlanoId(e.target.value)}>
+                {planos.map((p) => <option key={p.id} value={String(p.id)}>{p.nome} — {p.gratuito ? 'gratuito' : fmtBRL(p.valorMensal)}</option>)}
+              </select></Field>)
+        : null}
 
-    <SectionLabel dark>Acesso do cliente</SectionLabel>
-    <Field dark label="Login"><input style={inputStyle} value={login} onChange={(e) => setLogin(e.target.value)} placeholder="ex: mariasilva" autoCapitalize="none" /></Field>
-    <Field dark label="Senha inicial"><input style={inputStyle} value={senha} onChange={(e) => setSenha(e.target.value)} placeholder="mín. 4 caracteres" /></Field>
-    <div style={{ marginBottom: 14 }} data-testid="n0-liberar-agora">
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <Toggle value={liberar} onChange={setLiberar} />
-        <span style={{ fontSize: 13, fontWeight: 700, color: '#fff' }}>Liberar acesso agora</span>
+    {!ehPrecadastro && <>
+      <SectionLabel dark>Acesso do cliente</SectionLabel>
+      <Field dark label="Login"><input style={inputStyle} value={login} onChange={(e) => setLogin(e.target.value)} placeholder="ex: mariasilva" autoCapitalize="none" /></Field>
+      <FieldError show={!login.trim()} text="Informe o login (obrigatório)" />
+      <Field dark label="Senha inicial"><input style={inputStyle} value={senha} onChange={(e) => setSenha(e.target.value)} placeholder="mín. 4 caracteres" /></Field>
+      <FieldError show={senha.trim().length < 4} text="A senha precisa ter pelo menos 4 caracteres" />
+      <div style={{ marginBottom: 14 }} data-testid="n0-liberar-agora">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <Toggle value={liberar} onChange={setLiberar} />
+          <span style={{ fontSize: 13, fontWeight: 700, color: '#fff' }}>Liberar acesso agora</span>
+        </div>
+        <span style={{ fontSize: 12.5, color: '#C9C4D4', display: 'block', marginTop: 6, lineHeight: 1.5 }}>
+          {liberar
+            ? 'Acesso liberado: o cliente já entra com o login e a senha acima.'
+            : 'Sem liberar agora: fica aguardando liberação — você libera depois na ficha dele.'}
+        </span>
       </div>
-      <span style={{ fontSize: 12.5, color: '#C9C4D4', display: 'block', marginTop: 6, lineHeight: 1.5 }}>
-        {liberar
-          ? 'Acesso liberado: o cliente já entra com o login e a senha acima.'
-          : 'Sem liberar agora: fica como pré-cadastro aguardando liberação — você libera depois na ficha dele.'}
-      </span>
-    </div>
+    </>}
     {erro && <p style={{ fontSize: 12.5, color: RED, fontWeight: 700, margin: '0 0 10px' }}>{erro}</p>}
-    <button type="button" disabled={!podeSalvar} onClick={() => void salvar()}
+    <button type="button" disabled={!podeSalvar} data-testid="n0-salvar-compartilhar" onClick={() => void salvar(true)}
       style={{ ...primaryBtn, width: '100%', background: DEV_ACCENT, opacity: podeSalvar ? 1 : 0.5, cursor: podeSalvar ? 'pointer' : 'not-allowed' }}>
-      Cadastrar cliente
+      {ehPrecadastro ? 'Salvar e compartilhar link' : 'Salvar e compartilhar acesso'}
     </button>
-    {!podeSalvar && <p style={{ fontSize: 11.5, color: DEV_TXT3, margin: '8px 0 0', lineHeight: 1.5 }}>
-      Faltando: {[!nome.trim() && 'nome', !phoneOk && 'telefone válido', !emailOk && 'e-mail válido', !docOk && 'CPF válido', !login.trim() && 'login', senha.trim().length < 4 && 'senha (mín. 4)', tipoPlano === 'pagante' && !planoEscolhido && 'plano'].filter(Boolean).join(' · ')}.
+    <button type="button" disabled={!podeSalvar} data-testid="n0-salvar" onClick={() => void salvar(false)}
+      style={{ ...secondaryBtn, width: '100%', marginTop: 8, opacity: podeSalvar ? 1 : 0.5, cursor: podeSalvar ? 'pointer' : 'not-allowed' }}>
+      Só salvar
+    </button>
+    {!podeSalvar && <p data-testid="n0-faltando" style={{ fontSize: 11.5, color: RED, fontWeight: 700, margin: '8px 0 0', lineHeight: 1.5 }}>
+      Faltando: {[!nomeOk && 'nome', !contatoOk && 'telefone ou e-mail', !phoneOk && 'telefone válido', !emailOk && 'e-mail válido', !docOk && 'CPF válido', !ehPrecadastro && !login.trim() && 'login', !ehPrecadastro && senha.trim().length < 4 && 'senha (mín. 4)', tipoPlano === 'pagante' && !planoEscolhido && 'plano'].filter(Boolean).join(' · ')}.
     </p>}
   </Sheet>
 }
@@ -907,7 +1112,7 @@ function EditarClienteSheet({ tenant, onClose }: { tenant: TenantKit; onClose: (
       hasWhatsapp,
       email: email.trim(),
       doc: doc.trim() || undefined,
-      accessLog: [...(x.accessLog ?? []), { id: uid(), ts: new Date().toISOString().slice(0, 19), action: 'Dados do cliente editados pela Morfo', ator: 'suporte' }],
+      accessLog: [...(x.accessLog ?? []), { id: uid(), ts: new Date().toISOString().slice(0, 19), action: 'Dados do cliente editados pela Morfo', ator: 'admin' }],
     }))
     onClose()
   }
@@ -916,13 +1121,61 @@ function EditarClienteSheet({ tenant, onClose }: { tenant: TenantKit; onClose: (
     <Sheet dark title="Editar dados do cliente" onClose={onClose}>
       <Field dark label="Nome do cliente"><input style={inputStyle} value={nome} onChange={(e) => setNome(e.target.value)} /></Field>
       <PhoneComWhats phone={phone} setPhone={setPhone} hasWhatsapp={hasWhatsapp} setHasWhatsapp={setHasWhatsapp} />
-      <FieldError show={phone.trim() && !phoneOk} text="Telefone inválido (use DDD + número)" />
+      <FieldError show={!phoneOk} text={phone.trim() ? 'Telefone inválido (use DDD + número)' : 'Informe o telefone (obrigatório)'} />
       <Field dark label="E-mail"><input style={inputStyle} inputMode="email" value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
-      <FieldError show={email.trim() && !emailOk} text="E-mail inválido" />
+      <FieldError show={!emailOk} text={email.trim() ? 'E-mail inválido' : 'Informe o e-mail (obrigatório)'} />
       <Field dark label="CPF (opcional)"><input style={inputStyle} inputMode="numeric" value={doc} onChange={(e) => setDoc(e.target.value)} placeholder="000.000.000-00" /></Field>
       <FieldError show={doc.trim() && !docOk} text="CPF inválido" />
       <button type="button" disabled={!podeSalvar} onClick={() => void salvar()}
         style={{ ...primaryBtn, width: '100%', background: DEV_ACCENT, opacity: podeSalvar ? 1 : 0.5, cursor: podeSalvar ? 'pointer' : 'not-allowed' }}>
+        <Check size={16} /> Salvar alterações
+      </button>
+    </Sheet>
+  )
+}
+
+/* ===================== Editar acesso (login/senha) do cliente (N0) =====================
+   Achado 11/09/2026, revisão pedida pelo Rafael: a ficha do cliente só
+   mostrava o login do usuário (`t.users`), sem NENHUM jeito de editar
+   login/senha pelo N0 — precisava apagar o cliente inteiro e recadastrar só
+   pra trocar uma senha esquecida. A rodada de auditoria anterior tinha
+   corretamente decidido NÃO portar "adicionar 2º usuário/limite de
+   usuários" do Kit (Decisão 67: 1 usuário por ambiente) — mas confundiu
+   isso com "não precisa editar o único que existe", que é uma coisa
+   diferente e nunca foi decidida assim. Corrigido aqui: edição do usuário
+   único do cliente (nome/login/senha), mesma validação de login duplicado
+   já usada em EditarClienteSheet/FormularioDevUser
+   (`loginJaEmUsoGlobalmente`). */
+function EditarAcessoClienteSheet({ tenant, usuario, devUsers, tenants, onClose }: {
+  tenant: TenantKit; usuario: UsuarioTenant; devUsers: DevUserN0[]; tenants: TenantKit[]; onClose: () => void
+}) {
+  const [nome, setNome] = useState(usuario.name)
+  const [login, setLogin] = useState(usuario.login)
+  const [senha, setSenha] = useState(usuario.senha)
+  const [erro, setErro] = useState('')
+
+  async function salvar() {
+    const loginN = login.trim().toLowerCase()
+    if (!nome.trim() || !loginN || !senha.trim()) { setErro('Preencha nome, login e senha.'); return }
+    if (loginJaEmUsoGlobalmente({ devUsers, tenants }, loginN, { tenantId: tenant.id, userId: usuario.id })) {
+      setErro('Esse login já está em uso (N0 ou N1).'); return
+    }
+    await atualizarTenantN0(tenant.id, (x) => ({
+      ...x,
+      users: (x.users ?? []).map((u) => (u.id === usuario.id ? { ...u, name: nome.trim(), login: loginN, senha } : u)),
+      accessLog: [...(x.accessLog ?? []), { id: uid(), ts: new Date().toISOString().slice(0, 19), action: 'Login/senha do cliente editados pela Morfo', ator: 'admin' }],
+    }))
+    onClose()
+  }
+
+  return (
+    <Sheet dark title="Editar acesso do cliente" onClose={onClose}>
+      <Field dark label="Nome do usuário"><input style={inputStyle} value={nome} onChange={(e) => setNome(e.target.value)} /></Field>
+      <Field dark label="Usuário (login)"><input style={inputStyle} value={login} onChange={(e) => setLogin(e.target.value)} /></Field>
+      <Field dark label="Senha"><input style={inputStyle} value={senha} onChange={(e) => setSenha(e.target.value)} /></Field>
+      <FieldError show={!!erro} text={erro} />
+      <button type="button" disabled={!nome.trim() || !login.trim() || !senha.trim()} onClick={() => void salvar()}
+        style={{ ...primaryBtn, width: '100%', background: DEV_ACCENT, opacity: (nome.trim() && login.trim() && senha.trim()) ? 1 : 0.5, cursor: (nome.trim() && login.trim() && senha.trim()) ? 'pointer' : 'not-allowed' }}>
         <Check size={16} /> Salvar alterações
       </button>
     </Sheet>
@@ -1032,17 +1285,345 @@ function ConfirmarBloqueioSheet({ tenant, onClose, onConfirm }: { tenant: Tenant
   )
 }
 
-function AbaTenants({ onEntrarComoTenant, filtroDados }: { onEntrarComoTenant: () => void; filtroDados: FiltroDados }) {
-  const { tenants: todos, defaultParams } = usePlatformN0()
+
+/* ===== Virar pagante / estender teste (12/09/2026) =========================
+   Pedido do Rafael: "N0, cliente não pagante não tem botão pra torná-lo
+   pagante, nem pra escolher o plano, nem pra dar novo prazo — isso tem que
+   ser um fluxo completo com permissão pra eu mudar; exemplo: 'Cliente Demo
+   Ltda' está travado, não tenho o que fazer pra mudar ele pra pagante".
+
+   As duas ações mexem no MESMO dado que a ficha já mostra (`plan`, `trial`,
+   `billing`) e deixam registro no histórico do cliente (`accessLog`), como
+   toda ação da Morfo dentro do ambiente de um cliente. */
+/* Extrato de cobranças na FICHA do cliente (12/09/2026, build 052).
+
+   Pedido do Rafael: "na tela do cliente tem que mostrar o extrato de
+   pagamentos (últimos, respeitando a quantidade limite pra mostrar da config)
+   e com função de exibir todos e recolher".
+
+   Existia extrato, mas só dentro do Financeiro — para conferir a cobrança de
+   um cliente era preciso sair da ficha dele, trocar de aba e achá-lo de novo.
+   Aqui é a versão de leitura: as parcelas mais recentes primeiro, o corte pela
+   configuração da plataforma (`paymentCardsVisibleCount`, o mesmo parâmetro do
+   Kit que diz quantos cartões de pagamento aparecem) e a confirmação do
+   pagamento que o cliente informou — que é a única ação daqui que destrava o
+   acesso dele. Cobrar, alterar status e dar baixa manual continuam no
+   Financeiro, que é onde essa operação vive. */
+function ExtratoCobrancasCliente({ tenant }: { tenant: TenantKit }) {
+  const platform = usePlatformN0()
+  const limite = Math.max(1, paramsGlobais(platform).paymentCardsVisibleCount)
+  const [verTodas, setVerTodas] = useState(false)
+  const [confirmarForcar, setConfirmarForcar] = useState(false)
+  const todas = (tenant.billing?.installments ?? []).slice().sort((a, b) => b.dueDate.localeCompare(a.dueDate))
+  if (tenant.plan !== 'pagante' && todas.length === 0) return null
+  const visiveis = verTodas ? todas : todas.slice(0, limite)
+  const emAberto = todas.filter(instCobravel).reduce((acc, i) => acc + i.amount, 0)
+  return (
+    <div style={{ marginTop: 14 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
+        <span style={{ fontSize: 12, color: DEV_TXT2, fontWeight: 700 }}>Extrato de pagamentos</span>
+        <span style={{ fontSize: 11.5, color: emAberto ? AMBER : DEV_TXT3 }}>
+          {emAberto ? `${fmtBRL(emAberto)} em aberto` : 'nada em aberto'}
+        </span>
+      </div>
+      {todas.length === 0 ? (
+        <p style={{ fontSize: 12, color: DEV_TXT3, margin: 0 }}>Nenhuma cobrança gerada ainda.</p>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {visiveis.map((i) => {
+            const st = installmentDisplayStatus(i, tenant.billing?.toleranceDays) as StatusParcela
+            return (
+              <div key={i.id} data-testid={`n0-ficha-parcela-${i.id}`} style={{ background: DEV_CARD, borderRadius: 12, padding: 12 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ fontWeight: 700, fontSize: 13.5, color: '#fff' }}>Vence {fmtDate(i.dueDate)}</div>
+                    <div style={{ fontSize: 11.5, color: DEV_TXT2 }}>
+                      {fmtBRL(i.amount)}{i.paid ? ` · pago ${fmtDate(i.paidDate)}` : ''}
+                    </div>
+                  </div>
+                  <ParcelaBadge status={st} />
+                </div>
+                {i.pagamentoInformadoEm && !i.paid && (
+                  <button type="button" data-testid={`n0-ficha-confirmar-${i.id}`}
+                    onClick={() => void confirmarPagamento(tenant.id, i.id)}
+                    style={{ ...primaryBtn, background: GREEN, padding: '8px 10px', fontSize: 12.5, marginTop: 8 }}>
+                    <Check size={13} /> Confirmar pagamento e liberar acesso
+                  </button>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+      {todas.length > limite && (
+        <button type="button" data-testid="n0-ficha-extrato-todos" onClick={() => setVerTodas((v) => !v)}
+          style={{ background: 'none', border: 'none', color: DEV_ACCENT, fontWeight: 700, fontSize: 12, padding: '8px 0 0', cursor: 'pointer' }}>
+          {verTodas ? 'Recolher' : `Exibir todos (${todas.length})`}
+        </button>
+      )}
+      {/* ===== FORCAR_PAGAMENTO_MVP — REMOVER NA PUBLICAÇÃO EM PRODUÇÃO =====
+          Ver o bloco de comentário de `forcarPagamentoMVP` em
+          `kitPlatform.ts`: apagar aquela função e este bloco tira a ferramenta
+          inteira. O aviso fica VISÍVEL na tela de propósito — quem usar precisa
+          saber que está registrando um pagamento que não aconteceu. */}
+      {emAberto > 0 && (
+        <div style={{ marginTop: 12, border: `1px dashed ${AMBER}`, borderRadius: 12, padding: 12 }}>
+          <div style={{ fontSize: 11.5, color: DEV_TXT2, lineHeight: 1.45, marginBottom: 8 }}>
+            <strong style={{ color: AMBER }}>Ferramenta de MVP.</strong> Marca as cobranças em aberto como pagas sem
+            pagamento nenhum, só pra testar a liberação do acesso. Fica no log como forçado. Sai quando existir cobrança
+            de verdade.
+          </div>
+          {confirmarForcar ? (
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button type="button" data-testid="n0-forcar-pagamento-sim"
+                onClick={() => { void forcarPagamentoMVP(tenant.id); setConfirmarForcar(false) }}
+                style={{ ...primaryBtn, background: AMBER, padding: '9px 12px', fontSize: 12.5, flex: 1 }}>
+                Sim, forçar {fmtBRL(emAberto)}
+              </button>
+              <button type="button" onClick={() => setConfirmarForcar(false)}
+                style={{ background: 'rgba(255,255,255,0.08)', border: 'none', borderRadius: 10, color: '#fff', padding: '9px 12px', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', flex: 1 }}>
+                Cancelar
+              </button>
+            </div>
+          ) : (
+            <button type="button" data-testid="n0-forcar-pagamento" onClick={() => setConfirmarForcar(true)}
+              style={{ background: 'rgba(255,255,255,0.08)', border: 'none', borderRadius: 10, color: '#fff', padding: '9px 12px', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', width: '100%' }}>
+              Forçar pagamento (MVP)
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ConverterPaganteSheet({ tenant, onClose }: { tenant: TenantKit; onClose: () => void }) {
+  const planos = useTodosPlanos().filter((p) => p.ativo)
+  /* BUG REAL corrigido em 12/09/2026 (build 052), relatado pelo Rafael: "já
+     carrega um plano no campo mas se gravo critica que tem que escolher".
+
+     A causa é clássica e vale pra qualquer folha deste painel: `useTodosPlanos`
+     é reativo (lê o Dexie), então no PRIMEIRO render a lista vem vazia. O
+     estado inicial `planos[0]?.id` nascia `''` e nunca mais era revisto — mas o
+     `<select>`, sem `value` casando com nenhuma `<option>`, exibe a primeira da
+     lista assim que ela chega. A tela mostrava um plano escolhido e o estado
+     dizia que nada estava escolhido.
+
+     A correção não é um efeito que "conserta depois": é derivar no render. Se o
+     id guardado não casa com nenhum plano vivo, vale o primeiro da lista — o
+     mesmo que a pessoa está vendo. Mesma ideia pro valor: enquanto ninguém
+     digitar nada, ele acompanha o plano selecionado. */
+  const [planoEscolhido, setPlanoId] = useState<string>('')
+  const planoId = planos.some((p) => String(p.id) === planoEscolhido)
+    ? planoEscolhido
+    : (planos[0]?.id != null ? String(planos[0].id) : '')
+  const plano = planos.find((p) => String(p.id) === planoId)
+  const [valorDigitado, setValor] = useState<string | null>(null)
+  const valor = valorDigitado ?? formatarMoeda(plano?.valorMensal ?? 0)
+  const [diaVenc, setDiaVenc] = useState('5')
+  const [erro, setErro] = useState('')
+
+  async function salvar() {
+    const v = paraNumero(valor)
+    const dia = Number(diaVenc)
+    if (!plano) { setErro('Escolha um plano.'); return }
+    /* 12/09/2026: converter pra pagante exige valor > 0. Os planos placeholder
+       nascem com valor zero, e aceitar zero criava uma assinatura "pagante"
+       sem nenhuma cobrança — o cliente entrava no Financeiro sem extrato e sem
+       nada a vencer, que é justamente o oposto do que esta tela promete.
+       Plano gratuito tem caminho próprio (a flag de validade no cadastro do
+       plano), não passa por aqui. */
+    if (!Number.isFinite(v) || v <= 0) { setErro('Informe o valor mensal da assinatura (maior que zero).'); return }
+    if (!Number.isFinite(dia) || dia < 1 || dia > 28) { setErro('Dia de vencimento entre 1 e 28.'); return }
+    await atualizarTenantN0(tenant.id, (x) => ({
+      ...x,
+      plan: 'pagante',
+      planId: plano.id != null ? String(plano.id) : null,
+      trial: null,
+      manualBlock: false,
+      billing: {
+        monthlyValue: v,
+        dueDay: dia,
+        toleranceDays: x.billing?.toleranceDays ?? 5,
+        installments: x.billing?.installments ?? [],
+      },
+      accessLog: [...(x.accessLog ?? []), { id: uid(), ts: new Date().toISOString().slice(0, 19), action: `${tenant.plan === 'pagante' ? 'Plano alterado pela Morfo' : 'Convertido para pagante'} — plano ${plano.nome}, R$ ${v.toFixed(2)}/mês`, ator: 'admin' }],
+    }))
+    /* Item de 12/09/2026: a cobrança nasce JUNTO com a conversão, não na
+       próxima abertura do painel. `gerarParcelasPendentes` é idempotente e já
+       garante uma parcela em aberto (ver `kitPlatform.ts`); aqui ela é
+       chamada sobre o cliente JÁ atualizado, nunca sobre a cópia que este
+       render capturou — senão ela leria o plano antigo. */
+    const atual = (await lerPlatformN0Persistida()).tenants.find((x) => x.id === tenant.id)
+    if (atual) {
+      const patch = gerarParcelasPendentes(atual)
+      if (patch) await atualizarTenantN0(tenant.id, (x) => ({ ...x, ...patch }))
+    }
+    onClose()
+  }
+
+  return (
+    <Sheet dark title={tenant.plan === 'pagante' ? 'Trocar de plano' : 'Tornar pagante'} onClose={onClose}>
+      <Field dark label="Plano">
+        <select style={inputStyle} value={planoId} onChange={(e) => { setPlanoId(e.target.value); const p = planos.find((x) => String(x.id) === e.target.value); setValor(p ? formatarMoeda(p.valorMensal) : null) }}>
+          {planos.length === 0 && <option value="">Nenhum plano ativo cadastrado</option>}
+          {planos.map((p) => <option key={p.id} value={String(p.id)}>{p.nome}</option>)}
+        </select>
+      </Field>
+      <Field dark label="Valor mensal (R$)"><input style={inputStyle} inputMode="numeric" value={valor} onChange={(e) => setValor(aplicarMascaraValor(e.target.value))} /></Field>
+      <Field dark label="Dia do vencimento"><input type="number" min="1" max="28" style={inputStyle} value={diaVenc} onChange={(e) => setDiaVenc(e.target.value)} /></Field>
+      <FieldError show={!!erro} text={erro} />
+      <button type="button" onClick={() => void salvar()} style={{ ...primaryBtn, width: '100%', background: DEV_ACCENT }}>
+        <Check size={16} /> {tenant.plan === 'pagante' ? 'Salvar plano e valor' : 'Converter para pagante'}
+      </button>
+    </Sheet>
+  )
+}
+
+function NovoPrazoTesteSheet({ tenant, onClose }: { tenant: TenantKit; onClose: () => void }) {
+  const [dias, setDias] = useState('15')
+  const [erro, setErro] = useState('')
+  /* Item 10 da lista de 12/09/2026: "o botão de liberar mais teste não pode
+     estar amarrado ao de tornar pagante — não segue necessariamente esse
+     fluxo". Antes esta folha forçava `plan: 'trial'` sempre: dar mais prazo a
+     um cliente PAGANTE rebaixava o plano dele sem ninguém pedir. Agora mexer
+     no plano é uma escolha explícita, desmarcada por padrão pra quem já paga. */
+  const [mudarPlano, setMudarPlano] = useState(tenant.plan !== 'pagante')
+  async function salvar() {
+    const d = Number(dias)
+    if (!Number.isFinite(d) || d < 1) { setErro('Informe um número de dias maior que zero.'); return }
+    await atualizarTenantN0(tenant.id, (x) => ({
+      ...x,
+      ...(mudarPlano ? { plan: 'trial' as const } : {}),
+      manualBlock: false,
+      trial: { days: d, startDate: todayISO() },
+      accessLog: [...(x.accessLog ?? []), { id: uid(), ts: new Date().toISOString().slice(0, 19), action: `Novo prazo de teste: ${d} dias a partir de hoje${mudarPlano ? ' (plano voltou para período de teste)' : ' (plano mantido)'}`, ator: 'admin' }],
+    }))
+    onClose()
+  }
+  return (
+    <Sheet dark title="Novo prazo de teste" onClose={onClose}>
+      <div style={{ fontSize: 12, color: DEV_TXT2, marginBottom: 10, lineHeight: 1.5 }}>
+        Reinicia o período de avaliação a partir de hoje. Também desfaz um bloqueio manual, se houver.
+      </div>
+      <button type="button" onClick={() => setMudarPlano((v) => !v)}
+        style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.14)', borderRadius: 10, padding: '10px 12px', color: '#fff', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', textAlign: 'left', marginBottom: 10 }}>
+        <span style={{ width: 16, height: 16, borderRadius: 4, border: `1.5px solid ${mudarPlano ? DEV_ACCENT : 'rgba(255,255,255,0.35)'}`, background: mudarPlano ? DEV_ACCENT : 'transparent', flexShrink: 0 }} />
+        Também mudar o plano para &ldquo;período de teste&rdquo;
+      </button>
+      <Field dark label="Dias de teste"><input type="number" min="1" style={inputStyle} value={dias} onChange={(e) => setDias(e.target.value)} /></Field>
+      <FieldError show={!!erro} text={erro} />
+      <button type="button" onClick={() => void salvar()} style={{ ...primaryBtn, width: '100%', background: DEV_ACCENT }}>
+        <Check size={16} /> Aplicar novo prazo
+      </button>
+    </Sheet>
+  )
+}
+
+/* 'novo' = folha de cadastro em Período de teste (atalho "Criar ambiente de
+   teste"); 'novoPreCadastro' = mesma folha já marcada como Pré-cadastro
+   (atalho "Pré-cadastros", item 2 de 12/09/2026); 'preCadastros' = a LISTA
+   filtrada em quem aguarda liberação, alcançável pelo filtro da própria aba. */
+export type AcaoTenants = 'novo' | 'novoPreCadastro' | 'preCadastros' | undefined
+
+/* Barra de LIMITE × USO por cliente (12/09/2026, pedido do Rafael: "N0,
+   Clientes deve ter as barras de controle de limites x uso igual tem no
+   kit").
+
+   ADAPTAÇÃO registrada: no Kit as barras são "usuários usados × limite do
+   plano" e "registros de Entidade A × limite". Nenhuma das duas existe mais
+   aqui — o ambiente é de um usuário só (Decisão 67) e não há teto de
+   lançamentos (app local, sem custo por registro; o limite de usuários foi
+   removido do produto inteiro nesta mesma rodada). O limite REAL que este
+   produto tem é o TEMPO: o período de teste e o prazo de tolerância da
+   mensalidade. São esses dois que a barra mostra — mesma forma do Kit
+   (rótulo, usado/total e barra), com o que de fato limita alguma coisa. */
+function BarraUso({ rotulo, usado, total, cor }: { rotulo: string; usado: number; total: number; cor: string }) {
+  const pct = total > 0 ? Math.max(0, Math.min(100, (usado / total) * 100)) : 0
+  return (
+    <div style={{ marginTop: 6 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10.5, color: DEV_TXT2, marginBottom: 3 }}>
+        <span>{rotulo}</span>
+        <span>{Math.round(usado)} de {Math.round(total)}</span>
+      </div>
+      <div style={{ height: 5, borderRadius: 999, background: 'rgba(255,255,255,0.10)', overflow: 'hidden' }}>
+        <div style={{ width: `${pct}%`, height: '100%', background: cor, borderRadius: 999 }} />
+      </div>
+    </div>
+  )
+}
+
+/* Qual barra cabe pra este cliente — teste em andamento, ou tolerância da
+   mensalidade vencida. Sem nenhum limite ativo, não desenha nada (nunca uma
+   barra decorativa "0 de 0"). */
+function BarrasLimiteTenant({ t }: { t: TenantKit }) {
+  if (t.plan === 'trial' && t.trial) {
+    const total = t.trial.days
+    const restam = daysUntil(addDays(t.trial.startDate, t.trial.days)) ?? 0
+    const usado = Math.max(0, Math.min(total, total - restam))
+    return <BarraUso rotulo="Período de teste" usado={usado} total={total} cor={restam <= 3 ? RED : restam <= 7 ? AMBER : GREEN} />
+  }
+  const tol = t.billing?.toleranceDays ?? 0
+  const vencida = (t.billing?.installments ?? []).find((i) => !i.paid && (daysUntil(i.dueDate) ?? 99) < 0)
+  if (vencida && tol > 0) {
+    const atraso = Math.abs(daysUntil(vencida.dueDate) ?? 0)
+    return <BarraUso rotulo="Tolerância da mensalidade" usado={Math.min(atraso, tol)} total={tol} cor={atraso >= tol ? RED : AMBER} />
+  }
+  return null
+}
+
+function AbaTenants({ onEntrarComoTenant, filtroDados, acaoInicial, clienteInicial, aoAbrirClienteInicial }: {
+  onEntrarComoTenant: (tenantId: string) => void
+  filtroDados: FiltroDados
+  acaoInicial?: AcaoTenants
+  clienteInicial?: string | null
+  aoAbrirClienteInicial?: () => void
+}) {
+  const { tenants: todos, defaultParams, devUsers, urlsProduto } = usePlatformN0()
   const tenants = filtrarTenantsPorDados(todos, filtroDados)
-  const [selecionadoId, setSelecionadoId] = useState<string | null>(null)
+  /* Folha de compartilhamento (12/09/2026, build 053) — a MESMA peça pros
+     três cenários; quem abre diz qual é. Fica no nível da aba (e não dentro
+     da folha de cadastro) porque ela também é aberta pelo botão de liberar
+     acesso, que vive na ficha do cliente. */
+  const [compartilhar, setCompartilhar] = useState<DadosCompartilhamento | null>(null)
+  /* Abre já na ficha do cliente quando o painel volta de um acesso ao ambiente
+     dele (12/09/2026). O aviso ao shell ("já usei, pode esquecer") sai no mount
+     — sem isso, sair da ficha e voltar pra aba reabriria a mesma ficha. */
+  const [selecionadoId, setSelecionadoId] = useState<string | null>(clienteInicial ?? null)
+  useEffect(() => { if (clienteInicial) aoAbrirClienteInicial?.() }, [clienteInicial, aoAbrirClienteInicial])
   const [chatAberto, setChatAberto] = useState(false)
   const [exportOpen, setExportOpen] = useState(false) /* G44 regra 11b */
-  const [novoAberto, setNovoAberto] = useState(false) /* Decisão 67 */
+  /* `acaoInicial` vem do atalho do Início (12/09/2026): 'novo' abre direto a
+     folha de cadastro de cliente ("Criar ambiente de teste"), 'preCadastros'
+     abre a lista já filtrada em quem está aguardando liberação. */
+  const [novoAberto, setNovoAberto] = useState(acaoInicial === 'novo' || acaoInicial === 'novoPreCadastro') /* Decisão 67 */
+  const modoInicialNovo = acaoInicial === 'novoPreCadastro' ? ('precadastro' as const) : undefined
+  /* Aviso curto da própria aba — a folha de cadastro precisa dizer o que
+     aconteceu ao compartilhar (compartilhado × copiado × não deu). */
+  const [avisoTenants, setAvisoTenants] = useState('')
+  const [soPreCadastros, setSoPreCadastros] = useState(acaoInicial === 'preCadastros')
   const [editarAberto, setEditarAberto] = useState(false) /* Correção de auditoria — cluster Tenants x Kit, ver EditarClienteSheet */
   const [excluirAberto, setExcluirAberto] = useState(false) /* idem — ver ExcluirClienteSheet */
   const [confirmBlockOpen, setConfirmBlockOpen] = useState(false) /* idem — ver ConfirmarBloqueioSheet */
+  /* Achado 11/09/2026 (revisão pedida pelo Rafael): "1 usuário por ambiente"
+     (Decisão 67) nunca decidiu que esse usuário ficaria sem edição — são
+     duas coisas sem relação (não ter vários usuários ≠ não poder editar o
+     único que existe). A ficha do cliente só mostrava o login, sem nenhum
+     jeito de corrigir login/senha dele pelo N0 — ver EditarAcessoClienteSheet. */
+  const [editarAcessoFor, setEditarAcessoFor] = useState<UsuarioTenant | null>(null)
+  const [converterAberto, setConverterAberto] = useState(false) /* 12/09/2026 — ver ConverterPaganteSheet */
+  const [novoPrazoAberto, setNovoPrazoAberto] = useState(false)
+  const listaTenants = soPreCadastros
+    ? tenants.filter((t) => t.onboarding === 'pendente_liberacao' || (t.users ?? []).some((u) => u.status !== 'ativo'))
+    : tenants
   const selecionado = selecionadoId ? tenants.find((t) => t.id === selecionadoId) : undefined
+  /* Botão voltar do Android: fecha a conversa, depois a ficha do cliente,
+     antes de deixar o shell tratar (12/09/2026). */
+  usarBotaoVoltar(() => {
+    if (chatAberto) { setChatAberto(false); return true }
+    if (selecionadoId) { setSelecionadoId(null); return true }
+    return false
+  })
 
   // Conversa de suporte deste tenant, do lado N0 (10/09/2026, Decisão 53,
   // ponto 3) — mesma peça (`ChatConversa.tsx`) que o N1 usa em
@@ -1081,14 +1662,14 @@ function AbaTenants({ onEntrarComoTenant, filtroDados }: { onEntrarComoTenant: (
       void atualizarTenantN0(t.id, (x) => ({
         ...x,
         manualBlock: !x.manualBlock,
-        accessLog: [...(x.accessLog ?? []), { id: uid(), ts: new Date().toISOString().slice(0, 19), action: x.manualBlock ? 'Desbloqueio manual' : 'Bloqueio manual', ator: 'suporte' }],
+        accessLog: [...(x.accessLog ?? []), { id: uid(), ts: new Date().toISOString().slice(0, 19), action: x.manualBlock ? 'Desbloqueio manual' : 'Bloqueio manual', ator: 'admin' }],
       }))
       setConfirmBlockOpen(false)
     }
     const toggleManualBlock = () => (t.manualBlock ? applyToggleManualBlock() : setConfirmBlockOpen(true))
     return (
       <div>
-        <TopoN0 titulo={t.companyName} subtitulo={ehAppDesteAparelho ? 'Ambiente deste aparelho' : t.real ? 'Cliente cadastrado' : 'Tenant de exemplo'} onVoltarSub={() => setSelecionadoId(null)}
+        <TopoN0 titulo={t.companyName} subtitulo={ehAppDesteAparelho ? 'Ambiente deste aparelho' : t.real ? 'Cliente cadastrado' : 'Cliente de exemplo'} onVoltarSub={() => setSelecionadoId(null)}
           acoes={<button type="button" title="Editar dados do cliente" aria-label="Editar dados do cliente" onClick={() => setEditarAberto(true)}
             style={{ width: 34, height: 34, borderRadius: 10, border: 'none', background: 'rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
             <Pencil size={15} color="#fff" />
@@ -1096,6 +1677,19 @@ function AbaTenants({ onEntrarComoTenant, filtroDados }: { onEntrarComoTenant: (
         {editarAberto && <EditarClienteSheet tenant={t} onClose={() => setEditarAberto(false)} />}
         {excluirAberto && <ExcluirClienteSheet tenant={t} ehAppDesteAparelho={ehAppDesteAparelho} onClose={() => setExcluirAberto(false)} onExcluido={() => { setExcluirAberto(false); setSelecionadoId(null) }} />}
         {confirmBlockOpen && <ConfirmarBloqueioSheet tenant={t} onClose={() => setConfirmBlockOpen(false)} onConfirm={applyToggleManualBlock} />}
+        {editarAcessoFor && <EditarAcessoClienteSheet tenant={t} usuario={editarAcessoFor} devUsers={devUsers ?? []} tenants={todos} onClose={() => setEditarAcessoFor(null)} />}
+        {/* Item 18 (pedido do Rafael, 12/09/2026): cliente não pagante precisa de
+            um caminho completo pra virar pagante, escolher plano ou ganhar novo
+            prazo — antes ele ficava travado sem nada a fazer na ficha. */}
+        {converterAberto && <ConverterPaganteSheet tenant={t} onClose={() => setConverterAberto(false)} />}
+        {novoPrazoAberto && <NovoPrazoTesteSheet tenant={t} onClose={() => setNovoPrazoAberto(false)} />}
+        {compartilhar && <FolhaCompartilhar dados={compartilhar} onClose={() => setCompartilhar(null)}
+          notify={(m) => { setAvisoTenants(m); window.setTimeout(() => setAvisoTenants(''), 4000) }} />}
+        {avisoTenants && (
+          <div data-testid="n0-aviso-ficha" style={{ background: alpha(GREEN, 0.16), border: `1px solid ${alpha(GREEN, 0.4)}`, color: '#fff', borderRadius: 10, padding: '9px 12px', fontSize: 12.5, fontWeight: 600, marginBottom: 10 }}>
+            {avisoTenants}
+          </div>
+        )}
         <div style={{ background: DEV_CARD, borderRadius: 14, padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: 12, color: DEV_TXT2 }}>Status</span>
@@ -1113,19 +1707,53 @@ function AbaTenants({ onEntrarComoTenant, filtroDados }: { onEntrarComoTenant: (
             <span style={{ fontSize: 12, color: DEV_TXT2 }}>Cobrança mensal</span>
             <span style={{ fontSize: 12.5, fontWeight: 700, color: '#fff' }}>{fmtBRL(mrrDoTenant(t))}</span>
           </div>
+          {/* WhatsApp do cliente (achado 11/09/2026, mesma revisão do
+              login/senha): o Kit mostra um atalho de WhatsApp direto na ficha
+              do cliente (ao lado do nome/telefone do responsável) — aqui o
+              telefone nem aparecia. `linkWhatsApp` já existe neste arquivo
+              (usado hoje só pra cobrança de parcela); reaproveitado aqui. */}
+          {t.phone && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: 12, color: DEV_TXT2 }}>Contato</span>
+              <a href={linkWhatsApp(t.phone, `Olá ${t.ownerName || t.companyName}, aqui é da Morfo.`)} target="_blank" rel="noreferrer"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 800, color: '#25D366', background: 'rgba(37,211,102,0.1)', padding: '3px 8px', borderRadius: 999, textDecoration: 'none' }}>
+                <MessageCircle size={11} /> {t.phone}
+              </a>
+            </div>
+          )}
+          {/* Autorização de suporte (achado 11/09/2026): `supportAuthorized`
+              já existe no dado e já é alternado pelo próprio cliente em
+              `SuporteChat.tsx` (N1) — só não aparecia em lugar nenhum do
+              lado N0, então a Morfo não tinha como saber se pode acessar o
+              ambiente do cliente sem perguntar de novo. */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: 12, color: DEV_TXT2 }}>Acesso de suporte</span>
+            <span style={{ fontSize: 11, fontWeight: 800, color: t.supportAuthorized ? GREEN : DEV_TXT3, background: (t.supportAuthorized ? GREEN : DEV_TXT3) + '22', padding: '2px 8px', borderRadius: 999 }}>
+              {t.supportAuthorized ? 'Autorizado' : 'Não autorizado'}
+            </span>
+          </div>
           {/* Acesso do cliente (11/09/2026, Decisão 67): 1 usuário por
               ambiente, então a ficha mostra o login dele e se já está
               liberado — sem isso, cadastrar acesso e não conseguir conferir
-              seria meio caminho. A senha nunca é exibida. */}
+              seria meio caminho. A senha nunca é exibida aqui (só dentro do
+              formulário de edição, ver EditarAcessoClienteSheet). */}
           {(t.users ?? []).map((u) => (
-            <div key={u.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
+            <div key={u.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
               <span style={{ fontSize: 12, color: DEV_TXT2 }}>Acesso</span>
-              <span style={{ fontSize: 12.5, fontWeight: 700, color: u.status === 'ativo' ? '#fff' : AMBER, textAlign: 'right' }}>
-                {u.login}{u.status === 'ativo' ? '' : ' · aguardando liberação'}
+              <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontSize: 12.5, fontWeight: 700, color: u.status === 'ativo' ? '#fff' : AMBER, textAlign: 'right' }}>
+                  {u.login}{u.status === 'ativo' ? '' : ' · aguardando liberação'}
+                </span>
+                <button type="button" title="Editar login e senha do cliente" aria-label="Editar login e senha do cliente"
+                  onClick={() => setEditarAcessoFor(u)}
+                  style={{ width: 22, height: 22, borderRadius: 6, border: 'none', background: 'rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+                  <Pencil size={11} color="#fff" />
+                </button>
               </span>
             </div>
           ))}
         </div>
+        <ExtratoCobrancasCliente tenant={t} />
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 14 }}>
           {/* Liberar acesso (11/09/2026, Decisão 67 — "n0 tem que conseguir
               cadastrar novo cliente e preencher dados dele e liberar
@@ -1136,41 +1764,93 @@ function AbaTenants({ onEntrarComoTenant, filtroDados }: { onEntrarComoTenant: (
             <button
               type="button"
               data-testid="n0-liberar-acesso"
-              onClick={() => void atualizarTenantN0(t.id, (x) => ({
-                ...x,
-                onboarding: 'completo',
-                users: x.users.map((u) => (u.status === 'ativo' ? u : { ...u, status: 'ativo' })),
-                accessLog: [...(x.accessLog ?? []), { id: uid(), ts: new Date().toISOString().slice(0, 19), action: 'Acesso liberado pela Morfo', ator: 'suporte' }],
-              }))}
+              /* 12/09/2026 (build 053): liberar e AVISAR viraram um gesto só.
+                 O Rafael: "quando o N0 liberar clicando no botão, abrir tela
+                 com link preenchido permitindo mudar, mas ao confirmar mandar
+                 mensagem novamente podendo escolher se e-mail ou whatsapp com
+                 novo texto liberando acesso de testes" — e com o link de
+                 download do aplicativo dentro. Liberar sem avisar deixava o
+                 cliente esperando por um acesso que já existia. */
+              onClick={() => {
+                const usuario = (t.users ?? [])[0]
+                void atualizarTenantN0(t.id, (x) => ({
+                  ...x,
+                  onboarding: 'completo',
+                  users: x.users.map((u) => (u.status === 'ativo' ? u : { ...u, status: 'ativo' })),
+                  accessLog: [...(x.accessLog ?? []), { id: uid(), ts: new Date().toISOString().slice(0, 19), action: 'Acesso liberado pela Morfo', ator: 'admin' }],
+                }))
+                setCompartilhar({
+                  cenario: 'liberacao',
+                  nomeProduto: NOME_PRODUTO,
+                  nomeCliente: t.companyName,
+                  telefone: t.phone,
+                  email: t.email,
+                  login: usuario?.login,
+                  senha: usuario?.senha,
+                  contexto: t.plan === 'trial' && t.trial
+                    ? `Você tem ${t.trial.days} dias de teste a partir de hoje.`
+                    : undefined,
+                  linkApp: urlsProduto?.apk,
+                  linkSite: urlsProduto?.site,
+                })
+              }}
               style={{ background: GREEN, border: 'none', borderRadius: 10, color: '#fff', padding: '10px 12px', textAlign: 'left', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}
             >
               Liberar acesso deste cliente
             </button>
           )}
-          {/* "Entrar como este tenant" (08/09/2026, G59): REAL só pro
-              tenant `t0`, o ambiente deste aparelho (mesmo banco Dexie
-              local, sem barreira de backend pra atravessar) — ver
-              `ehAppDesteAparelho` acima. Continua desabilitado pros exemplos
-              fictícios e, desde a Decisão 67, também pros clientes
-              cadastrados pela Morfo. É o ÚNICO caminho N0→N1 (G59). */}
+          {/* Fluxo de plano do cliente (12/09/2026): trial → pagante, e novo
+              prazo de teste. Antes, um cliente em teste/bloqueado não tinha
+              nenhuma ação possível na ficha. */}
+          {/* Item 11 (12/09/2026): "não encontrei a troca de plano pela
+              Morfo". A ação existia, mas só aparecia pra quem AINDA não era
+              pagante — num cliente que já paga, não havia como trocar o plano
+              dele. Agora aparece sempre, com o rótulo certo pra cada caso. */}
           <button
             type="button"
-            disabled={!ehAppDesteAparelho}
-            title={ehAppDesteAparelho ? undefined : 'Só o ambiente deste aparelho tem aplicativo de verdade pra entrar — os demais dependem de servidor (Backlog #028)'}
-            onClick={ehAppDesteAparelho ? onEntrarComoTenant : undefined}
+            data-testid="n0-tornar-pagante"
+            onClick={() => setConverterAberto(true)}
+            /* 12/09/2026: "trocar plano não precisa estar destacado". Tornar
+               pagante é a ação principal de um cliente em teste e continua
+               destacada; trocar o plano de quem já paga é manutenção, e passa
+               a usar o mesmo fundo neutro das outras ações da ficha. */
+            style={{ background: t.plan === 'pagante' ? 'rgba(255,255,255,0.08)' : DEV_ACCENT, border: 'none', borderRadius: 10, color: '#fff', padding: '10px 12px', textAlign: 'left', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}
+          >
+            {t.plan === 'pagante' ? 'Trocar de plano / valor' : 'Tornar pagante (escolher plano)'}
+          </button>
+          <button
+            type="button"
+            data-testid="n0-novo-prazo"
+            onClick={() => setNovoPrazoAberto(true)}
+            style={{ background: 'rgba(255,255,255,0.08)', border: 'none', borderRadius: 10, color: '#fff', padding: '10px 12px', textAlign: 'left', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}
+          >
+            {t.plan === 'pagante' ? 'Voltar para período de teste (novo prazo)' : 'Dar novo prazo de teste'}
+          </button>
+          {/* "Entrar como este cliente" (08/09/2026, G59) — 12/09/2026, itens
+              13/14/15: passou a valer pra QUALQUER ambiente, não só o do
+              aparelho. Antes ficava travado nos demais porque todo dado era
+              global: entrar em outro cliente mostraria os dados deste
+              aparelho, que foi exatamente o que o Rafael reportou. Com o
+              escopo por ambiente (`src/ambiente.ts`), entrar num cliente abre
+              o ambiente DELE — vazio, se ele ainda não tem nada. Continua
+              sendo o ÚNICO caminho N0→N1 (G59). */}
+          <button
+            type="button"
+            data-testid="n0-entrar-como-tenant"
+            onClick={() => onEntrarComoTenant(t.id)}
             style={{
-              background: ehAppDesteAparelho ? DEV_ACCENT : 'rgba(255,255,255,0.05)',
-              border: ehAppDesteAparelho ? 'none' : '1px solid rgba(255,255,255,0.08)',
+              background: DEV_ACCENT,
+              border: 'none',
               borderRadius: 10,
-              color: ehAppDesteAparelho ? '#fff' : DEV_TXT3,
+              color: '#fff',
               padding: '10px 12px',
               textAlign: 'left',
               fontSize: 12.5,
               fontWeight: 700,
-              cursor: ehAppDesteAparelho ? 'pointer' : 'not-allowed',
+              cursor: 'pointer',
             }}
           >
-            Entrar como este tenant (impersonate)
+            Entrar como este cliente (impersonate)
           </button>
           <button
             type="button"
@@ -1289,10 +1969,34 @@ function AbaTenants({ onEntrarComoTenant, filtroDados }: { onEntrarComoTenant: (
             <Trash2 size={15} /> Excluir cliente
           </button>
         </div>
+        {/* Histórico (achado 11/09/2026): o Kit mostra, na própria ficha do
+            cliente, os últimos eventos do `accessLog` dele (aba "Histórico")
+            — aqui o log já é gravado desde sempre (bloqueio, edição, acesso
+            liberado, parcela paga, etc. — ver os vários `accessLog: [...]`
+            acima e na Auditoria), só não aparecia em lugar nenhum na ficha:
+            pra ver o que aconteceu com ESTE cliente era preciso ir pra
+            Auditoria (aba separada) e procurar pelo nome. Mostrado aqui só
+            os 5 mais recentes — a Auditoria continua sendo o lugar certo
+            pra ver tudo. */}
+        {(t.accessLog ?? []).length > 0 && (
+          <div style={{ marginTop: 14 }}>
+            <div style={{ fontSize: 11, fontWeight: 800, color: DEV_TXT2, textTransform: 'uppercase', letterSpacing: 0.3, marginBottom: 6 }}>Histórico recente</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {(t.accessLog ?? []).slice().reverse().slice(0, 5).map((a) => (
+                <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 8, background: DEV_CARD, borderRadius: 10, padding: '8px 12px' }}>
+                  <ShieldAlert size={13} color={DEV_ACCENT} />
+                  <span style={{ fontSize: 12, color: '#C9C4D4', flex: 1 }}>
+                    {a.action} · {new Date(a.ts).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         <p style={{ fontSize: 11, color: DEV_TXT3, lineHeight: 1.6, marginTop: 14 }}>
           {ehAppDesteAparelho
-            ? 'Entrar como este tenant abre o aplicativo de negócio em modo consulta, com um aviso permanente e um jeito de voltar ao painel N0 — não é uma troca de sessão, você continua logado como administrador.'
-            : 'Ações acima ficam desabilitadas de propósito — exigem tenant real e servidor (Backlog #028); a tela já está pronta pra quando isso existir.'}
+            ? 'Entrar como este cliente abre o aplicativo de negócio em modo consulta, com um aviso permanente e um jeito de voltar ao painel N0 — não é uma troca de sessão, você continua logado como administrador.'
+            : 'Ações acima ficam desabilitadas de propósito — exigem cliente real e servidor (Backlog #028); a tela já está pronta pra quando isso existir.'}
         </p>
       </div>
     )
@@ -1310,7 +2014,18 @@ function AbaTenants({ onEntrarComoTenant, filtroDados }: { onEntrarComoTenant: (
             <Plus size={18} color="#fff" />
           </button>} />}
       />
-      {novoAberto && <NovoClienteSheet diasTestePadrao={defaultParams?.trialDays ?? 15} onClose={() => setNovoAberto(false)} />}
+      {avisoTenants && (
+        <div data-testid="n0-aviso-tenants" style={{ background: alpha(GREEN, 0.16), border: `1px solid ${alpha(GREEN, 0.4)}`, color: '#fff', borderRadius: 10, padding: '9px 12px', fontSize: 12.5, fontWeight: 600, marginBottom: 10 }}>
+          {avisoTenants}
+        </div>
+      )}
+      {novoAberto && <NovoClienteSheet diasTestePadrao={defaultParams?.trialDays ?? 15} modoInicial={modoInicialNovo}
+        urls={urlsProduto ?? {}}
+        aoCompartilhar={setCompartilhar}
+        notify={(m) => { setAvisoTenants(m); window.setTimeout(() => setAvisoTenants(''), 4000) }}
+        onClose={() => setNovoAberto(false)} />}
+      {compartilhar && <FolhaCompartilhar dados={compartilhar} onClose={() => setCompartilhar(null)}
+        notify={(m) => { setAvisoTenants(m); window.setTimeout(() => setAvisoTenants(''), 4000) }} />}
       {exportOpen && <ExportSheet dark title="Tenants" filenameBase="morfofinp-n0-tenants"
         screenColumns={[
           { key: 'companyName', label: 'Ambiente' },
@@ -1332,18 +2047,29 @@ function AbaTenants({ onEntrarComoTenant, filtroDados }: { onEntrarComoTenant: (
         }))}
         onClose={() => setExportOpen(false)} />}
       <AvisoDadoFicticio />
+      {soPreCadastros && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: alpha(AMBER, 12), border: `1px solid ${alpha(AMBER, 30)}`, borderRadius: 10, padding: '8px 10px', marginBottom: 8 }}>
+          <span style={{ flex: 1, fontSize: 12, fontWeight: 700, color: '#fff' }}>Mostrando só pré-cadastros aguardando liberação</span>
+          <button type="button" onClick={() => setSoPreCadastros(false)} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 8, color: '#fff', fontSize: 11.5, padding: '4px 10px', cursor: 'pointer' }}>Ver todos</button>
+        </div>
+      )}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {tenants.map((t) => (
+        {listaTenants.map((t) => (
           <button
             key={t.id}
             type="button"
             onClick={() => setSelecionadoId(t.id)}
+            /* Item 10 da lista de 12/09/2026: "destacar cliente não pagante".
+               O cliente que não paga ganha uma tarja lateral âmbar e um selo
+               NÃO PAGANTE ao lado do nome — antes, só o rótulo do plano em
+               cinza dizia isso, no meio de todo o resto. */
             style={{
               display: 'flex',
               alignItems: 'center',
               gap: 10,
               background: DEV_CARD,
               border: 'none',
+              borderLeft: t.plan === 'pagante' ? '3px solid transparent' : `3px solid ${AMBER}`,
               borderRadius: 12,
               padding: '12px 14px',
               textAlign: 'left',
@@ -1351,10 +2077,24 @@ function AbaTenants({ onEntrarComoTenant, filtroDados }: { onEntrarComoTenant: (
             }}
           >
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {t.companyName}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {t.companyName}
+                </span>
+                {t.plan !== 'pagante' && (
+                  <span data-testid="n0-selo-nao-pagante" style={{ flexShrink: 0, fontSize: 9, fontWeight: 800, letterSpacing: 0.3, color: AMBER, background: `${AMBER}22`, borderRadius: 999, padding: '2px 7px' }}>
+                    NÃO PAGANTE
+                  </span>
+                )}
+                {/* Item 21: pontinho vermelho animado quando esse cliente tem
+                    mensagem que a Morfo ainda não leu. */}
+                {hasUnreadMorfo(t) && (
+                  <span data-testid="n0-ponto-nao-lida" className="mloc-badge-pulse" aria-label="Mensagem não lida deste cliente"
+                    style={{ flexShrink: 0, width: 8, height: 8, borderRadius: '50%', background: RED }} />
+                )}
               </div>
               <div style={{ fontSize: 11, color: DEV_TXT2, marginTop: 2 }}>{planoLabelDoTenant(t)}</div>
+              <BarrasLimiteTenant t={t} />
             </div>
             <Badge status={statusDoTenant(t)} />
             <ChevronRightIcon width={16} height={16} color={DEV_TXT2} />
@@ -1465,7 +2205,7 @@ function AlterarStatusParcelaSheet({ tenant, inst, onClose, onSave }: {
         <span style={{ fontSize: 12.5, color: DEV_TXT2 }}>Situação atual</span>
         <ParcelaBadge status={atual} />
       </div>
-      <label style={labelN0Style}>Nova situação</label>
+      <label style={labelN0Style}>Nova Situação</label>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 14 }}>
         {opcoes.map((o) => (
           <button
@@ -1599,7 +2339,7 @@ function AbaFinanceiro({ filtroDados }: { filtroDados: FiltroDados }) {
     await atualizarTenantN0(tenant.id, (x) => ({
       ...x,
       billing: x.billing ? { ...x.billing, installments: x.billing.installments.map((i) => (i.id === parcelaAlterar.id ? { ...i, ...patch } : i)) } : x.billing,
-      accessLog: [...(x.accessLog ?? []), { id: uid(), ts: new Date().toISOString().slice(0, 19), action: `Parcela de ${fmtDate(parcelaAlterar.dueDate)} marcada como ${PARCELA_ROTULO[novoStatus]}${motivo ? ` — ${motivo}` : ''}`, ator: 'suporte' }],
+      accessLog: [...(x.accessLog ?? []), { id: uid(), ts: new Date().toISOString().slice(0, 19), action: `Parcela de ${fmtDate(parcelaAlterar.dueDate)} marcada como ${PARCELA_ROTULO[novoStatus]}${motivo ? ` — ${motivo}` : ''}`, ator: 'admin' }],
     }))
     setParcelaAlterar(null)
   }
@@ -1610,7 +2350,7 @@ function AbaFinanceiro({ filtroDados }: { filtroDados: FiltroDados }) {
       ...x,
       billing: x.billing ? { ...x.billing, installments: x.billing.installments.map((i) => (i.id === inst.id ? { ...i, paid: true, paidDate: new Date().toISOString().slice(0, 10), method, cancelada: false, perda: false } : i)) } : x.billing,
       onboarding: 'completo',
-      accessLog: [...(x.accessLog ?? []), { id: uid(), ts: new Date().toISOString().slice(0, 19), action: 'Pagamento de parcela confirmado pela Morfo', ator: 'suporte' }],
+      accessLog: [...(x.accessLog ?? []), { id: uid(), ts: new Date().toISOString().slice(0, 19), action: 'Pagamento de parcela confirmado pela Morfo', ator: 'admin' }],
     }))
     setParcelaCobrar(null)
   }
@@ -1645,6 +2385,23 @@ function AbaFinanceiro({ filtroDados }: { filtroDados: FiltroDados }) {
                   </div>
                   <ParcelaBadge status={st} />
                 </div>
+                {/* 12/09/2026, item 3: quando o CLIENTE avisa que pagou (pelo
+                    "Já paguei" da tela de regularização), a parcela fica
+                    aguardando ESTA confirmação — e é ela que libera o acesso
+                    de volta. Sem servidor não há baixa automática; quando
+                    houver (Backlog 028), o gateway ocupa este lugar. */}
+                {i.pagamentoInformadoEm && !i.paid && (
+                  <div data-testid={`n0-aguardando-${i.id}`} style={{ marginTop: 8, background: alpha(AMBER, 0.14), border: `1px solid ${alpha(AMBER, 0.4)}`, borderRadius: 10, padding: '9px 10px' }}>
+                    <div style={{ fontSize: 12, color: '#fff', fontWeight: 700, marginBottom: 7 }}>
+                      Cliente informou o pagamento em {fmtDate(i.pagamentoInformadoEm)}
+                    </div>
+                    <button type="button" data-testid={`n0-confirmar-pagamento-${i.id}`}
+                      onClick={() => void confirmarPagamento(tenant.id, i.id)}
+                      style={{ ...primaryBtn, background: GREEN, padding: '9px 12px', fontSize: 13 }}>
+                      <Check size={14} /> Confirmar pagamento e liberar acesso
+                    </button>
+                  </div>
+                )}
                 {instCobravelLocal(i) && (
                   <button type="button" onClick={() => setParcelaCobrar(i)} style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, background: 'none', border: 'none', color: DEV_ACCENT, fontWeight: 700, fontSize: 12, padding: 0, cursor: 'pointer' }}>
                     <Link2 size={13} /> Cobrar
@@ -1672,7 +2429,7 @@ function AbaFinanceiro({ filtroDados }: { filtroDados: FiltroDados }) {
     <div>
       <TopoN0
         titulo="Financeiro"
-        subtitulo="Cobrança das assinaturas dos tenants"
+        subtitulo="Cobrança das assinaturas dos clientes"
         acoes={<IconesDeTela dark onBuscar={() => setBuscaAberta(true)} onExportar={() => setExportOpen(true)} />}
       />
       {buscaAberta && (
@@ -1752,81 +2509,151 @@ function AbaFinanceiro({ filtroDados }: { filtroDados: FiltroDados }) {
   )
 }
 
-/* Auditoria do cluster Financeiro/Auditoria x Kit (11/09/2026): o Kit
-   filtra `platform.auditLog`, um log GLOBAL separado do `tenant.accessLog`
-   — decisão de produto já tomada e documentada (`kitPlatform.ts`, nota
-   acima de `verificarVencimentoPrecadastro`): o MorfoFinP unifica os dois
-   num só (`accessLog`), então esta tela já lê tudo que existe pra ler, sem
-   duplicar. O que realmente faltava era a CAPACIDADE DE ACHAR algo nessa
-   lista — o Kit tem busca por texto + filtro por cliente/tipo/usuário/
-   origem/período (`SearchFilterRow` + `FilterSheet`, Kit L6029/L6030); esta
-   tela não tinha filtro NENHUM, só a lista cronológica inteira. Adicionados
-   busca por texto e filtro por cliente (os 2 mais usados, e os que fazem
-   sentido com os campos que `RegistroAcesso` realmente tem — `id/ts/action/
-   ator`, sem `tipo` próprio). Tipo/Usuário/Origem (N0×N1×suporte) e período
-   De-Até do Kit ficam de fora: exigiriam ou um campo `tipo` que
-   `RegistroAcesso` não tem, ou peças de filtro (`FilterSheet`,
-   `MultiFilterChips`, `DateFilterBar`) que não existem em `kitBase.tsx`/
-   `PadraoUI.tsx` — fora do escopo de um agente que só edita `DevApp.tsx`. */
+/* Auditoria do N0 — filtros do Kit (12/09/2026, item 19 do Rafael: "Auditoria
+   completamente diferente do Kit, implementar os filtros do print").
+   Transcrição de `AuditoriaScreen` (Kit L5662-L5745): busca por texto, filtro
+   por Cliente, chips de "Tipo de alteração", e um disclosure "Filtros
+   avançados" com Usuário, Origem (N0 × N1) e período De/Até — mais
+   `TotalRegistros` e o badge de tipo/ator em cada linha.
+
+   ADAPTAÇÃO (mesma de sempre, ver `kitPlatform.ts`): o Kit lê
+   `platform.auditLog` (log global separado); aqui a fonte é o
+   `tenants[].accessLog`, que já é o log unificado deste produto. Os campos
+   `tipo`/`atorNome`/`atorUserId` entraram no `RegistroAcesso` nesta rodada —
+   registro antigo, sem eles, aparece como "Geral"/"Admin Morfo", nunca some
+   da lista. O "Exibir/Ocultar — manter últimos X" do Kit fica de fora: este
+   painel nunca teve esse parâmetro de contagem visível para a auditoria, e
+   inventá-lo aqui criaria um parâmetro sem tela que o configure. */
 function AbaAuditoria() {
-  const { tenants } = usePlatformN0()
+  const platform = usePlatformN0()
+  const { tenants } = platform
   const [query, setQuery] = useState('')
   const [tenantFiltro, setTenantFiltro] = useState('')
+  const [tipoFiltro, setTipoFiltro] = useState<string[]>([])
+  const [atorFiltro, setAtorFiltro] = useState<string[]>([])
+  const [usuarioFiltro, setUsuarioFiltro] = useState('')
+  const [dataDe, setDataDe] = useState('')
+  const [dataAte, setDataAte] = useState('')
+  const [avancadosAbertos, setAvancadosAbertos] = useState(false)
+  const [exportOpen, setExportOpen] = useState(false) /* G44 regra 11b */
+
   const eventos = tenants
     .flatMap((t) => (t.accessLog ?? []).map((ev) => ({ ...ev, tenant: t.companyName, tenantId: t.id })))
     .sort((a, b) => (a.ts < b.ts ? 1 : -1))
+
+  /* Kit L5686-L5689: as pessoas do N0 e as de TODOS os N1, com a empresa no
+     rótulo pra distinguir homônimos entre ambientes diferentes. */
+  const usuariosOptions = [
+    ...(platform.devUsers ?? []).map((u) => ({ v: u.id, l: `${u.name} (Morfo/N0)` })),
+    ...tenants.flatMap((t) => (t.users ?? []).map((u) => ({ v: u.id, l: `${u.name} — ${t.companyName} (N1)` }))),
+  ]
+
   const q = query.trim().toLowerCase()
-  const filtrados = eventos.filter((ev) =>
-    (!tenantFiltro || ev.tenantId === tenantFiltro) &&
-    (!q || ev.action.toLowerCase().includes(q) || ev.tenant.toLowerCase().includes(q)))
-  const [exportOpen, setExportOpen] = useState(false) /* G44 regra 11b */
+  const filtrados = eventos.filter((ev) => {
+    if (tenantFiltro && ev.tenantId !== tenantFiltro) return false
+    if (tipoFiltro.length && !tipoFiltro.includes(ev.tipo ?? 'geral')) return false
+    if (atorFiltro.length && !atorFiltro.includes(ev.ator ?? 'admin')) return false
+    if (usuarioFiltro && ev.atorUserId !== usuarioFiltro) return false
+    if (dataDe && ev.ts.slice(0, 10) < dataDe) return false
+    if (dataAte && ev.ts.slice(0, 10) > dataAte) return false
+    if (q && !(ev.action.toLowerCase().includes(q) || ev.tenant.toLowerCase().includes(q))) return false
+    return true
+  })
+
   const linhasAud: ExportRow[] = filtrados.map((ev) => ({
-    ts: ev.ts.replace('T', ' ').slice(0, 16), tenant: ev.tenant, action: ev.action,
+    ts: ev.ts.replace('T', ' ').slice(0, 16), tenant: ev.tenant,
+    tipo: AUDIT_TIPOS[ev.tipo ?? 'geral'], ator: (ATOR_INFO[ev.ator ?? 'admin'] ?? ATOR_INFO.admin).l,
+    action: ev.action,
   }))
-  const filtroAtivo = !!tenantFiltro || !!q
+  const colunasAud = [
+    { key: 'ts', label: 'Quando' },
+    { key: 'tenant', label: 'Ambiente' },
+    { key: 'tipo', label: 'Tipo' },
+    { key: 'ator', label: 'Origem' },
+    { key: 'action', label: 'Ação' },
+  ]
+  const avancadosAtivos = !!(usuarioFiltro || atorFiltro.length || dataDe || dataAte)
+  const filtroAtivo = avancadosAtivos || !!tenantFiltro || !!q || tipoFiltro.length > 0
+  const campoEscuro: React.CSSProperties = { ...inputStyle, background: DEV_CARD, color: '#fff', border: 'none' }
+
   return (
     <div>
       <TopoN0
         titulo="Auditoria"
-        subtitulo="Log de ações de N0/N1/tenant"
+        subtitulo="Log de ações do painel e dos clientes"
         acoes={<IconesDeTela dark onExportar={() => setExportOpen(true)} />}
       />
       {exportOpen && <ExportSheet dark title="Auditoria" filenameBase="morfofinp-n0-auditoria"
-        screenColumns={[
-          { key: 'ts', label: 'Quando' },
-          { key: 'tenant', label: 'Ambiente' },
-          { key: 'action', label: 'Ação' },
-        ]}
-        screenRows={linhasAud}
-        detailColumns={[
-          { key: 'ts', label: 'Quando' },
-          { key: 'tenant', label: 'Ambiente' },
-          { key: 'action', label: 'Ação' },
-        ]}
-        detailRows={linhasAud}
+        screenColumns={colunasAud} screenRows={linhasAud}
+        detailColumns={colunasAud} detailRows={linhasAud}
         onClose={() => setExportOpen(false)} />}
       <AvisoDadoFicticio />
-      <SearchBox dark value={query} onChange={setQuery} placeholder="Buscar por ação ou empresa..." />
-      <div style={{ margin: '10px 0 14px' }}>
-        <select value={tenantFiltro} onChange={(e) => setTenantFiltro(e.target.value)} style={campoN0Style}>
+      <p style={{ fontSize: 11.5, color: DEV_TXT2, margin: '12px 2px 10px', lineHeight: 1.5 }}>
+        Todos os logs de alteração, do N0 (painel administrativo) e do N1 (cada cliente no seu próprio
+        ambiente) — incluindo o que o suporte fizer dentro do ambiente de um cliente.
+      </p>
+      <div style={{ marginBottom: 10 }}>
+        <SearchBox dark value={query} onChange={setQuery} placeholder="Buscar por texto da ação ou empresa" />
+      </div>
+      <Field dark label="Cliente">
+        <select value={tenantFiltro} onChange={(e) => setTenantFiltro(e.target.value)} style={campoEscuro}>
           <option value="">Todos os clientes</option>
           {tenants.map((t) => <option key={t.id} value={t.id}>{t.companyName}</option>)}
         </select>
+      </Field>
+      <div style={{ marginBottom: 10 }}>
+        <MultiFilterChips dark title="Tipo de alteração" allLabel="Todas"
+          options={Object.entries(AUDIT_TIPOS).map(([v, l]) => ({ v, l }))}
+          selected={tipoFiltro} setSelected={(f: (sel: string[]) => string[]) => setTipoFiltro(f)} />
       </div>
-      {filtroAtivo && <TotalRegistros dark n={filtrados.length} label={filtrados.length === 1 ? 'registro' : 'registros'} />}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: filtroAtivo ? 8 : 0 }}>
-        {filtrados.length === 0 && (
-          <p style={{ fontSize: 12, color: DEV_TXT3 }}>
-            {eventos.length === 0 ? 'Nenhum evento registrado ainda.' : 'Nenhum registro encontrado. Ajuste a busca ou o filtro.'}
-          </p>
-        )}
-        {filtrados.map((ev) => (
-          <div key={ev.id} style={{ background: DEV_CARD, borderRadius: 12, padding: '11px 14px' }}>
-            <div style={{ fontSize: 11, color: DEV_TXT2 }}>{ev.ts.replace('T', ' ').slice(0, 16)}</div>
-            <div style={{ fontSize: 12.5, fontWeight: 700, color: '#fff', marginTop: 2 }}>{ev.tenant}</div>
-            <div style={{ fontSize: 12, color: DEV_TXT2, marginTop: 1 }}>{ev.action}</div>
+      <div style={{ marginBottom: 6 }}>
+        <button type="button" onClick={() => setAvancadosAbertos((v) => !v)}
+          style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', background: 'none', border: 'none', padding: '6px 0', cursor: 'pointer' }}>
+          <Filter size={14} color={DEV_TXT2} />
+          <span style={{ fontSize: 12.5, fontWeight: 700, color: '#fff', flex: 1, textAlign: 'left' }}>
+            Filtros avançados{avancadosAtivos ? ' · ativos' : ''}
+          </span>
+          <ChevronRight size={16} color={DEV_TXT2} style={{ transform: avancadosAbertos ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }} />
+        </button>
+        {avancadosAbertos && <>
+          <Field dark label="Usuário">
+            <select value={usuarioFiltro} onChange={(e) => setUsuarioFiltro(e.target.value)} style={campoEscuro}>
+              <option value="">Todos os usuários</option>
+              {usuariosOptions.map((o) => <option key={o.v} value={o.v}>{o.l}</option>)}
+            </select>
+          </Field>
+          <div style={{ marginBottom: 10 }}>
+            <MultiFilterChips dark title="Origem (N0 × N1)" allLabel="Todas"
+              options={[{ v: 'admin', l: 'Morfo' }, { v: 'n1', l: 'Cliente (N1)' }, { v: 'suporte', l: 'Suporte (dentro do ambiente)' }]}
+              selected={atorFiltro} setSelected={(f: (sel: string[]) => string[]) => setAtorFiltro(f)} />
           </div>
-        ))}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 4 }}>
+            <Field dark label="De"><input type="date" style={campoEscuro} value={dataDe} onChange={(e) => setDataDe(e.target.value)} /></Field>
+            <Field dark label="Até"><input type="date" style={campoEscuro} value={dataAte} onChange={(e) => setDataAte(e.target.value)} /></Field>
+          </div>
+        </>}
+      </div>
+      <TotalRegistros dark n={filtrados.length} label={filtrados.length === 1 ? 'registro' : 'registros'} />
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
+        {filtrados.length === 0 && (
+          <div style={{ fontSize: 13.5, color: DEV_TXT2, textAlign: 'center', padding: '24px 0' }}>
+            {eventos.length === 0 ? 'Nenhum evento registrado ainda.' : `Nenhum registro encontrado.${filtroAtivo ? ' Ajuste a busca ou os filtros.' : ''}`}
+          </div>
+        )}
+        {filtrados.map((ev) => {
+          const info = ATOR_INFO[ev.ator ?? 'admin'] ?? ATOR_INFO.admin
+          return (
+            <div key={ev.id} style={{ background: DEV_CARD, borderRadius: 12, padding: '10px 12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 9.5, fontWeight: 800, color: DEV_ACCENT, background: alpha(DEV_ACCENT, 13.3), padding: '2px 7px', borderRadius: 999 }}>{AUDIT_TIPOS[ev.tipo ?? 'geral']}</span>
+                <span style={{ fontSize: 9.5, fontWeight: 800, color: info.cor, background: alpha(info.cor, 13.3), padding: '2px 7px', borderRadius: 999 }}>{info.l}</span>
+                <span style={{ fontSize: 11, fontWeight: 700, color: '#fff', flex: 1, textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ev.tenant}</span>
+              </div>
+              <div style={{ fontSize: 12.5, color: '#C9C4D4' }}>{ev.action}</div>
+              <div style={{ fontSize: 10.5, color: DEV_TXT2, marginTop: 3 }}>{ev.ts.replace('T', ' ').slice(0, 16)}{ev.atorNome ? ` · ${ev.atorNome}` : ''}</div>
+            </div>
+          )
+        })}
       </div>
     </div>
   )
@@ -1874,8 +2701,7 @@ function SubParametrosPlanos({ onVoltarSub }: { onVoltarSub: () => void }) {
   const [porte, setPorte] = useState<'Pequeno' | 'Médio' | 'Grande'>('Pequeno')
   const [gratuito, setGratuito] = useState(false)
   const [validadeDias, setValidadeDias] = useState('15')
-  const [valorMensal, setValorMensal] = useState('0')
-  const [limiteUsuarios, setLimiteUsuarios] = useState('3')
+  const [valorMensal, setValorMensal] = useState(formatarMoeda(0))
   const [descricaoCurta, setDescricaoCurta] = useState('')
   const [funcionalidades, setFuncionalidades] = useState('')
   const [adicionais, setAdicionais] = useState('')
@@ -1889,8 +2715,7 @@ function SubParametrosPlanos({ onVoltarSub }: { onVoltarSub: () => void }) {
     setPorte(p.porte ?? PLANO_PADRAO_KIT.porte)
     setGratuito(Boolean(p.gratuito))
     setValidadeDias(p.validadeDias ? String(p.validadeDias) : '15')
-    setValorMensal(String(p.valorMensal))
-    setLimiteUsuarios(String(p.limiteUsuarios ?? PLANO_PADRAO_KIT.limiteUsuarios))
+    setValorMensal(formatarMoeda(p.valorMensal))
     setDescricaoCurta(p.descricaoCurta ?? '')
     setFuncionalidades(p.funcionalidades.join('\n'))
     setAdicionais('')
@@ -1905,7 +2730,6 @@ function SubParametrosPlanos({ onVoltarSub }: { onVoltarSub: () => void }) {
     setGratuito(false)
     setValidadeDias('15')
     setValorMensal('0')
-    setLimiteUsuarios(String(PLANO_PADRAO_KIT.limiteUsuarios))
     setDescricaoCurta('')
     setFuncionalidades('')
     setAdicionais('')
@@ -1923,8 +2747,16 @@ function SubParametrosPlanos({ onVoltarSub }: { onVoltarSub: () => void }) {
     .map((f) => f.trim())
     .filter(Boolean)
 
-  // Regra de gravação do Kit: `canSave = name && (gratuito ? validadeDias > 0 : monthlyValue > 0)`.
-  const podeSalvar = Boolean(nome.trim()) && (gratuito ? Number(validadeDias) > 0 : Number(valorMensal.replace(',', '.')) > 0)
+  /* 12/09/2026 (Rafael: "aqui nos planos o botão salvar não está habilitando
+     quando edito as permissões, só quando marco plano gratuito, não deveria
+     ser assim"). O Kit exige `valorMensal > 0` ou "gratuito com validade" pra
+     habilitar o Salvar — com os planos semeados em R$ 0,00, mexer só nos
+     acessos deixava o botão morto e a edição se perdia. Agora o único
+     obrigatório é o NOME (o que de fato identifica o plano); um plano sem
+     valor e sem validade fica salvo, com o aviso abaixo do botão dizendo
+     como ele vai aparecer pro cliente. */
+  const podeSalvar = Boolean(nome.trim())
+  const semPreco = !gratuito && !(paraNumero(valorMensal) > 0)
 
   async function salvar() {
     if (!podeSalvar) return
@@ -1933,8 +2765,7 @@ function SubParametrosPlanos({ onVoltarSub }: { onVoltarSub: () => void }) {
       porte,
       gratuito,
       validadeDias: gratuito ? Number(validadeDias) : null,
-      valorMensal: gratuito ? 0 : Number(valorMensal.replace(',', '.')) || 0,
-      limiteUsuarios: Number(limiteUsuarios) || 1,
+      valorMensal: gratuito ? 0 : paraNumero(valorMensal),
       descricaoCurta: descricaoCurta.trim(),
       funcionalidades: listaFuncionalidades,
       destaque,
@@ -1951,14 +2782,13 @@ function SubParametrosPlanos({ onVoltarSub }: { onVoltarSub: () => void }) {
 
   if (editandoId !== null) {
     const previa = recursosAutomaticos({
-      limiteUsuarios: Number(limiteUsuarios) || 1,
       restricoes: { exportacaoDetalhada: expDetalhada, layoutPersonalizado: layoutPersonalizado },
       funcionalidades: listaFuncionalidades,
     })
     return (
       <div>
         <TopoN0 titulo={editandoId === 'novo' ? 'Novo plano' : 'Editar plano'} onVoltarSub={() => setEditandoId(null)} />
-        <label style={labelN0Style} htmlFor="plano-nome">Nome do plano</label>
+        <label style={labelN0Style} htmlFor="plano-nome">Nome do Plano</label>
         <input id="plano-nome" style={campoN0Style} value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Ex: Plano Médio" />
 
         <label style={labelN0Style}>Porte</label>
@@ -1984,21 +2814,23 @@ function SubParametrosPlanos({ onVoltarSub }: { onVoltarSub: () => void }) {
           </>
         ) : (
           <>
+            {/* Item 11 da lista de 12/09/2026: "campo de valor do plano com
+                máscara em todas as telas". Passa a usar a MESMA máscara de
+                moeda do resto do app (`formatoMoeda.ts`) — digitar 9900 vira
+                99,00, e não existe mais a chance de gravar "99.9" ou "99,9,9". */}
             <label style={labelN0Style} htmlFor="plano-valor">Valor mensal (R$)</label>
-            <input id="plano-valor" style={campoN0Style} value={valorMensal} onChange={(e) => setValorMensal(e.target.value)} />
+            <input id="plano-valor" inputMode="numeric" style={campoN0Style} value={valorMensal}
+              onChange={(e) => setValorMensal(aplicarMascaraValor(e.target.value))} />
           </>
         )}
 
-        <label style={labelN0Style} htmlFor="plano-usuarios">Limite de usuários</label>
-        <input id="plano-usuarios" type="number" min="1" style={campoN0Style} value={limiteUsuarios} onChange={(e) => setLimiteUsuarios(e.target.value)} />
-
-        <label style={labelN0Style} htmlFor="plano-desc">Descrição curta</label>
+        <label style={labelN0Style} htmlFor="plano-desc">Descrição Curta</label>
         <input id="plano-desc" style={campoN0Style} value={descricaoCurta} onChange={(e) => setDescricaoCurta(e.target.value)} placeholder="Uma frase sobre pra quem é esse plano" />
 
         <label style={labelN0Style} htmlFor="plano-func">Funcionalidades (uma por linha)</label>
         <textarea id="plano-func" style={{ ...campoN0Style, minHeight: 90, fontFamily: 'inherit', resize: 'vertical' }} value={funcionalidades} onChange={(e) => setFuncionalidades(e.target.value)} placeholder={'5 usuários\nSuporte prioritário'} />
 
-        <label style={labelN0Style}>Acesso liberado neste plano</label>
+        <label style={labelN0Style}>Acesso Liberado Neste Plano</label>
         <MarcacaoN0
           marcado={expDetalhada}
           onAlternar={() => setExpDetalhada((v) => !v)}
@@ -2039,8 +2871,11 @@ function SubParametrosPlanos({ onVoltarSub }: { onVoltarSub: () => void }) {
           Salvar plano
         </button>
         {!podeSalvar && (
+          <p style={{ fontSize: 11, color: DEV_TXT2, margin: '6px 2px 0' }}>Informe o nome do plano.</p>
+        )}
+        {podeSalvar && semPreco && (
           <p style={{ fontSize: 11, color: DEV_TXT2, margin: '6px 2px 0' }}>
-            {nome.trim() ? (gratuito ? 'Informe a validade em dias (maior que zero).' : 'Informe o valor mensal (maior que zero) ou marque “Plano gratuito, com validade”.') : 'Informe o nome do plano.'}
+            Sem valor mensal e sem validade: este plano vai aparecer como <strong style={{ color: '#fff' }}>Grátis</strong> pro cliente, sem prazo pra expirar.
           </p>
         )}
       </div>
@@ -2066,7 +2901,7 @@ function SubParametrosPlanos({ onVoltarSub }: { onVoltarSub: () => void }) {
               </span>
             </div>
             <div style={{ fontSize: 11, color: DEV_TXT3, marginTop: 3 }}>
-              {p.porte ?? PLANO_PADRAO_KIT.porte} · {p.limiteUsuarios ?? PLANO_PADRAO_KIT.limiteUsuarios} usuário(s)
+              {p.porte ?? PLANO_PADRAO_KIT.porte}
               {p.descricaoCurta ? ` · ${p.descricaoCurta}` : ''}
             </div>
             <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
@@ -2189,7 +3024,7 @@ function FormularioDevUser({ alvo, devUsers, tenants, perfis, podeTrocarPerfil =
   return (
     <div>
       <TopoN0 titulo={titulo} onVoltarSub={onFechar} />
-      <label style={labelN0Style} htmlFor="devuser-nome">Nome completo</label>
+      <label style={labelN0Style} htmlFor="devuser-nome">Nome Completo</label>
       <input id="devuser-nome" style={campoN0Style} value={nome} onChange={(e) => setNome(e.target.value)} />
       <label style={labelN0Style} htmlFor="devuser-cpf">CPF (opcional)</label>
       <input id="devuser-cpf" style={campoN0Style} value={cpf} onChange={(e) => setCpf(e.target.value)} placeholder="000.000.000-00" />
@@ -2206,7 +3041,7 @@ function FormularioDevUser({ alvo, devUsers, tenants, perfis, podeTrocarPerfil =
       <input id="devuser-login" style={campoN0Style} value={login} onChange={(e) => setLogin(e.target.value)} />
       <label style={labelN0Style} htmlFor="devuser-senha">Senha</label>
       <input id="devuser-senha" style={campoN0Style} value={senha} onChange={(e) => setSenha(e.target.value)} />
-      <label style={labelN0Style} htmlFor="devuser-perfil">Perfil de acesso</label>
+      <label style={labelN0Style} htmlFor="devuser-perfil">Perfil de Acesso</label>
       {podeTrocarPerfil ? (
         <select id="devuser-perfil" style={campoN0Style} value={perfilId} onChange={(e) => setPerfilId(e.target.value)}>
           {perfis.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
@@ -2316,12 +3151,12 @@ function SubParametrosUsuarios({ onVoltarSub }: { onVoltarSub: () => void }) {
 
   if (editando !== null) {
     return <FormularioDevUser alvo={editando} devUsers={devUsers} tenants={platform.tenants} perfis={perfis}
-      titulo={editando === 'novo' ? 'Novo administrador' : 'Editar administrador'} onFechar={() => setEditando(null)} />
+      titulo={editando === 'novo' ? 'Novo usuário Morfo' : 'Editar usuário Morfo'} onFechar={() => setEditando(null)} />
   }
 
   return (
     <div>
-      <TopoN0 titulo="Usuários Morfo (administradores)" subtitulo="Login/senha reais de quem acessa o painel N0" onVoltarSub={onVoltarSub} />
+      <TopoN0 titulo="Usuários Morfo" subtitulo="Login/senha reais de quem acessa o painel N0" onVoltarSub={onVoltarSub} />
       <p style={{ fontSize: 11, color: DEV_TXT3, lineHeight: 1.6, marginTop: 0, marginBottom: 14 }}>
         Cada linha aqui é uma credencial de verdade (login/senha, não só um registro informativo) — o mesmo dado que
         a tela de Login usa pra autenticar no painel N0. O perfil de acesso decide o que cada administrador pode ver
@@ -2329,7 +3164,7 @@ function SubParametrosUsuarios({ onVoltarSub }: { onVoltarSub: () => void }) {
       </p>
       {erro && <div style={{ fontSize: 12, color: '#F5615C', marginBottom: 10, fontWeight: 700 }}>{erro}</div>}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14 }}>
-        {devUsers.length === 0 && <p style={{ fontSize: 12, color: DEV_TXT3 }}>Nenhum administrador registrado ainda.</p>}
+        {devUsers.length === 0 && <p style={{ fontSize: 12, color: DEV_TXT3 }}>Nenhum usuário Morfo registrado ainda.</p>}
         {devUsers.map((u) => (
           <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: DEV_CARD, borderRadius: 12, padding: '11px 14px' }}>
             <div style={{ flex: 1, minWidth: 0 }}>
@@ -2359,7 +3194,7 @@ function SubParametrosUsuarios({ onVoltarSub }: { onVoltarSub: () => void }) {
         ))}
       </div>
       <button type="button" onClick={() => setEditando('novo')} style={{ width: '100%', background: 'rgba(255,255,255,0.08)', border: `1px dashed ${DEV_ACCENT}66`, borderRadius: 10, padding: 12, color: DEV_ACCENT, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
-        + Novo administrador
+        + Novo usuário Morfo
       </button>
       {excluindo && <ExcluirDevUsuarioSheet usuario={excluindo} onClose={() => setExcluindo(null)} onExcluido={() => setExcluindo(null)} />}
     </div>
@@ -2393,7 +3228,8 @@ function SubParametrosPermissoes({ onVoltarSub }: { onVoltarSub: () => void }) {
 }
 
 type SubParametros = 'meusDados' | 'alertas' | 'assinatura' | 'ambiente' | 'chat' | 'testesCliente' | 'limpezasCliente'
-  | 'marca' | 'planos' | 'usuarios' | 'permissoes' | 'testesMorfo' | 'limpezasMorfo' | 'layout' | 'site' | null
+  | 'marca' | 'urls' | 'planos' | 'usuarios' | 'permissoes' | 'testesMorfo' | 'limpezasMorfo' | 'layout' | 'site'
+  | 'padraoCategorias' | null
 
 // Casca comum das telas novas de Parâmetros (10/09/2026, Decisão 55 — Parte
 // B): cabeçalho com "‹ Voltar" + a faixa de aviso curta, no mesmo padrão que
@@ -2410,14 +3246,72 @@ function TelaGrupoN0({ titulo, subtitulo, onVoltarSub, render }: { titulo: strin
   )
 }
 
+/* Folha de "Apagar dados de teste" (12/09/2026) — o caminho de um toque a
+   partir da barra do topo. Dupla confirmação, como toda ação destrutiva do
+   painel, e a contagem do que vai sair é lida na hora, não estimada. */
+function ApagarDadosTesteSheet({ onClose }: { onClose: () => void }) {
+  const platform = usePlatformN0()
+  const qtdLanc = useLiveQuery(() => contarLancamentosFicticios(), [], 0)
+  const planosFic = useLiveQuery(async () => (await db.planos.toArray()).filter((p) => p.ficticio).length, [], 0)
+  const [etapa, setEtapa] = useState(0)
+  const [resultado, setResultado] = useState<string | null>(null)
+  const ambientes = platform.tenants.filter(ehTenantDeTeste).length
+  const usuarios = (platform.devUsers ?? []).filter((u, i) => i > 0 && u.ficticio).length
+
+  async function apagar() {
+    const r = await apagarTodosDadosDeTeste()
+    setResultado(`${r.ambientes} ambiente(s), ${r.usuarios} usuário(s), ${r.planos} plano(s) e ${r.lancamentos} lançamento(s) de teste apagados.`)
+    setEtapa(0)
+  }
+
+  return (
+    <Sheet dark title="Apagar dados de teste" onClose={onClose}>
+      {resultado ? (
+        <>
+          <p style={{ fontSize: 13.5, lineHeight: 1.6, color: '#fff', margin: '0 0 14px' }}>{resultado}</p>
+          <button type="button" style={{ ...primaryBtn, width: '100%', background: DEV_ACCENT }} onClick={onClose}>Fechar</button>
+        </>
+      ) : (
+        <>
+          <p style={{ fontSize: 13, lineHeight: 1.6, color: '#C9C4D4', margin: '0 0 12px' }}>
+            Sai TODO o dado de demonstração do painel: os ambientes de exemplo, os usuários Morfo e os planos marcados
+            como teste, e os lançamentos de teste do ambiente deste aparelho.
+          </p>
+          <div style={{ background: DEV_CARD, borderRadius: 12, padding: '11px 13px', fontSize: 12.5, color: '#fff', lineHeight: 1.8, marginBottom: 14 }}>
+            {ambientes} ambiente(s) de teste<br />
+            {usuarios} usuário(s) Morfo de teste<br />
+            {planosFic} plano(s) de teste<br />
+            {qtdLanc} lançamento(s) de teste
+          </div>
+          <p style={{ fontSize: 11.5, lineHeight: 1.6, color: '#9B96A8', margin: '0 0 14px' }}>
+            Não toca no ambiente deste aparelho, em cliente cadastrado pela Morfo, nos seus lançamentos, nos planos reais
+            nem no seu acesso de administrador.
+          </p>
+          <button type="button" data-testid="n0-confirmar-apagar-teste" style={{ ...dangerBtn, width: '100%' }} onClick={() => setEtapa(1)}>
+            <Trash2 size={16} /> Apagar dados de teste
+          </button>
+        </>
+      )}
+      {etapa === 1 && (
+        <ConfirmDeleteSheet dark title="Confirmação final" confirmLabel="Apagar de vez" confirmIcon={Trash2} irreversible
+          message="Os dados de teste serão apagados agora. Os seus dados reais continuam onde estão."
+          onConfirm={() => void apagar()} onClose={() => setEtapa(0)} />
+      )}
+    </Sheet>
+  )
+}
+
 // `podeVerFuncN0` (10/09/2026, Decisão 54 Parte B) — gating real por perfil
 // de acesso, derivado de `perfilMorfoLogado` no shell (`DevApp` abaixo) e
 // repassado por prop; cada sub-item de Parâmetros só aparece quando
 // `nivelAcesso` devolve algo além de `null` pra `parametros.<chave>`.
-function AbaParametros({ podeVerFuncN0 }: { podeVerFuncN0: (k: string) => boolean }) {
-  const [sub, setSub] = useState<SubParametros>(null)
+function AbaParametros({ podeVerFuncN0, subInicial }: { podeVerFuncN0: (k: string) => boolean; subInicial?: SubParametros }) {
+  const [sub, setSub] = useState<SubParametros>(subInicial ?? null)
 
   const voltar = () => setSub(null)
+  /* Botão voltar do Android: dentro de um grupo de parâmetros, volta pra
+     lista de grupos em vez de sair do app (12/09/2026). */
+  usarBotaoVoltar(() => { if (sub) { setSub(null); return true } return false })
   if (sub === 'planos') return <SubParametrosPlanos onVoltarSub={voltar} />
   if (sub === 'site') return <SubParametrosSite onVoltarSub={voltar} />
   if (sub === 'meusDados') return <SubParametrosMeusDadosN0 onVoltarSub={voltar} />
@@ -2430,11 +3324,16 @@ function AbaParametros({ podeVerFuncN0 }: { podeVerFuncN0: (k: string) => boolea
   if (sub === 'ambiente') return <TelaGrupoN0 titulo="Ambiente dos Clientes" subtitulo="Acesso de suporte e retenção de dados" onVoltarSub={voltar} render={() => <SubParametrosAmbiente />} />
   if (sub === 'chat') return <TelaGrupoN0 titulo="Gerenciar Chat" subtitulo="Mensagens automáticas e horário de atendimento" onVoltarSub={voltar} render={() => <SubParametrosChat />} />
   if (sub === 'marca') return <TelaGrupoN0 titulo="Marca" subtitulo="Logos por contexto e canal de suporte" onVoltarSub={voltar} render={(n) => <SubParametrosMarca notify={n} />} />
+  /* Build 053: os endereços do produto (.apk e site) — ver `SubParametrosUrls`. */
+  if (sub === 'urls') return <TelaGrupoN0 titulo="URLs" subtitulo="Download do aplicativo e site do produto" onVoltarSub={voltar} render={() => <SubParametrosUrls />} />
   if (sub === 'layout') return <TelaGrupoN0 titulo="Layout do Sistema" subtitulo="Vale pro N1 e pro N0" onVoltarSub={voltar} render={(n) => <SubParametrosLayout notify={n} />} />
   if (sub === 'testesCliente') return <TelaGrupoN0 titulo="Gerar Teste no Cliente" subtitulo="Massa fictícia no ambiente de um cliente" onVoltarSub={voltar} render={(n) => <SubTesteCliente notify={n} />} />
   if (sub === 'testesMorfo') return <TelaGrupoN0 titulo="Gerar Teste Morfo" subtitulo="Massa fictícia nos registros do painel N0" onVoltarSub={voltar} render={(n) => <SubTesteMorfo notify={n} />} />
   if (sub === 'limpezasCliente') return <TelaGrupoN0 titulo="Limpar Dados do Cliente" subtitulo="Teste e reais — checagem dupla" onVoltarSub={voltar} render={(n) => <SubLimpezaCliente notify={n} />} />
   if (sub === 'limpezasMorfo') return <TelaGrupoN0 titulo="Limpar Dados da Morfo" subtitulo="Teste e reais — checagem dupla" onVoltarSub={voltar} render={(n) => <SubLimpezaMorfo notify={n} />} />
+  /* Item 7 (12/09/2026): as configurações de Categorias/Grupos/ícones do N1,
+     aqui como padrão da plataforma. Ver `padraoCategorias.ts`. */
+  if (sub === 'padraoCategorias') return <TelaGrupoN0 titulo="Categorias e Grupos (padrão)" subtitulo="Padrão que os ambientes não editados recebem" onVoltarSub={voltar} render={(n) => <PadraoCategoriasN0 notify={n} />} />
 
   // Kit L509-L513 / L1600-L1700: os itens de Parâmetros agrupados pelas MESMAS
   // 3 sessões da árvore de permissão (`FUNCOES_PERFIL_N0`), na ordem do Kit.
@@ -2444,9 +3343,11 @@ function AbaParametros({ podeVerFuncN0 }: { podeVerFuncN0: (k: string) => boolea
     { sessao: 'Ambiente do Cliente', chave: 'assinatura', titulo: 'Assinatura e Bloqueio', hint: 'Tolerância, dia de vencimento, dias de teste e aviso de fim de teste' },
     { sessao: 'Ambiente do Cliente', chave: 'ambiente', titulo: 'Ambiente dos Clientes', hint: 'Pré-cadastro, acesso de suporte (autorização e modo) e retenção de dados' },
     { sessao: 'Ambiente do Cliente', chave: 'chat', titulo: 'Gerenciar Chat', hint: 'Mensagem automática, follow-up e horário de atendimento por dia' },
+    { sessao: 'Ambiente do Cliente', chave: 'padraoCategorias', titulo: 'Categorias e Grupos (padrão)', hint: 'Cadastro-modelo de grupos, categorias, metas e ícones — ambientes não editados recebem' },
     { sessao: 'Ambiente do Cliente', chave: 'testesCliente', titulo: 'Gerar Teste no Cliente', hint: 'Massa de dados fictícios dentro do ambiente de um cliente (só ambiente vazio)' },
     { sessao: 'Ambiente do Cliente', chave: 'limpezasCliente', titulo: 'Limpar Dados do Cliente', hint: 'Apaga dados de teste ou reais do ambiente — checagem dupla' },
     { sessao: 'Ambiente MorfoFinP ADM', chave: 'marca', titulo: 'Marca', hint: 'Logos da Morfo e do produto por contexto + canal de suporte (WhatsApp)' },
+    { sessao: 'Ambiente MorfoFinP ADM', chave: 'urls', titulo: 'URLs', hint: 'Link de download do aplicativo (.apk) e endereço do site — usados em toda mensagem ao cliente' },
     { sessao: 'Ambiente MorfoFinP ADM', chave: 'planos', titulo: 'Gerenciar Planos', hint: 'Nome, preço e funcionalidades dos planos (Dexie, editável)' },
     { sessao: 'Ambiente MorfoFinP ADM', chave: 'usuarios', titulo: 'Usuários Morfo (administradores)', hint: 'Login/senha reais de quem acessa este painel N0' },
     { sessao: 'Ambiente MorfoFinP ADM', chave: 'permissoes', titulo: 'Permissões Morfo', hint: 'Perfis de acesso e o que cada um pode ver/editar no painel N0' },
@@ -2482,7 +3383,7 @@ function AbaParametros({ podeVerFuncN0 }: { podeVerFuncN0: (k: string) => boolea
                 }}
               >
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: '#fff' }}>{it.titulo}</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#fff' }}>{emTituloCaso(it.titulo)}</div>
                   <div style={{ fontSize: 11, color: DEV_TXT2, marginTop: 2, lineHeight: 1.5 }}>{it.hint}</div>
                 </div>
                 <ChevronRightIcon width={16} height={16} color={DEV_TXT2} />
@@ -2495,7 +3396,14 @@ function AbaParametros({ podeVerFuncN0 }: { podeVerFuncN0: (k: string) => boolea
   )
 }
 
-export default function DevApp({ onEntrarComoTenant }: { onEntrarComoTenant: () => void }) {
+export default function DevApp({ onEntrarComoTenant, clienteParaReabrir, aoReabrirCliente }: {
+  onEntrarComoTenant: (tenantId: string) => void
+  /* 12/09/2026 (build 052): id do cliente cuja ficha deve reabrir assim que o
+     painel voltar — é o que faz "sair do acesso ao ambiente" cair na ficha
+     dele, e não na tela inicial (ver `AppRoot.tsx`). */
+  clienteParaReabrir?: string | null
+  aoReabrirCliente?: () => void
+}) {
   // Gating real por perfil de acesso (10/09/2026, Decisão 54 Parte B):
   // `loggedDevUserId` (gravado por `authN0.ts` no login) resolve QUEM está
   // logado; `perfilDoUsuario`/`nivelAcesso` (literais do Kit, `kitPlatform.ts`)
@@ -2507,9 +3415,23 @@ export default function DevApp({ onEntrarComoTenant }: { onEntrarComoTenant: () 
   const usuarioMorfoLogado = platform.devUsers?.find((u) => u.id === config?.loggedDevUserId)
   const perfilMorfoLogado = perfilDoUsuario(platform.perfisMorfo ?? perfisPadraoN0(), usuarioMorfoLogado)
   const podeVerFuncN0 = (k: string) => nivelAcesso(perfilMorfoLogado, k) !== null
-  const abasVisiveis = ABAS.filter((a) => podeVerFuncN0(a.key))
+  /* Ordem das abas do N0 = padrão salvo em Parâmetros › Layout do Sistema
+     (12/09/2026). Aba fora da ordem salva vai pro fim, na ordem do código —
+     nunca some. */
+  const ordemN0 = platform.layoutConfig?.ordemAbasN0
+  const abasVisiveis = (ordemN0 && ordemN0.length
+    ? [...ordemN0.map((k) => ABAS.find((a) => a.key === k)).filter((a): a is typeof ABAS[number] => !!a),
+       ...ABAS.filter((a) => !ordemN0.includes(a.key))]
+    : ABAS
+  ).filter((a) => podeVerFuncN0(a.key))
 
-  const [abaEscolhida, setAba] = useState<AbaN0>('inicio')
+  const [abaEscolhida, setAba] = useState<AbaN0>(clienteParaReabrir ? 'tenants' : 'inicio')
+  /* 12/09/2026 (build 052): toque no rodapé sempre leva pra tela PRINCIPAL da
+     aba — mesma regra do N1 (ver `App.tsx`). Aqui o passo de dentro é a ficha
+     de um cliente, a sub-tela de Parâmetros e a conversa aberta no suporte;
+     todos são estado local da aba, então este contador entra na `key` de cada
+     uma e remonta a aba no estado inicial. */
+  const [resetAbaN0, setResetAbaN0] = useState(0)
   // Se a aba escolhida deixar de estar visível (perfil trocado/reduzido pra
   // este usuário), cai na 1ª aba que ainda é visível — derivado direto no
   // render (sem efeito) pra nunca piscar a aba antiga por 1 frame.
@@ -2524,6 +3446,25 @@ export default function DevApp({ onEntrarComoTenant }: { onEntrarComoTenant: () 
   // filtro/UI temporária do Kit); padrão "ambos" preserva o comportamento
   // de sempre (soma real+fictício), até o Rafael trocar.
   const [filtroDados, setFiltroDados] = useState<FiltroDados>('ambos')
+  /* A barra só existe quando há dado de teste vivo (12/09/2026) — e o filtro
+     volta pra "ambos" quando o último dado de teste é apagado, senão ficaria
+     preso num recorte cuja barra não está mais na tela pra desfazer. */
+  const qtdLancFicticiosShell = useLiveQuery(() => contarLancamentosFicticios(), [], 0)
+  const temDadosTeste = temDadosDeTesteNaPlataforma(platform, qtdLancFicticiosShell)
+  const [apagarTesteAberto, setApagarTesteAberto] = useState(false)
+  const filtroEfetivo = temDadosTeste ? filtroDados : 'ambos'
+  /* Atalhos do Início (12/09/2026, pedido do Rafael): cada um leva pro
+     DESTINO de verdade (não só pra aba), e sempre no TOPO da rolagem —
+     "todos os atalhos devem levar pra tela destino no topo da rolagem". */
+  const areaConteudoRef = useRef<HTMLDivElement>(null)
+  const [subParametrosInicial, setSubParametrosInicial] = useState<SubParametros>(null)
+  const [acaoTenants, setAcaoTenants] = useState<AcaoTenants>(undefined)
+  const irPara = (destino: AbaN0, opcoes?: { sub?: SubParametros; acaoTenants?: AcaoTenants }) => {
+    setSubParametrosInicial(opcoes?.sub ?? null)
+    setAcaoTenants(opcoes?.acaoTenants)
+    setAba(destino)
+    requestAnimationFrame(() => areaConteudoRef.current?.scrollTo({ top: 0 }))
+  }
 
   /* "Posição dos menus" e "Posição do botão ⋮" do N0 (10/09/2026, Decisão 58
      — Parâmetros → Layout do Sistema → "Menus do N0"). Mesma mecânica do N1
@@ -2549,6 +3490,15 @@ export default function DevApp({ onEntrarComoTenant }: { onEntrarComoTenant: () 
       .filter(([k]) => posDeMenuN0(k) === 'menu')
       .map(([, a]) => ({ icon: a.icon, label: a.label, onClick: a.onClick, danger: a.danger })),
   ]
+  /* Botão voltar do Android (12/09/2026) — ver `src/voltarAndroid.ts`. As
+     telas de dentro (ficha de cliente, sub-parâmetro, extrato) registram o
+     próprio tratador; aqui fica só o nível do shell. */
+  usarBotaoVoltar(() => {
+    if (suporteGeralAberto) { setSuporteGeralAberto(false); return true }
+    if (abasVisiveis.length > 0 && aba !== abasVisiveis[0].key) { setAba(abasVisiveis[0].key); return true }
+    return false
+  })
+
   const menuN0NoTopo = menuPosN0 === 'topo' || menuPosN0 === 'topo_esquerda'
   const botaoMaisN0 = menuN0NoTopo ? <TopIconMenu dark items={itensMaisN0} /> : null
   const entradasRodapeN0 = (() => {
@@ -2633,19 +3583,22 @@ export default function DevApp({ onEntrarComoTenant }: { onEntrarComoTenant: () 
       {/* Igual ao Kit: a barra fica no nível do shell (acima do conteúdo de
           cada aba), persiste ao trocar de aba — só não aparece em
           Auditoria, mesma exceção do Kit. */}
-      {aba !== 'auditoria' && <FiltroDadosBar filtroDados={filtroDados} setFiltroDados={setFiltroDados} />}
+      {aba !== 'auditoria' && temDadosTeste && (
+        <FiltroDadosBar filtroDados={filtroDados} setFiltroDados={setFiltroDados} onLimpar={() => setApagarTesteAberto(true)} />
+      )}
+      {apagarTesteAberto && <ApagarDadosTesteSheet onClose={() => setApagarTesteAberto(false)} />}
 
-      <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
+      <div ref={areaConteudoRef} style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
         {suporteGeralAberto ? (
           <CentralSuporteN0 onClose={() => setSuporteGeralAberto(false)} />
         ) : (
           <>
-            {aba === 'inicio' && podeVerFuncN0('inicio') && <AbaInicio filtroDados={filtroDados} onIrPara={setAba} onAbrirSuporte={() => setSuporteGeralAberto(true)} />}
-            {aba === 'tenants' && podeVerFuncN0('tenants') && <AbaTenants onEntrarComoTenant={onEntrarComoTenant} filtroDados={filtroDados} />}
-            {aba === 'financeiro' && podeVerFuncN0('financeiro') && <AbaFinanceiro filtroDados={filtroDados} />}
-            {aba === 'auditoria' && podeVerFuncN0('auditoria') && <AbaAuditoria />}
-            {aba === 'parametros' && podeVerFuncN0('parametros') && <AbaParametros podeVerFuncN0={podeVerFuncN0} />}
-            {aba === 'indicadores' && podeVerFuncN0('indicadores') && <IndicadoresDevScreen filtroDados={filtroDados} />}
+            {aba === 'inicio' && podeVerFuncN0('inicio') && <AbaInicio key={`inicio-${resetAbaN0}`} filtroDados={filtroEfetivo} onIrPara={irPara} onAbrirSuporte={() => setSuporteGeralAberto(true)} />}
+            {aba === 'tenants' && podeVerFuncN0('tenants') && <AbaTenants key={`tenants-${acaoTenants ?? 'lista'}-${resetAbaN0}`} acaoInicial={acaoTenants} clienteInicial={clienteParaReabrir} aoAbrirClienteInicial={aoReabrirCliente} onEntrarComoTenant={onEntrarComoTenant} filtroDados={filtroEfetivo} />}
+            {aba === 'financeiro' && podeVerFuncN0('financeiro') && <AbaFinanceiro key={`financeiro-${resetAbaN0}`} filtroDados={filtroEfetivo} />}
+            {aba === 'auditoria' && podeVerFuncN0('auditoria') && <AbaAuditoria key={`auditoria-${resetAbaN0}`} />}
+            {aba === 'parametros' && podeVerFuncN0('parametros') && <AbaParametros key={`param-${subParametrosInicial ?? 'lista'}-${resetAbaN0}`} subInicial={subParametrosInicial} podeVerFuncN0={podeVerFuncN0} />}
+            {aba === 'indicadores' && podeVerFuncN0('indicadores') && <IndicadoresDevScreen key={`indic-${resetAbaN0}`} filtroDados={filtroEfetivo} />}
           </>
         )}
       </div>
@@ -2660,7 +3613,10 @@ export default function DevApp({ onEntrarComoTenant }: { onEntrarComoTenant: () 
           const acao = acoesN0[k]
           if (acao) { acao.onClick(); return }
           setSuporteGeralAberto(false)
+          setSubParametrosInicial(null)
+          setAcaoTenants(undefined)
           setAba(k as AbaN0)
+          setResetAbaN0((n) => n + 1)
         }}
       />
     </div>

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode, type CSSProperties } from 'react'
 import { Check, ChevronLeft, ChevronRight, X, type LucideIcon } from 'lucide-react'
 import { MORFO_HORIZONTAL_URI, MORFO_SIMBOLO_URI, PRODUTO_WORDMARK_URI } from './kitLogos'
+import { tituloCasoSeTexto } from '../tituloCaso'
 
 // Base compartilhada do Kit de Estrutura Mínima Morfo (09/09/2026, Decisão 48).
 //
@@ -60,6 +61,19 @@ export const KIT_BUILD = '2.0'
    pra evitar import circular com `PadraoUI.tsx`, que importa deste arquivo. */
 export const ESPACO_LINHA_KIT = 10
 
+/* Elevação de popup (12/09/2026, build 053) — ADAPTAÇÃO (G44 regra 3).
+   O Rafael: "todas telas de popup deve ter alguma diferença dela pra tela de
+   trás, alguma sombra ou borda, pois hoje ela está se misturando tanto no
+   claro quanto no escuro". As folhas do Kit (`Sheet`, `InfoDot`, painel do
+   "⋮") nasciam sem borda e com sombra fraca ou nenhuma — no tema claro o
+   painel é papel claro sobre um app claro, e o véu de 0.5 não bastava.
+   Estes dois valores são o par: quem separa é a borda, e a sombra dá a
+   profundidade. `SOMBRA_POPUP` vale nos dois temas (é um halo escuro, que
+   funciona sobre claro e sobre escuro); `bordaPopup(dark)` escolhe a linha. */
+export const SOMBRA_POPUP = '0 18px 44px rgba(20, 19, 25, 0.42), 0 2px 10px rgba(20, 19, 25, 0.18)'
+export const VEU_POPUP = 'rgba(28,27,34,0.62)'
+export const bordaPopup = (dark?: boolean) => `1px solid ${dark ? 'rgba(255,255,255,0.14)' : '#CFC8BD'}`
+
 /* ---- Kit L226: TELA_CHEIA_BASE ---- */
 export const TELA_CHEIA_BASE: CSSProperties = { position: 'fixed', top: 'var(--mloc-tela-top, 0px)', bottom: 'var(--mloc-tela-bottom, 0px)', left: 0, right: 0, margin: '0 auto', width: '100%', maxWidth: 'var(--mloc-tela-maxw, var(--mloc-maxw, 430px))', borderRadius: 'var(--mloc-tela-radius, 0px)', border: 'var(--mloc-tela-border, none)', boxShadow: 'var(--mloc-tela-shadow, none)' }
 
@@ -73,7 +87,7 @@ export function normalizeAddress(a: Partial<Endereco> | string | null | undefine
 
 /* ---- Kit L974-L977: iconBtnStyle, Field, inputStyle, Segmented ---- */
 export const iconBtnStyle: CSSProperties = { width: 36, height: 36, borderRadius: 10, border: 'none', background: SOFT, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }
-export function Field({ label, children, dark, right }: { label: ReactNode; children: ReactNode; dark?: boolean; right?: ReactNode }) { return <label style={{ display: 'block', marginTop: 0, marginBottom: 14 }}><span style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12.5, fontWeight: 700, color: dark ? '#C9C4D4' : TXT2, marginBottom: 6 }}><span>{label}</span>{right}</span>{children}</label> }
+export function Field({ label, children, dark, right }: { label: ReactNode; children: ReactNode; dark?: boolean; right?: ReactNode }) { return <label style={{ display: 'block', marginTop: 0, marginBottom: 14 }}><span style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12.5, fontWeight: 700, color: dark ? '#C9C4D4' : TXT2, marginBottom: 6 }}><span>{tituloCasoSeTexto(label) as ReactNode}</span>{right}</span>{children}</label> }
 export const inputStyle: CSSProperties = { width: '100%', boxSizing: 'border-box', padding: '12px 13px', borderRadius: 10, border: `1.5px solid ${LINE}`, fontSize: 15, background: BRANCO, color: INK, outline: 'none' }
 /* `dark` (achado no diff literal desta rodada, 11/09/2026 — Projeto Modelo hoje
    tem esse parâmetro em Segmented/Toggle, faltava aqui): variante pro tema
@@ -94,7 +108,29 @@ export function EmptyState({ icon: Icon, title, hint, dark }: { icon: LucideIcon
 export function Sheet({ title, onClose, children, resetScrollKey, dark }: { title: ReactNode; onClose: () => void; children: ReactNode; resetScrollKey?: unknown; dark?: boolean }) {
   const bodyRef = useRef<HTMLDivElement>(null)
   useEffect(() => { if (bodyRef.current) bodyRef.current.scrollTop = 0 }, [resetScrollKey])
-  return <div style={{ position: 'fixed', inset: 0, background: 'rgba(28,27,34,0.5)', zIndex: 40, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }} onClick={onClose}><div ref={bodyRef} onClick={e => e.stopPropagation()} style={{ background: dark ? DEV_CARD : PAPER, width: '100%', maxWidth: 'var(--mloc-sheet-maxw, var(--mloc-maxw, 430px))', maxHeight: 'calc(100% - 40px)', overflowY: 'auto', WebkitOverflowScrolling: 'touch', borderRadius: '20px 20px 0 0', padding: '18px 16px 28px' }}><div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}><h2 style={{ fontSize: 17, fontWeight: 800, color: dark ? '#fff' : INK, margin: 0, textTransform: 'none' }}>{title}</h2><button onClick={onClose} style={{ ...iconBtnStyle, background: dark ? 'rgba(255,255,255,0.08)' : SOFT }}><X size={18} color={dark ? '#fff' : INK} /></button></div>{children}</div></div>
+  /* CENTRALIZADA NA VERTICAL (12/09/2026, build 054) — o Rafael: "todos os
+     popups e janelas de textos 'i' devem abrir centralizados na tela
+     verticalmente e quando forem maiores devem rolar, mas nunca cortar nem
+     esconder nada".
+
+     Era uma folha colada na base (o padrão do Kit). Duas coisas mudam e nada
+     mais: o alinhamento do véu (`flex-end` → `center`) e o raio, que passa a
+     ser nos 4 cantos porque a folha deixou de encostar em qualquer borda.
+
+     O que NÃO muda, e é o que garante o "nunca cortar": `maxHeight` em
+     porcentagem da janela + `overflowY: auto` no painel. O véu tem padding
+     próprio, então sempre sobra margem visível em cima e embaixo — inclusive
+     com o teclado do celular aberto, que é quando a janela encurta. Mesmo
+     raciocínio da "centralização segura" já registrada no projeto: quem
+     centraliza é o item dentro de um contêiner que rola, nunca uma margem
+     negativa que empurra o topo pra fora do alcance. */
+  return <div style={{ position: 'fixed', inset: 0, background: VEU_POPUP, zIndex: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 12px' }} onClick={onClose}><div ref={bodyRef} onClick={e => e.stopPropagation()} style={{ background: dark ? DEV_CARD : PAPER, width: '100%', maxWidth: 'var(--mloc-sheet-maxw, var(--mloc-maxw, 430px))', maxHeight: '100%', overflowY: 'auto', WebkitOverflowScrolling: 'touch', borderRadius: 20, padding: '18px 16px 22px', border: bordaPopup(dark), boxShadow: SOMBRA_POPUP }}>{/* Cabeçalho GRUDADO no topo (12/09/2026, pedido do Rafael: "popup de
+      Gerenciar Permissões não tem botão de voltar — revise todas as telas desse
+      tipo"). O X sempre existiu, mas numa folha longa (o editor de perfil tem
+      dezenas de campos) ele rolava pra fora da tela e a pessoa ficava sem saída
+      visível. `sticky` com `top: -18` cancela o padding de topo do painel, então
+      o cabeçalho encosta na borda ao rolar. Vale pra TODA folha do app de uma
+      vez — é a mesma peça. */}<div style={{ position: 'sticky', top: -18, zIndex: 1, background: dark ? DEV_CARD : PAPER, margin: '-18px -16px 14px', padding: '18px 16px 10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}><h2 style={{ fontSize: 17, fontWeight: 800, color: dark ? '#fff' : INK, margin: 0, textTransform: 'none' }}>{tituloCasoSeTexto(title) as ReactNode}</h2><button onClick={onClose} data-testid="fechar-folha" aria-label="Fechar" style={{ ...iconBtnStyle, background: dark ? 'rgba(255,255,255,0.08)' : SOFT }}><X size={18} color={dark ? '#fff' : INK} /></button></div>{children}</div></div>
 }
 
 /* ---- Kit L1000-L1008: botões ---- */
@@ -245,3 +281,40 @@ export interface KitPlatform {
   branding?: { morfoTopo?: string; morfoExterna?: string; produtoExterna?: string; produtoTopo?: string }
 }
 export const KIT_LOGOS = { MORFO_SIMBOLO_URI, MORFO_HORIZONTAL_URI, PRODUTO_WORDMARK_URI }
+
+/* ---- Kit L2809-L2821: HScroll ---- */
+export function HScroll({ children, bg, dark, gap, grow }: { children: ReactNode; bg?: string; dark?: boolean; gap?: number; grow?: boolean }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const [canLeft, setCanLeft] = useState(false)
+  const [canRight, setCanRight] = useState(false)
+  const check = () => { const el = ref.current; if (!el) return; setCanLeft(el.scrollLeft > 4); setCanRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 4) }
+  useEffect(() => { check(); const el = ref.current; if (!el) return; const onResize = () => check(); window.addEventListener('resize', onResize); return () => window.removeEventListener('resize', onResize) })
+  const fadeBg = bg || (dark ? DEV_BG : PAPER)
+  return <div style={{ position: 'relative', minWidth: 0, flex: grow ? '1 1 auto' : undefined }}>
+    <style>{'.mloc-hscroll::-webkit-scrollbar{display:none;width:0;height:0}'}</style>
+    <div ref={ref} onScroll={check} className="mloc-hscroll" style={{ display: 'flex', gap: gap ?? 6, overflowX: 'auto', paddingBottom: 2, WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none', msOverflowStyle: 'none' }}>{children}</div>
+    {canLeft && <div style={{ position: 'absolute', top: 0, left: 0, bottom: 2, width: 22, background: `linear-gradient(to left, transparent, ${fadeBg})`, pointerEvents: 'none', display: 'flex', alignItems: 'center' }}><ChevronLeft size={13} color={dark ? '#9B96A8' : TXT3} /></div>}
+    {canRight && <div style={{ position: 'absolute', top: 0, right: 0, bottom: 2, width: 22, background: `linear-gradient(to right, transparent, ${fadeBg})`, pointerEvents: 'none', display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}><ChevronRight size={13} color={dark ? '#9B96A8' : TXT3} /></div>}
+  </div>
+}
+
+/* ---- Kit L2839-L2851: MultiFilterChips ---- (12/09/2026: entrou com a
+   reconstrução da Auditoria do N0, item 19 do Rafael — o Kit filtra "Tipo de
+   alteração" e "Origem (N0 × N1)" com esta peça; ela não existia aqui, e era
+   a justificativa registrada em `AbaAuditoria` pra os filtros faltarem.) */
+export function MultiFilterChips({ title, titleRight, options, selected, setSelected, extra, dark, allLabel }: {
+  title?: ReactNode; titleRight?: ReactNode; options: { v: string; l: string }[]
+  selected: string[]; setSelected: (f: (sel: string[]) => string[]) => void
+  extra?: ReactNode; dark?: boolean; allLabel?: string
+}) {
+  const toggle = (v: string) => setSelected((sel) => sel.includes(v) ? sel.filter((x) => x !== v) : [...sel, v])
+  const off = dark ? DEV_CARD : BRANCO; const border = dark ? 'transparent' : LINE; const text = dark ? '#C9C4D4' : TXT2; const accent = ACCENT
+  return <div>
+    {title && <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '0 2px 6px' }}><div style={{ fontSize: 11, fontWeight: 700, color: dark ? '#9B96A8' : TXT3 }}>{title}</div>{titleRight}</div>}
+    <HScroll dark={dark}>
+      <button onClick={() => setSelected(() => [])} style={{ flexShrink: 0, padding: '7px 13px', borderRadius: 999, border: `1.5px solid ${selected.length === 0 ? accent : border}`, background: selected.length === 0 ? accent : off, color: selected.length === 0 ? '#fff' : text, fontSize: 12.5, fontWeight: 700, whiteSpace: 'nowrap', cursor: 'pointer' }}>{allLabel || 'Todos'}</button>
+      {options.map((o) => <button key={o.v} onClick={() => toggle(o.v)} style={{ flexShrink: 0, padding: '7px 13px', borderRadius: 999, border: `1.5px solid ${selected.includes(o.v) ? accent : border}`, background: selected.includes(o.v) ? accent : off, color: selected.includes(o.v) ? '#fff' : text, fontSize: 12.5, fontWeight: 700, whiteSpace: 'nowrap', cursor: 'pointer' }}>{o.l}</button>)}
+      {extra}
+    </HScroll>
+  </div>
+}

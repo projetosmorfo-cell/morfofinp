@@ -47,7 +47,11 @@ export default function BarraMeta({
   return (
     <div>
       {rotulo && (
-        <div className={`linha ${icone ? 'linha-cabecalho-grupo' : ''}`} style={{ border: 'none', padding: 0 }}>
+        /* Item 7 da lista de 12/09/2026: o título e o "XX de XX" quebravam
+           linha dentro do card (medido a 430px). `.linha-barra-topo` trava o
+           valor numa linha só e deixa o rótulo encolher com reticências em
+           vez de empurrar tudo pra baixo. */
+        <div className={`linha linha-barra-topo ${icone ? 'linha-cabecalho-grupo' : ''}`} style={{ border: 'none', padding: 0 }}>
           <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             {icone}
             {rotulo}

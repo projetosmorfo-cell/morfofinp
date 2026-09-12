@@ -69,23 +69,47 @@ export function GraficoEntradaSaida({ entrada, saida }: { entrada: number; saida
   ]
   return (
     <Moldura titulo="ENTRADA × SAÍDA DO MÊS">
-      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: 28, height: ALTURA + 44 }}>
+      {/* 12/09/2026 (Rafael: "a legenda tem que estar centralizada em relação
+          a cada barra"): a versão anterior desenhava DUAS faixas irmãs — uma
+          com valor+barra, outra com os rótulos. O rótulo tinha largura fixa
+          de 54px (a da barra), mas a coluna de cima ficava com a largura do
+          VALOR, que é maior que 54px sempre que o número é longo. Com gaps
+          iguais e larguras diferentes, os centros das duas faixas não
+          coincidiam e o nome saía deslocado em relação à sua barra.
+          Agora é UMA coluna por barra, contendo valor + barra + rótulo: o
+          centro é o mesmo por construção, independente do tamanho do número.
+          A linha de base é a borda inferior do bloco valor+barra, não um
+          elemento à parte desenhado por cima. */}
+      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: 28 }}>
         {barras.map((b) => (
-          <div key={b.rotulo} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
-            <strong style={{ fontSize: 13, whiteSpace: 'nowrap' }}>{fmtBRL(b.valor)}</strong>
+          <div key={b.rotulo} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
             <div
               style={{
-                width: 54,
-                height: alturaDe(b.valor),
-                background: b.cor,
-                borderRadius: '4px 4px 0 0',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: 6,
+                borderBottom: '1px solid var(--borda)',
+                paddingBottom: 0,
+                width: '100%',
               }}
-            />
-            <span style={{ fontSize: 12, color: 'var(--texto-fraco)' }}>{b.rotulo}</span>
+            >
+              <strong style={{ fontSize: 13, whiteSpace: 'nowrap' }}>{fmtBRL(b.valor)}</strong>
+              <div
+                style={{
+                  width: 54,
+                  height: alturaDe(b.valor),
+                  background: b.cor,
+                  borderRadius: '4px 4px 0 0',
+                }}
+              />
+            </div>
+            <span style={{ textAlign: 'center', fontSize: 12, color: 'var(--texto-fraco)', marginTop: 6 }}>
+              {b.rotulo}
+            </span>
           </div>
         ))}
       </div>
-      <div style={{ borderTop: '1px solid var(--borda)', marginTop: -22 }} />
     </Moldura>
   )
 }
@@ -188,21 +212,35 @@ export function GraficoMargem({
           </text>
         </svg>
       </div>
+      {/* Item 16 da lista de 12/09/2026: esta legenda estourava a tela porque
+          `.valor-pos`/`.valor-neg` têm `white-space: nowrap` global (regra
+          criada pra valor monetário nunca quebrar no meio). Num parágrafo de
+          texto isso vira uma linha única mais larga que a coluna. Corrigido
+          na raiz, no `index.css`: parágrafo com essas classes volta a quebrar
+          linha; valor solto (span/strong) segue sem quebrar. */}
       {estourou && (
         <p className="valor-neg" style={{ margin: '0 0 8px', fontSize: 12.5, fontWeight: 700 }}>
           Estourou o teto em {fmtBRL(Math.abs(sobra))} — o mês inteiro já está comprometido.
         </p>
       )}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', rowGap: 4, columnGap: 10, fontSize: 12.5, marginTop: 4 }}>
-        <Fragmento cor="var(--vermelho)" rotulo="Já saiu (pago)" valor={jaPago} />
-        <Fragmento cor="var(--amarelo)" rotulo="Ainda vai sair (comprometido)" valor={totalComprometido} />
-        <Fragmento cor="var(--verde)" rotulo="Sobra real" valor={sobra} />
+        <Fragmento cor="var(--vermelho)" rotulo="Já saiu do teto (pago)" valor={jaPago} />
+        <Fragmento cor="var(--amarelo)" rotulo="Ainda vai sair do teto (comprometido)" valor={totalComprometido} />
+        <Fragmento cor="var(--verde)" rotulo="Sobra real do teto" valor={sobra} />
         <span style={{ color: 'var(--texto-fraco)', paddingTop: 4, borderTop: '1px solid var(--borda)' }}>Teto do mês</span>
         <strong style={{ paddingTop: 4, borderTop: '1px solid var(--borda)', whiteSpace: 'nowrap' }}>{fmtBRL(teto)}</strong>
       </div>
       <p className="texto-fraco" style={{ margin: '8px 0 0', fontSize: 11.5 }}>
         O comprometido soma o que já está lançado e ainda não foi pago com a conta fixa que ainda nem virou
         lançamento neste mês. O traço no arco marca onde o mês termina se nada mudar.
+        {/* Item 3 da lista de 12/09/2026: os números daqui não batem com o
+            "Saiu"/"A pagar" do Resumo do mês, e isso é de propósito — aqui é
+            teto de consumo, lá é caixa. Sem dizer isso na tela, a diferença
+            parece erro de cálculo. */}
+        <br />
+        Aqui entra só gasto de <strong>consumo</strong>, que é o que ocupa o teto. Aporte para cofrinho,
+        transferência e pagamento de fatura ficam de fora — por isso estes valores são menores que o
+        &ldquo;Saiu&rdquo; e o &ldquo;A pagar&rdquo; do Resumo do mês, que são visão de caixa e somam tudo.
       </p>
     </Moldura>
   )
@@ -258,7 +296,7 @@ export function GraficoMetasGrupos({ fatias }: { fatias: FatiaGrupo[] }) {
     return (
       <Moldura titulo="META POR GRUPO">
         <p className="texto-fraco" style={{ margin: 0, fontSize: 12.5 }}>
-          Nenhum grupo com meta cadastrada ainda — defina os percentuais em Configurações → Categorias e Grupos →
+          Nenhum grupo com meta cadastrada ainda — defina os percentuais em Configurações → Categorias, Grupos e Metas →
           Metas, ou pelo lápis ao lado de cada grupo aqui embaixo.
         </p>
       </Moldura>

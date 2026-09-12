@@ -157,7 +157,7 @@ export function FolhaFiltros({
     <div className="modal-fundo" onClick={onFechar}>
       <div className="modal-conteudo" onClick={(e) => e.stopPropagation()}>
         <div className="linha" style={{ border: 'none', padding: 0, marginBottom: 8 }}>
-          <h2 style={{ margin: 0 }}>Filtros e ordenação</h2>
+          <h2 style={{ margin: 0 }}>Filtros e Ordenação</h2>
           <button
             type="button"
             onClick={onFechar}
@@ -168,7 +168,7 @@ export function FolhaFiltros({
           </button>
         </div>
 
-        <label>Ordenar por data</label>
+        <label>Ordenar por Data</label>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           <ChipMulti valor="Mais recente ↓" ativo={ordemRascunho} onClick={() => setOrdemRascunho(true)} />
           <ChipMulti valor="Mais antigo ↑" ativo={!ordemRascunho} onClick={() => setOrdemRascunho(false)} />
@@ -186,7 +186,7 @@ export function FolhaFiltros({
           ))}
         </div>
 
-        <label>Status de pagamento</label>
+        <label>Status de Pagamento</label>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           {TODOS_STATUS.map((s) => (
             <ChipMulti
@@ -279,7 +279,7 @@ export function FolhaFiltros({
             />
           </div>
           <div style={{ flex: 1 }}>
-            <label>Data até</label>
+            <label>Data Até</label>
             <input
               type="date"
               value={rascunho.dataAte}

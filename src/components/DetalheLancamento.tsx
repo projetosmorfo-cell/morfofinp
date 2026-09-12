@@ -1,10 +1,11 @@
 import { useState, type FormEvent } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, type Periodicidade, type RegraRecorrencia, type Lancamento } from '../db'
-import { gerarIdSerie, gerarParcelas, ROTULOS_PERIODICIDADE, NOMES_DIA_SEMANA } from '../recorrencia'
+import { gerarIdSerie, gerarParcelas, reprocessarSerieAPartirDe, ROTULOS_PERIODICIDADE, NOMES_DIA_SEMANA } from '../recorrencia'
 import { fmtBRL, formatarMoeda, aplicarMascaraValor, paraNumero } from '../formatoMoeda'
 import SeletorCategoriaComIcone from './SeletorCategoriaComIcone'
 import MemoriaDescricao from './MemoriaDescricao'
+import { lerDoAmbiente, marcaDoAmbiente } from '../ambiente'
 
 function hoje() {
   return new Date().toISOString().slice(0, 10)
@@ -81,8 +82,8 @@ export default function DetalheLancamento({
   aoSalvarComSucesso?: () => void
   onFechar: () => void
 }) {
-  const categorias = useLiveQuery(() => db.categorias.orderBy('nome').toArray(), [])
-  const contas = useLiveQuery(() => db.contas.toArray(), [])
+  const categorias = useLiveQuery(() => lerDoAmbiente(db.categorias.orderBy('nome').toArray()), [])
+  const contas = useLiveQuery(() => lerDoAmbiente(db.contas.toArray()), [])
   const original = useLiveQuery(() => (alvoId != null ? db.lancamentos.get(alvoId) : undefined), [alvoId])
   // Par da transferência (a outra perna) — só buscado quando o lançamento
   // aberto já é metade de uma transferência (ver `transferenciaId` em
@@ -149,6 +150,23 @@ export default function DetalheLancamento({
     setDescricao(original.descricao)
     setValor(formatarMoeda(original.valor))
     setPago(original.pago !== false)
+    /* Item 9: abrir uma ocorrência de série mostra a recorrência dela já
+       preenchida — antes o formulário voltava sempre pra "Único". */
+    if (original.recorrencia) {
+      setRecorrencia(original.recorrencia)
+      if (original.periodicidade) setPeriodicidade(original.periodicidade)
+      if (original.regraRecorrencia?.tipo === 'diaFixo') {
+        setTipoRegra('diaFixo')
+        setDiaFixo(String(original.regraRecorrencia.dia))
+      } else if (original.regraRecorrencia?.tipo === 'diaUtil') {
+        setTipoRegra('diaUtil')
+        setDiaUtil(String(original.regraRecorrencia.diaUtil))
+      } else if (original.regraRecorrencia?.tipo === 'diaSemana') {
+        setTipoRegra('diaSemana')
+        setDiaSemana(String(original.regraRecorrencia.diaSemana))
+      }
+      if (original.parcelaN) setParcelaN(String(original.parcelaN))
+    }
     if (ehTransferenciaExistente && parTransferencia) {
       const legOrigem = parTransferencia.find((l) => l.valor < 0) ?? original
       const legDestino = parTransferencia.find((l) => l.valor > 0) ?? original
@@ -183,7 +201,15 @@ export default function DetalheLancamento({
   // ÚNICO, porém, pode virar fixo/parcelado também na edição (pedido do
   // Rafael) — nesse caso o formulário mostra as mesmas opções da criação.
   const jaTemSerie = editando && !!original?.recorrencia
-  const podeEscolherRecorrencia = !jaTemSerie && tipo !== 'transferencia'
+  /* Item 9 da lista de 12/09/2026: "ao incluir/editar com recorrência, o campo
+     recorrência não aparece mais ao editar de novo e deveria; deve reprocessar
+     ao salvar". O campo ficava escondido justamente quando o lançamento JÁ
+     pertencia a uma série — ou seja, exatamente quando ele importa. Agora
+     aparece sempre (menos em transferência, que não tem recorrência), já
+     preenchido com o que está gravado, e salvar reprocessa a série a partir
+     desta ocorrência (ver `reprocessarSerieAPartirDe` em `recorrencia.ts`:
+     nunca mexe no que já foi pago, nunca duplica). */
+  const podeEscolherRecorrencia = tipo !== 'transferencia'
 
   function trocarAba(novaAba: TipoLancamento) {
     if (novaAba === 'transferencia' && contaOrigemId === '') {
@@ -326,6 +352,7 @@ export default function DetalheLancamento({
       const transferenciaId = gerarIdSerie()
       await db.lancamentos.bulkAdd([
         {
+          ...marcaDoAmbiente(),
           dataCompetencia: data,
           dataCaixa: data,
           descricao: descricaoTransf,
@@ -339,6 +366,7 @@ export default function DetalheLancamento({
           transferenciaId,
         },
         {
+          ...marcaDoAmbiente(),
           dataCompetencia: data,
           dataCaixa: data,
           descricao: descricaoTransf,
@@ -374,8 +402,22 @@ export default function DetalheLancamento({
 
     if (editando && alvoId != null) {
       if (jaTemSerie) {
-        // Editar sempre atualiza só a ocorrência aberta (não a série
-        // inteira) quando já pertence a uma série — simples e previsível.
+        /* Item 9 (12/09/2026): salvar uma ocorrência de série passou a
+           REPROCESSAR a série a partir dela — não é mais só "edita esta
+           ocorrência e pronto". A ocorrência aberta recebe também os
+           parâmetros de recorrência escolhidos agora (nº de parcelas,
+           periodicidade, regra do dia); `reprocessarSerieAPartirDe` cuida do
+           resto: apaga só o que vem depois e ainda não foi pago, e regenera
+           dali pra frente. Nada do que já foi pago é tocado, e nada é
+           duplicado (a rotina confere antes de gravar). */
+        const regraEditada: RegraRecorrencia =
+          tipoRegra === 'diaFixo'
+            ? { tipo: 'diaFixo', dia: Math.min(31, Math.max(1, Number(diaFixo) || 1)) }
+            : tipoRegra === 'diaUtil'
+              ? { tipo: 'diaUtil', diaUtil: Math.min(23, Math.max(1, Number(diaUtil) || 1)) }
+              : { tipo: 'diaSemana', diaSemana: Math.min(6, Math.max(0, Number(diaSemana))) }
+        const nParcelas = Math.max(1, Math.round(Number(parcelaN)) || (original?.parcelaN ?? 1))
+        const recorrenciaFinal = recorrencia === 'unico' ? original!.recorrencia! : recorrencia
         await db.lancamentos.update(alvoId, {
           dataCompetencia: data,
           dataCaixa: data,
@@ -384,7 +426,27 @@ export default function DetalheLancamento({
           categoriaId: Number(categoriaId),
           contaId: contaEscolhidaId,
           pago,
+          recorrencia: recorrenciaFinal,
+          ...(recorrenciaFinal === 'fixo'
+            ? { periodicidade, regraRecorrencia: regraEditada }
+            : { parcelaN: nParcelas }),
         })
+        if (original?.serieId) {
+          await reprocessarSerieAPartirDe(original.serieId, {
+            dataCompetencia: data,
+            valor: valorComSinal,
+            descricao: descricao || '(sem descrição)',
+            descricaoOriginal: original.descricaoOriginal,
+            categoriaId: Number(categoriaId),
+            contaId: contaEscolhidaId,
+            pagoPor: original.pagoPor,
+            recorrencia: recorrenciaFinal,
+            parcelaI: original.parcelaI,
+            parcelaN: nParcelas,
+            periodicidade,
+            regraRecorrencia: regraEditada,
+          })
+        }
         fecharAposSalvar()
         return
       }
@@ -411,6 +473,7 @@ export default function DetalheLancamento({
         if (resto.length > 0) {
           await db.lancamentos.bulkAdd(
             resto.map((p) => ({
+              ...marcaDoAmbiente(),
               dataCompetencia: p.data,
               dataCaixa: p.data,
               descricao: descricao || '(sem descrição)',
@@ -476,6 +539,7 @@ export default function DetalheLancamento({
       const serieId = gerarIdSerie()
       await db.lancamentos.bulkAdd(
         parcelas.map((p) => ({
+          ...marcaDoAmbiente(),
           dataCompetencia: p.data,
           dataCaixa: p.data,
           descricao: descricao || '(sem descrição)',
@@ -504,6 +568,7 @@ export default function DetalheLancamento({
             ? { tipo: 'diaUtil', diaUtil: Math.min(23, Math.max(1, Number(diaUtil) || 1)) }
             : { tipo: 'diaSemana', diaSemana: Math.min(6, Math.max(0, Number(diaSemana))) }
       await db.lancamentos.add({
+        ...marcaDoAmbiente(),
         dataCompetencia: data,
         dataCaixa: data,
         descricao: descricao || '(sem descrição)',
@@ -524,6 +589,7 @@ export default function DetalheLancamento({
     }
 
     await db.lancamentos.add({
+      ...marcaDoAmbiente(),
       dataCompetencia: data,
       dataCaixa: data,
       descricao: descricao || '(sem descrição)',
@@ -658,7 +724,7 @@ export default function DetalheLancamento({
             className={campoComErro === 'valor' ? 'campo-com-erro' : undefined}
           />
 
-          <label htmlFor="dl-descricao">O que foi</label>
+          <label htmlFor="dl-descricao">O que Foi</label>
           <MemoriaDescricao
             id="dl-descricao"
             placeholder="Ex.: Mercado do mês"
@@ -691,7 +757,7 @@ export default function DetalheLancamento({
                     </option>
                   ))}
               </select>
-              <label htmlFor="dl-categoria-origem">Categoria de saída</label>
+              <label htmlFor="dl-categoria-origem">Categoria de Saída</label>
               <select
                 id="dl-categoria-origem"
                 value={categoriaOrigemId}
@@ -724,7 +790,7 @@ export default function DetalheLancamento({
                     </option>
                   ))}
               </select>
-              <label htmlFor="dl-categoria-destino">Categoria de entrada</label>
+              <label htmlFor="dl-categoria-destino">Categoria de Entrada</label>
               <select
                 id="dl-categoria-destino"
                 value={categoriaDestinoId}
@@ -821,7 +887,7 @@ export default function DetalheLancamento({
 
                   {usaDiaDoMes ? (
                     <>
-                      <label htmlFor="dl-tipo-regra">Regra do dia</label>
+                      <label htmlFor="dl-tipo-regra">Regra do Dia</label>
                       <select id="dl-tipo-regra" value={tipoRegra} onChange={(e) => setTipoRegra(e.target.value as TipoRegraUI)}>
                         <option value="diaFixo">Dia fixo do mês</option>
                         <option value="diaUtil">Dia útil do mês</option>
@@ -852,7 +918,7 @@ export default function DetalheLancamento({
                     </>
                   ) : (
                     <>
-                      <label htmlFor="dl-dia-semana">Dia da semana</label>
+                      <label htmlFor="dl-dia-semana">Dia da Semana</label>
                       <select id="dl-dia-semana" value={diaSemana} onChange={(e) => setDiaSemana(e.target.value)}>
                         {NOMES_DIA_SEMANA.map((nome, i) => (
                           <option key={i} value={i}>
@@ -871,7 +937,7 @@ export default function DetalheLancamento({
 
               {recorrencia === 'parcelado' && (
                 <div className="cartao" style={{ marginTop: 8, background: 'var(--bg)' }}>
-                  <label htmlFor="dl-parcela-n">Quantidade de parcelas</label>
+                  <label htmlFor="dl-parcela-n">Quantidade de Parcelas</label>
                   <input
                     id="dl-parcela-n"
                     type="number"

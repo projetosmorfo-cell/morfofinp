@@ -68,7 +68,13 @@ function PerfilEditSheet({ funcs, initial, onClose, onSave, dark }: {
         </div>)}
       </div>}
     </div>)}
-    <button disabled={!canSave} style={{ ...primaryBtn, width: '100%', opacity: canSave ? 1 : 0.5 }} onClick={() => onSave({ nome: nome.trim(), permissoes })}><Check size={16} /> Salvar perfil</button>
+    {/* Saída também no FIM da folha (12/09/2026, item 25 do Rafael): esta é a
+        folha mais longa do app; quem rola até o fim precisa poder voltar sem
+        subir tudo de novo. O cabeçalho grudado (kitBase › Sheet) cobre o resto. */}
+    <div style={{ display: 'flex', gap: 8 }}>
+      <button style={{ ...secondaryBtn, flex: 1 }} onClick={onClose}>Voltar</button>
+      <button disabled={!canSave} style={{ ...primaryBtn, flex: 2, opacity: canSave ? 1 : 0.5 }} onClick={() => onSave({ nome: nome.trim(), permissoes })}><Check size={16} /> Salvar perfil</button>
+    </div>
   </Sheet>
 }
 

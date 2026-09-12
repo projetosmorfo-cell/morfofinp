@@ -35,6 +35,14 @@ export interface Conta {
   diaFechamento?: number
   diaVencimento?: number
   contaPagamentoPadraoId?: number
+  /* ---- Escopo por AMBIENTE (12/09/2026, itens 13/14/15/23 do Rafael) ----
+     Qual ambiente (tenant) é dono deste registro. AUSENTE = o ambiente deste
+     aparelho (`t0`), que é como todo o histórico real dele já está gravado —
+     por isso o campo é opcional e nada precisou ser migrado. Só é preenchido
+     quando o painel N0 está operando DENTRO de outro cliente (gerar massa,
+     limpar dados, entrar como o tenant). Não é índice: a filtragem acontece
+     em memória, sobre tabelas que o app já carrega inteiras. */
+  ambienteId?: string
 }
 
 export type Natureza =
@@ -101,6 +109,16 @@ export interface Categoria {
   // inferir de lançamento recorrente) — usado na tela Planejamento como
   // "Planejado de Entrada" dessa categoria.
   esperadoMensal?: number
+  /* Receita FIXA — a base de cálculo das metas (12/09/2026, pedido do Rafael).
+     Só faz sentido em categoria de natureza Receita, e é opcional: a pessoa
+     marca quais receitas dela são previsíveis todo mês (salário, pró-labore,
+     aluguel recebido). A soma dos lançamentos das categorias marcadas, NO MÊS
+     ATUAL, é o 100% sobre o qual os percentuais de meta de grupo incidem.
+     Substitui a regra antiga, que era "a categoria chamada Salário, do mês
+     anterior" — hardcode de nome, e de um mês que não é o que está na tela.
+     `Salário` nasce marcada (semente e padrão do N0), para que a base não mude
+     de valor em nenhuma instalação existente por causa desta troca. */
+  receitaFixa?: boolean
   // Vincula esta categoria a uma conta específica — em geral um cofrinho
   // (Conta tipo 'cofre') — pra que um lançamento NESTA categoria, mesmo pago
   // por outra conta (ex.: pagar direto pelo Bradesco usando essa categoria
@@ -120,6 +138,14 @@ export interface Categoria {
   icone?: string
   iconeEstilo?: 'colorido' | 'preenchido' | 'borda'
   iconeCor?: string
+  /* ---- Escopo por AMBIENTE (12/09/2026, itens 13/14/15/23 do Rafael) ----
+     Qual ambiente (tenant) é dono deste registro. AUSENTE = o ambiente deste
+     aparelho (`t0`), que é como todo o histórico real dele já está gravado —
+     por isso o campo é opcional e nada precisou ser migrado. Só é preenchido
+     quando o painel N0 está operando DENTRO de outro cliente (gerar massa,
+     limpar dados, entrar como o tenant). Não é índice: a filtragem acontece
+     em memória, sobre tabelas que o app já carrega inteiras. */
+  ambienteId?: string
 }
 
 // Grupo virou cadastro de verdade (30/08/2026) — antes era só um union type
@@ -142,6 +168,14 @@ export interface GrupoRegistro {
   icone?: string
   iconeEstilo?: 'colorido' | 'preenchido' | 'borda'
   iconeCor?: string
+  /* ---- Escopo por AMBIENTE (12/09/2026, itens 13/14/15/23 do Rafael) ----
+     Qual ambiente (tenant) é dono deste registro. AUSENTE = o ambiente deste
+     aparelho (`t0`), que é como todo o histórico real dele já está gravado —
+     por isso o campo é opcional e nada precisou ser migrado. Só é preenchido
+     quando o painel N0 está operando DENTRO de outro cliente (gerar massa,
+     limpar dados, entrar como o tenant). Não é índice: a filtragem acontece
+     em memória, sobre tabelas que o app já carrega inteiras. */
+  ambienteId?: string
 }
 
 export type StatusLancamento = 'importado' | 'conciliado' | 'manual'
@@ -234,6 +268,14 @@ export interface Lancamento {
   // função que decide o rótulo (Pago/Recebido/Atrasado/A pagar/A receber) e
   // nunca ler esse campo direto fora dali.
   pago?: boolean
+  /* ---- Escopo por AMBIENTE (12/09/2026, itens 13/14/15/23 do Rafael) ----
+     Qual ambiente (tenant) é dono deste registro. AUSENTE = o ambiente deste
+     aparelho (`t0`), que é como todo o histórico real dele já está gravado —
+     por isso o campo é opcional e nada precisou ser migrado. Só é preenchido
+     quando o painel N0 está operando DENTRO de outro cliente (gerar massa,
+     limpar dados, entrar como o tenant). Não é índice: a filtragem acontece
+     em memória, sobre tabelas que o app já carrega inteiras. */
+  ambienteId?: string
 }
 
 export interface Meta {
@@ -243,6 +285,14 @@ export interface Meta {
   base: 'receita_real' | 'valor_fixo'
   valorFixo?: number
   mesVigencia: string // yyyymm
+  /* ---- Escopo por AMBIENTE (12/09/2026, itens 13/14/15/23 do Rafael) ----
+     Qual ambiente (tenant) é dono deste registro. AUSENTE = o ambiente deste
+     aparelho (`t0`), que é como todo o histórico real dele já está gravado —
+     por isso o campo é opcional e nada precisou ser migrado. Só é preenchido
+     quando o painel N0 está operando DENTRO de outro cliente (gerar massa,
+     limpar dados, entrar como o tenant). Não é índice: a filtragem acontece
+     em memória, sobre tabelas que o app já carrega inteiras. */
+  ambienteId?: string
 }
 
 export interface SaldoInformado {
@@ -250,6 +300,14 @@ export interface SaldoInformado {
   contaId: number
   dataReferencia: string // yyyymm
   saldoInformado: number
+  /* ---- Escopo por AMBIENTE (12/09/2026, itens 13/14/15/23 do Rafael) ----
+     Qual ambiente (tenant) é dono deste registro. AUSENTE = o ambiente deste
+     aparelho (`t0`), que é como todo o histórico real dele já está gravado —
+     por isso o campo é opcional e nada precisou ser migrado. Só é preenchido
+     quando o painel N0 está operando DENTRO de outro cliente (gerar massa,
+     limpar dados, entrar como o tenant). Não é índice: a filtragem acontece
+     em memória, sobre tabelas que o app já carrega inteiras. */
+  ambienteId?: string
 }
 
 export interface Usuario {
@@ -281,10 +339,23 @@ export interface ConfiguracaoIcones {
   // `src/configuracaoIcones.ts`. Campo aditivo, não indexado, sem bump de
   // schema (mesma regra de sempre pra esta tabela singleton).
   pctGrupoRevisado?: boolean
+  /* Marca da migração da flag "receita fixa" (build 053). Ver
+     `migrarReceitaFixa()` em `src/baseMeta.ts`: a flag nasceu marcada só em
+     banco NOVO, então toda base criada antes da build 051 ficava com a base
+     das metas em R$ 0,00. Roda uma vez e nunca mais. */
+  receitaFixaRevisada?: boolean
   // Marca de que a migração de tipo de grupo (entrada × saída) já rodou nesta
   // instalação (11/09/2026) — ver `migrarTipoDosGrupos()` em
   // `src/gruposUtil.ts`. Mesma regra do campo acima: aditivo, não indexado.
   gruposTipoRevisado?: boolean
+  // Padrão de Categorias/Grupos/ícones da plataforma (12/09/2026, item 7 do
+  // Rafael). `padraoCatVersaoAplicada` é a versão do padrão do N0 que ESTE
+  // ambiente já recebeu; `catsEditadasPeloUsuario` marca que a pessoa mexeu
+  // no próprio cadastro — a partir daí o padrão novo não é mais empurrado por
+  // cima (é exatamente o "pros N1 que não editaram" do pedido). Aditivos, não
+  // indexados, sem bump de schema — mesma regra desta tabela singleton.
+  padraoCatVersaoAplicada?: number
+  catsEditadasPeloUsuario?: boolean
   // `modoVisao` (04/09/2026, pedido do Rafael): visão "Light" (simplificada —
   // só Resumo/Lançamentos/Carteira no rodapé) vs. "Premium" (todas as 5
   // abas, o app como é hoje). Mesmo raciocínio de sempre pra campo aditivo
@@ -317,6 +388,20 @@ export interface ConfiguracaoIcones {
   // Kit). Campo aditivo, não indexado, sem bump de schema.
   // Ausente/undefined = 'escuro' (o app como sempre foi, Etapa 4).
   temaPreferido?: 'claro' | 'escuro' | 'auto'
+  // Aviso de permissões da notificação bancária (12/09/2026, pedido do
+  // Rafael: "ao abrir o app, apareça um popup com esses dados e os 2 botões,
+  // enquanto não forem fornecidas as permissões [...] com a opção de lembrar
+  // mais tarde ou não mostrar novamente"). `permissoesAdiadasEm` é a data ISO
+  // do "Lembrar mais tarde" (o popup volta no dia seguinte);
+  // `permissoesNuncaMostrar` é o "Não mostrar novamente" — as duas ficam sem
+  // efeito assim que as duas permissões estiverem concedidas (o popup só
+  // existe enquanto falta alguma). Campos aditivos, sem bump de schema.
+  /* Qual ambiente está logado no N1 (12/09/2026, correção do login dos
+     clientes cadastrados no N0 — ver `auth.ts`). Ausente = o ambiente deste
+     aparelho (`t0`), que é o comportamento de sempre. */
+  loggedTenantIdN1?: string
+  permissoesAdiadasEm?: string
+  permissoesNuncaMostrar?: boolean
   // Memória do campo "O que foi" (10/09/2026, pedido do Rafael: "sugere lista
   // dos últimos registros conforme digita; essa memória é parâmetro de nível 1
   // do ambiente do cliente, em DIAS PRA TRÁS, padrão 60 dias"). Quantos dias
@@ -474,6 +559,19 @@ export interface ConfiguracaoIcones {
   // campo do mesmo singleton. Ausente = massa de demonstração do próprio Kit
   // (`gerarPlatformN0()`, valores do MorfoMod — G55).
   platformN0?: PlatformN0
+  /* Ambiente que o app está exibindo agora (itens 13/14/15/23, 12/09/2026).
+     Ausente = o ambiente deste aparelho. Só muda quando o administrador Morfo
+     entra num cliente pelo painel N0. Fica no singleton (e não em memória) pra
+     a escolha sobreviver a um reload no meio de um teste. */
+  ambienteAtivoId?: string
+  /* Item 6 (12/09/2026): o tour guiado abre a cada abertura do app até a
+     pessoa marcar "Não exibir novamente" — é este campo que guarda a escolha. */
+  tourNaoExibir?: boolean
+  /* Qual versão do padrão de Categorias/Grupos cada ambiente já recebeu
+     (item 15, 12/09/2026). Antes era um número único (`padraoCatVersaoAplicada`,
+     mantido por compatibilidade): um cliente novo nunca recebia o padrão
+     porque o aparelho já tinha "consumido" aquela versão. */
+  padraoCatVersaoPorAmbiente?: Record<string, number>
 }
 
 // "Gerenciar Planos" (08/09/2026, G59 — item aprovado pro N0). Antes
@@ -514,6 +612,9 @@ export interface PlanoRegistro {
   gratuito?: boolean
   validadeDias?: number | null
   // Limite de usuários do ambiente que contrata este plano.
+  /* Sem uso desde 12/09/2026 (o ambiente do cliente é de um usuário só):
+     o campo continua no tipo pra não invalidar plano gravado antes disso,
+     mas nenhuma tela lê nem escreve mais. */
   limiteUsuarios?: number
   // Frase curta de venda ("pra quem é esse plano").
   descricaoCurta?: string
@@ -567,6 +668,14 @@ export interface NotificacaoPendente {
   tipo?: 'saida' | 'entrada' // palpite pela leitura do texto
   status: StatusNotificacao
   lancamentoId?: number // preenchido ao confirmar
+  /* ---- Escopo por AMBIENTE (12/09/2026, itens 13/14/15/23 do Rafael) ----
+     Qual ambiente (tenant) é dono deste registro. AUSENTE = o ambiente deste
+     aparelho (`t0`), que é como todo o histórico real dele já está gravado —
+     por isso o campo é opcional e nada precisou ser migrado. Só é preenchido
+     quando o painel N0 está operando DENTRO de outro cliente (gerar massa,
+     limpar dados, entrar como o tenant). Não é índice: a filtragem acontece
+     em memória, sobre tabelas que o app já carrega inteiras. */
+  ambienteId?: string
 }
 
 // Versão dos DADOS DE SEMENTE (não é versão de schema — isso é o `.version()`

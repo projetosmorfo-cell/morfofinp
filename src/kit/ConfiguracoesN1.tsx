@@ -58,16 +58,17 @@ import { GroupLabelCompact, MenuGroup } from './PadraoUI'
 import type { ItemMenuCompacto } from './PadraoUI'
 import {
   User, LifeBuoy, Bell, Building2, CreditCard, List, Tag, Wallet,
-  Wrench, AlertTriangle, LogOut,
+  Wrench,
 } from 'lucide-react'
 import { useTemaEfetivo } from '../configuracaoIcones'
+import { emTituloCaso } from '../tituloCaso'
 
 /* As chaves são exatamente as de `ItemMenuEngrenagem` em `App.tsx` — a tela
    não inventa destino nenhum, só reorganiza os que já existiam. */
 export type ChaveConfigN1 =
   | 'meusDados' | 'categorias' | 'contas' | 'notificacoes'
   | 'meuAmbiente' | 'assinatura' | 'ajuda' | 'layout'
-  | 'manutencao' | 'limpar' | 'sair'
+  | 'manutencao'
 
 interface DefItem {
   key: ChaveConfigN1
@@ -80,7 +81,7 @@ interface DefItem {
 
 const SESSAO_1: DefItem[] = [
   { key: 'meusDados', icon: User, titulo: 'Meus Dados', resumo: 'Seu nome, login, contato e troca de senha' },
-  { key: 'categorias', icon: Tag, titulo: 'Categorias e Grupos', resumo: 'Como seus lançamentos são classificados' },
+  { key: 'categorias', icon: Tag, titulo: 'Categorias, Grupos e Metas', resumo: 'Como seus lançamentos são classificados' },
   { key: 'contas', icon: Wallet, titulo: 'Contas e carteiras', resumo: 'Onde o dinheiro entra e sai — bancos, cartões e dinheiro' },
   { key: 'notificacoes', icon: Bell, titulo: 'Notificações bancárias', resumo: 'Avisos do banco lidos e transformados em lançamento' },
   { key: 'ajuda', icon: LifeBuoy, titulo: 'Ajuda', resumo: 'Suporte por chat e tour guiado do sistema' },
@@ -92,10 +93,12 @@ const SESSAO_2: DefItem[] = [
   { key: 'layout', icon: List, titulo: 'Layout e Menus', resumo: 'Visão Light × Premium, ordem do rodapé e destes itens' },
 ]
 
+/* 12/09/2026 (pedido do Rafael): "Limpar Dados" e "Sair" saíram da tela
+   principal de Configurações — as duas continuam existindo, dentro de
+   "Manutenção e Saída", junto do backup (que a limpeza agora oferece antes de
+   apagar). O menu principal deixa de ter ação destrutiva de 1 toque. */
 const SESSAO_3: DefItem[] = [
-  { key: 'manutencao', icon: Wrench, titulo: 'Manutenção e dados', resumo: 'Tour, ferramentas de teste, exportar ícones e diagnóstico' },
-  { key: 'limpar', icon: AlertTriangle, titulo: 'Limpar todos os dados', resumo: 'Apaga seus lançamentos — zona de risco', destrutivo: true },
-  { key: 'sair', icon: LogOut, titulo: 'Sair', resumo: 'Encerrar a sessão neste aparelho', destrutivo: true },
+  { key: 'manutencao', icon: Wrench, titulo: 'Manutenção e Saída', resumo: 'Backup, limpar dados, ferramentas de teste e sair do app' },
 ]
 
 /* A ordem salva pelo usuário reordena DENTRO da sessão; quem não está na
@@ -119,16 +122,19 @@ export default function ConfiguracoesN1({
      do produto), então o tema efetivo do N1 é traduzido aqui — é isso que faz
      a tela de parâmetros respeitar claro/escuro sem sair do layout do Kit. */
   const dark = useTemaEfetivo() === 'escuro'
-  const visivel = (d: DefItem) => d.key === 'sair' || !podeVer || podeVer(d.key)
+  const visivel = (d: DefItem) => !podeVer || podeVer(d.key)
   const monta = (defs: DefItem[]): ItemMenuCompacto[] =>
     ordenar(defs, ordem).filter(visivel).map((d) => ({
       key: d.key,
       icon: d.icon,
-      titulo: d.titulo,
+      titulo: emTituloCaso(d.titulo),
       resumo: d.resumo,
       destrutivo: d.destrutivo,
       badge: d.key === 'ajuda' ? chatNaoLida : undefined,
-      dataTour: d.key === 'ajuda' ? 'n1-ajuda-card' : undefined,
+      /* Item 6 (12/09/2026): o tour guiado termina apontando pra "Contas e
+         Carteiras" e "Categorias, Grupos e Metas" — por isso os dois ganharam
+         marca própria, além da que a Ajuda já tinha. */
+      dataTour: d.key === 'ajuda' ? 'n1-ajuda-card' : d.key === 'contas' ? 'cfg-contas' : d.key === 'categorias' ? 'cfg-categorias' : undefined,
       onClick: () => onAbrir(d.key),
     }))
 

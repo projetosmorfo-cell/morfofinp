@@ -1,11 +1,11 @@
-import { useRef, useState, type CSSProperties, type Dispatch, type SetStateAction } from 'react'
+import { useRef, useState, type CSSProperties, type Dispatch, type ReactNode, type SetStateAction } from 'react'
 import { ArrowRight, Building, Check, CheckCircle2, FileText, KeyRound, List, Mail, QrCode, UserPlus, X } from 'lucide-react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../db'
 import {
   AMBER, BRANCO, CORAL, GREEN, INK, LINE, PAPER, PURPLE, PURPLE_DEEP, RED, TXT2, TXT3, KIT_BUILD, TELA_CHEIA_BASE,
   EmptyState, Field, FieldError, PhoneComWhats, SectionLabel, Segmented, Sheet, TopBar,
-  alpha, fmtBRL, inputStyle, linkBtnSmall, primaryBtn, renderRico, secondaryBtn, validaEmailEnvio, validaTelefone,
+  alpha, fmtBRL, inputStyle, linkBtnSmall, primaryBtn, renderRico, secondaryBtn, validaCPF, validaEmailEnvio, validaTelefone,
   type KitPlan, type KitPlatform, type KitUser, type SitePage,
 } from './kitBase'
 import { NOME_PRODUTO, SITE_LOGIN_PAGE_ID, SITE_PLANOS_PAGE_ID, BlocoLogosLogin, SiteHeaderWeb, SiteNavHorizontalWeb, SiteNavVerticalWeb, loginPageCfgDe, montarPlatformSite, paginasSiteComLogin, sitePagesDe, siteWebLayoutDe } from './siteKit'
@@ -144,11 +144,14 @@ function AceitarConviteSheet({ platform, setPlatform, onClose, onEntrar }: { pla
    "Registros de Entidade A". Com os campos presentes, o cálculo é o do Kit. */
 function planFeaturesAuto(plano: KitPlan | undefined) {
   if (!plano) return []
-  if (plano.userLimit == null && plano.itemLimit === undefined && !plano.restrictions) return [...(plano.features || [])]
+  /* 12/09/2026: "limite de usuários" saiu do produto inteiro (o ambiente é
+     de um usuário só desde a Decisão 67), então a linha automática dele
+     também sai daqui — a lista de venda nunca promete um limite que não
+     existe mais. */
+  if (plano.itemLimit === undefined && !plano.restrictions) return [...(plano.features || [])]
   const r = plano.restrictions || {}
   const list = [
-    plano.itemLimit ? `Até ${plano.itemLimit} registros de Entidade A` : 'Registros de Entidade A ilimitados',
-    `${plano.userLimit} usuário${(plano.userLimit ?? 0) > 1 ? 's' : ''}`,
+    ...(plano.itemLimit ? [`Até ${plano.itemLimit} registros de Entidade A`] : []),
     r.exportacaoDetalhada ? 'Exportação detalhada (CSV/PDF completo)' : 'Exportação simples',
     r.layoutPersonalizado ? 'Layout e menus personalizáveis' : 'Layout padrão da Morfo',
   ]
@@ -178,36 +181,73 @@ function PlanoCard({ plano, selected, onSelect }: { plano: KitPlan; selected: bo
    telefone —, e é esse usuário que fica como o único acesso do ambiente.
    `companyName` continua no payload porque é o NOME DO AMBIENTE no resto do
    app (barra do topo, painel N0); recebe o nome da pessoa. */
-export interface SelfRegisterPayload { companyName: string; ownerName: string; phone: string; hasWhatsapp: boolean; email: string; login: string; senha: string; planoContratado: KitPlan | undefined; paymentMethod: string | null; primeiraCobrancaPaga: boolean; autoLiberado: boolean }
-function ContratarPacoteFlow({ plans, onClose, onFinish }: { plans: KitPlan[]; onClose: () => void; onFinish: (payload: SelfRegisterPayload) => void }) {
+export interface SelfRegisterPayload { companyName: string; ownerName: string; phone: string; hasWhatsapp: boolean; email: string; doc?: string; login: string; senha: string; planoContratado: KitPlan | undefined; paymentMethod: string | null; primeiraCobrancaPaga: boolean; autoLiberado: boolean }
+export interface DadosIniciaisContratacao {
+  ownerName?: string
+  phone?: string
+  hasWhatsapp?: boolean
+  email?: string
+  doc?: string
+  login?: string
+}
+
+export function ContratarPacoteFlow({ plans, onClose, onFinish, iniciais, extrato, tituloPasso1 }: {
+  plans: KitPlan[]
+  onClose: () => void
+  onFinish: (payload: SelfRegisterPayload) => void
+  /* Pré-preenchimento (12/09/2026, item 3): quando este fluxo é aberto por um
+     acesso BLOQUEADO, os dados do cliente já existem — repetir digitação é
+     atrito puro. O Kit não prevê isso porque lá o fluxo só nasce no site
+     deslogado, onde ninguém é conhecido ainda. */
+  iniciais?: DadosIniciaisContratacao
+  /* Bloco livre mostrado no passo 1, acima dos planos — é onde entra o extrato
+     de pagamentos pendentes ("na tela dos planos deve ter extrato de pagamentos
+     pendentes caso exista pra permitir clicar e pagar, ou trocar de plano"). */
+  extrato?: ReactNode
+  tituloPasso1?: string
+}) {
   const [step, setStep] = useState(1)
   const [planId, setPlanId] = useState(plans.find(p => p.destaque)?.id || plans[0]?.id || '')
-  const [ownerName, setOwnerName] = useState(''); const [phone, setPhone] = useState(''); const [hasWhatsapp, setHasWhatsapp] = useState(true); const [email, setEmail] = useState(''); const [login, setLogin] = useState(''); const [senha, setSenha] = useState('')
+  const [ownerName, setOwnerName] = useState(iniciais?.ownerName ?? ''); const [phone, setPhone] = useState(iniciais?.phone ?? ''); const [hasWhatsapp, setHasWhatsapp] = useState(iniciais?.hasWhatsapp ?? false) /* ADAPTAÇÃO (build 054): padrão desmarcado, ver DevApp */; const [email, setEmail] = useState(iniciais?.email ?? ''); const [login, setLogin] = useState(iniciais?.login ?? ''); const [senha, setSenha] = useState(''); const [doc, setDoc] = useState(iniciais?.doc ?? '')
   const [method, setMethod] = useState<'pix' | 'cartao_credito' | 'boleto'>('pix'); const [processando, setProcessando] = useState(false)
   const plano = plans.find(p => p.id === planId)
-  const phoneOk = validaTelefone(phone)
-  const dadosCompletos = ownerName.trim() && login.trim() && senha.trim() && phoneOk && validaEmailEnvio(email)
+  /* Item 22 da lista de 12/09/2026: telefone e CPF obrigatórios também no
+     autocadastro, e a crítica em vermelho no campo — antes o botão só ficava
+     apagado, sem dizer o que faltava. */
+  const phoneOk = !!phone.trim() && validaTelefone(phone)
+  const docOk = !!doc.trim() && validaCPF(doc)
+  const emailOk = validaEmailEnvio(email)
+  const faltando = [
+    !ownerName.trim() && 'nome',
+    !phoneOk && 'telefone válido',
+    !emailOk && 'e-mail válido',
+    !docOk && 'CPF válido',
+    !login.trim() && 'login',
+    senha.trim().length < 4 && 'senha (mín. 4)',
+  ].filter(Boolean)
+  const dadosCompletos = faltando.length === 0
 
   const confirmarPagamento = () => {
     setProcessando(true)
     setTimeout(() => {
       const autoLiberado = method !== 'boleto'
-      onFinish({ companyName: ownerName.trim(), ownerName, phone, hasWhatsapp, email: email.trim(), login, senha, planoContratado: plano, paymentMethod: method, primeiraCobrancaPaga: autoLiberado, autoLiberado })
+      onFinish({ companyName: ownerName.trim(), ownerName, phone, hasWhatsapp, email: email.trim(), doc: doc.trim(), login, senha, planoContratado: plano, paymentMethod: method, primeiraCobrancaPaga: autoLiberado, autoLiberado })
       setProcessando(false); setStep(4)
     }, 900)
   }
   const confirmarGratuito = () => {
     setProcessando(true)
     setTimeout(() => {
-      onFinish({ companyName: ownerName.trim(), ownerName, phone, hasWhatsapp, email: email.trim(), login, senha, planoContratado: plano, paymentMethod: null, primeiraCobrancaPaga: false, autoLiberado: true })
+      onFinish({ companyName: ownerName.trim(), ownerName, phone, hasWhatsapp, email: email.trim(), doc: doc.trim(), login, senha, planoContratado: plano, paymentMethod: null, primeiraCobrancaPaga: false, autoLiberado: true })
       setProcessando(false); setStep(4)
     }, 500)
   }
 
-  return <Sheet title={step === 1 ? 'Escolha seu plano' : step === 2 ? 'Seus dados' : step === 3 ? 'Pagamento' : 'Tudo certo!'} onClose={onClose} resetScrollKey={step}>
+  return <Sheet title={step === 1 ? (tituloPasso1 ?? 'Escolha seu plano') : step === 2 ? 'Seus dados' : step === 3 ? 'Pagamento' : 'Tudo certo!'} onClose={onClose} resetScrollKey={step}>
     <div style={{ display: 'flex', gap: 4, marginBottom: 16 }}>{(plano?.gratuito ? [1, 2, 4] : [1, 2, 3, 4]).map(n => <div key={n} style={{ flex: 1, height: 3, borderRadius: 999, background: n <= step ? PURPLE : LINE }} />)}</div>
 
     {step === 1 && <>
+      {extrato}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
         {plans.map(pl => <PlanoCard key={pl.id} plano={pl} selected={pl.id === planId} onSelect={() => setPlanId(pl.id)} />)}
       </div>
@@ -219,13 +259,23 @@ function ContratarPacoteFlow({ plans, onClose, onFinish }: { plans: KitPlan[]; o
         <span style={{ fontSize: 13, fontWeight: 700, color: INK }}>{plano?.name}</span>{plano?.gratuito ? <span style={{ fontSize: 13, fontWeight: 800, color: GREEN }}>Grátis por {plano.validadeDias} dias</span> : <span style={{ fontSize: 13, fontWeight: 800, color: PURPLE }}>{fmtBRL(plano?.monthlyValue)}/mês</span>}
       </div>
       <Field label="Seu nome"><input style={inputStyle} value={ownerName} onChange={e => setOwnerName(e.target.value)} /></Field>
+      <FieldError show={!ownerName.trim()} text="Informe seu nome (obrigatório)" />
       <PhoneComWhats phone={phone} setPhone={setPhone} hasWhatsapp={hasWhatsapp} setHasWhatsapp={setHasWhatsapp} />
-      <FieldError show={phone.trim() && !phoneOk} text="Telefone inválido (use DDD + número)" />
+      <FieldError show={!phoneOk} text={phone.trim() ? 'Telefone inválido (use DDD + número)' : 'Informe o telefone (obrigatório)'} />
       <Field label="E-mail"><input type="email" style={inputStyle} value={email} onChange={e => setEmail(e.target.value)} placeholder="voce@exemplo.com" /></Field>
-      <FieldError show={email.trim() && !validaEmailEnvio(email)} text="E-mail inválido" />
+      <FieldError show={!emailOk} text={email.trim() ? 'E-mail inválido' : 'Informe o e-mail (obrigatório)'} />
+      <Field label="CPF"><input style={inputStyle} inputMode="numeric" value={doc} onChange={e => setDoc(e.target.value)} placeholder="000.000.000-00" /></Field>
+      <FieldError show={!docOk} text={doc.trim() ? 'CPF inválido' : 'Informe o CPF (obrigatório)'} />
       <SectionLabel>Acesso</SectionLabel>
       <Field label="Escolha um login"><input style={inputStyle} value={login} onChange={e => setLogin(e.target.value)} /></Field>
+      <FieldError show={!login.trim()} text="Escolha um login (obrigatório)" />
       <Field label="Escolha uma senha"><input style={inputStyle} type="password" value={senha} onChange={e => setSenha(e.target.value)} /></Field>
+      <FieldError show={senha.trim().length < 4} text="A senha precisa ter pelo menos 4 caracteres" />
+      {faltando.length > 0 && (
+        <p data-testid="autocadastro-faltando" style={{ fontSize: 12, color: RED, fontWeight: 700, margin: '0 0 10px', lineHeight: 1.5 }}>
+          Faltando: {faltando.join(' · ')}.
+        </p>
+      )}
       <p style={{ fontSize: 12, color: TXT3, lineHeight: 1.5, margin: '2px 0 12px' }}>
         É com esse login e senha que você entra no app. O ambiente é individual: só este acesso existe.
       </p>
@@ -469,7 +519,21 @@ export default function LoginView() {
   const plans: KitPlan[] = planosDexie.map(p => ({ id: String(p.id), name: p.nome, monthlyValue: p.valorMensal, destaque: p.destaque, features: recursosAutomaticos(p) }))
   const platform: KitPlatform = {
     devUsers,
-    tenants: [{ id: 't0', companyName: NOME_PRODUTO, users: tenantUsers }],
+    /* TODOS os ambientes (12/09/2026): o `submit()` do Kit procura a
+       credencial digitada em `platform.tenants[*].users` — com só `t0` na
+       lista, o login de um cliente cadastrado no N0 nunca batia ("login ou
+       senha inválidos", relatado pelo Rafael). O ambiente deste aparelho
+       continua em primeiro, com a lista migrada de sempre. */
+    tenants: [
+      { id: TENANT_N1_ID, companyName: NOME_PRODUTO, users: tenantUsers },
+      ...platformN0Persistida.tenants
+        .filter((t) => t.id !== TENANT_N1_ID)
+        .map((t) => ({
+          id: t.id,
+          companyName: t.companyName,
+          users: (t.users ?? []).map((u) => ({ id: u.id, name: u.name, login: u.login, senha: u.senha, email: u.email, status: u.status, demo: u.demo })),
+        })),
+    ],
     plans,
     // siteConfig / sitePages / siteMenu / branding: editáveis em N0 →
     // Parâmetros → Site MorfoFinP (Decisão 49), com os valores padrão do Kit
@@ -490,9 +554,9 @@ export default function LoginView() {
   // `entrarComoTenantUser` caem no 1º usuário da lista (migrando a
   // credencial antiga ou criando o admin padrão do Kit se a lista ainda
   // estiver vazia — mesmo efeito que `entrarDemoN0()`/`entrarDemo()` tinham).
-  const onLogin = (level: LoginLevel, _tenantId: string | null, userId?: string) => {
+  const onLogin = (level: LoginLevel, tenantId: string | null, userId?: string) => {
     if (level === 'dev') void entrarComoDevUser(userId)
-    else void entrarComoTenantUser(userId)
+    else void entrarComoTenantUser(userId, tenantId ?? undefined)
   }
   /* "Contratar um plano" cria o ÚNICO usuário do ambiente com os dados que a
      pessoa acabou de preencher, guarda o plano contratado (Minha Assinatura)
@@ -507,6 +571,7 @@ export default function LoginView() {
         nome: payload.ownerName,
         email: payload.email,
         telefone: payload.phone,
+        cpf: payload.doc,
         nomeAmbiente: payload.companyName,
       })
     })()

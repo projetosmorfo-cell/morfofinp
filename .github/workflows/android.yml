@@ -181,9 +181,19 @@ jobs:
           ./gradlew :app:signingReport --no-daemon | sed -n '/Variant: debug/,/^$/p' || true
 
       - name: Renomear .apk
+        # DOIS nomes no mesmo Release, de propósito (12/09/2026, build 054):
+        #  • MorfoFinP-build-NNN.apk — o histórico, um por versão;
+        #  • MorfoFinP.apk           — nome FIXO, que é o que dá um endereço
+        #    permanente pro último build:
+        #    https://github.com/<dono>/<repo>/releases/latest/download/MorfoFinP.apk
+        #    O GitHub só resolve esse atalho quando o nome do arquivo é igual em
+        #    todo Release — com o número no nome, ele nunca acharia. É este
+        #    endereço que vai em N0 › Parâmetros › URLs, e ele nunca muda.
+        #    (Vale pra repositório público; num privado o link pede login.)
         run: |
           mkdir -p saida
           cp android/app/build/outputs/apk/debug/app-debug.apk "saida/MorfoFinP-build-${{ steps.build.outputs.nnn }}.apk"
+          cp android/app/build/outputs/apk/debug/app-debug.apk "saida/MorfoFinP.apk"
           ls -la saida
 
       - name: Impressão digital do certificado (tem que ser SEMPRE a mesma)

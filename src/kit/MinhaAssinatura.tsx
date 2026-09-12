@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { usePlanos, usePlanoPadrao, recursosAutomaticos, type Plano } from './planos'
 import { usePlanoAtual, salvarPlanoId } from './planoAtual'
+import { useTenantN1 } from './kitPlatform'
 
 // Modelo de negócio Completo (05/09/2026, Roteiro de Parametrização Morfo,
 // Etapa 5) — adaptado de `MinhaAssinaturaView`/`TrocarPlanoSheet`/
@@ -114,7 +115,7 @@ function TrocarPlanoModal({
     <div className="modal-fundo" onClick={onFechar}>
       <div className="modal-conteudo" onClick={(e) => e.stopPropagation()}>
         <div className="linha" style={{ border: 'none', padding: 0, marginBottom: 8 }}>
-          <h2 style={{ margin: 0 }}>Trocar de plano</h2>
+          <h2 style={{ margin: 0 }}>Trocar de Plano</h2>
           <button
             type="button"
             onClick={onFechar}
@@ -199,7 +200,7 @@ function EncerrarPlanoModal({
     <div className="modal-fundo" onClick={onFechar}>
       <div className="modal-conteudo" onClick={(e) => e.stopPropagation()}>
         <div className="linha" style={{ border: 'none', padding: 0, marginBottom: 8 }}>
-          <h2 style={{ margin: 0 }}>Encerrar assinatura</h2>
+          <h2 style={{ margin: 0 }}>Encerrar Assinatura</h2>
           <button
             type="button"
             onClick={onFechar}
@@ -247,7 +248,13 @@ function EncerrarPlanoModal({
   )
 }
 
-export default function MinhaAssinatura({ aoVoltar }: { aoVoltar: () => void }) {
+// Achado 11/09/2026 (revisão pedida pelo Rafael): o Kit sempre oferece um
+// atalho "Falar com a Morfo" nesta tela (`MinhaAssinaturaView`, `SectionLabel
+// right=`) — é onde a dúvida sobre assinatura costuma aparecer. Essa versão
+// tinha ficado sem NENHUM link de contato/chat. Corrigido: `onAbrirSuporte`
+// reaproveita a mesma navegação pro chat que o resto do app já usa
+// (`setConfigAberta('suporte')` em App.tsx) — nada de mecanismo novo.
+export default function MinhaAssinatura({ aoVoltar, onAbrirSuporte, temNaoLida }: { aoVoltar: () => void; onAbrirSuporte?: () => void; temNaoLida?: boolean }) {
   const planoAtual = usePlanoAtual()
   const planos = usePlanos()
   // `usePlanoPadrao()` (o plano `destaque`, com fallback pro primeiro cadastrado) — igual ao
@@ -257,6 +264,10 @@ export default function MinhaAssinatura({ aoVoltar }: { aoVoltar: () => void }) 
   const planoPadrao = usePlanoPadrao()
   const [trocarAberto, setTrocarAberto] = useState(false)
   const [encerrarAberto, setEncerrarAberto] = useState(false)
+  /* Cobranças do próprio ambiente (item 11) — a mais recente em cima. */
+  const tenant = useTenantN1()
+  const hojeISO = new Date().toISOString().slice(0, 10)
+  const cobrancas = [...(tenant?.billing?.installments ?? [])].sort((a, b) => b.dueDate.localeCompare(a.dueDate))
 
   return (
     <>
@@ -273,7 +284,27 @@ export default function MinhaAssinatura({ aoVoltar }: { aoVoltar: () => void }) 
         pagamento.
       </p>
 
-      <h2 style={{ marginTop: 0 }}>Plano atual</h2>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+        <h2 style={{ marginTop: 0 }}>Plano Atual</h2>
+        {onAbrirSuporte && (
+          <button
+            type="button"
+            onClick={onAbrirSuporte}
+            className={temNaoLida ? 'mloc-shake' : ''}
+            style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'none', border: 'none', color: 'var(--azul)', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', padding: 0, position: 'relative', marginTop: 0 }}
+          >
+            💬 Falar com a Morfo
+            {temNaoLida && (
+              <span
+                className="mloc-badge-pulse"
+                style={{ position: 'absolute', top: -6, right: -10, minWidth: 14, height: 14, borderRadius: 999, background: 'var(--vermelho)', border: '2px solid var(--bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8.5, fontWeight: 900, color: '#fff' }}
+              >
+                !
+              </span>
+            )}
+          </button>
+        )}
+      </div>
       <div className="cartao">
         {planoAtual ? (
           <CartaoPlano plano={planoAtual} selecionado />
@@ -300,6 +331,34 @@ export default function MinhaAssinatura({ aoVoltar }: { aoVoltar: () => void }) 
             Encerrar
           </button>
         </div>
+      </div>
+
+      {/* Item 11 da lista de 12/09/2026: "ao virar o dia de pagamento, gerar o
+          próximo pagamento como 'a vencer' e mostrar [...] na tela de
+          assinatura do N1". As cobranças são geradas automaticamente pelo
+          housekeeping da plataforma (`gerarParcelasPendentes`, kitPlatform.ts)
+          — esta seção só mostra o que existe, com a data e a situação. */}
+      <h2>Meus Pagamentos</h2>
+      <div className="cartao">
+        {cobrancas.length === 0 ? (
+          <p className="texto-fraco" style={{ marginTop: 0 }}>
+            Nenhuma cobrança gerada ainda — elas aparecem aqui a partir do dia de vencimento do seu plano.
+          </p>
+        ) : (
+          cobrancas.map((c) => {
+            const situacao = c.paid ? 'Pago' : c.dueDate >= hojeISO ? 'A vencer' : 'Vencido'
+            const cor = c.paid ? 'valor-pos' : c.dueDate >= hojeISO ? 'texto-fraco' : 'valor-neg'
+            return (
+              <div key={c.id} className="linha" style={{ padding: '6px 0' }}>
+                <span>{c.dueDate.split('-').reverse().join('/')}</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span className={cor} style={{ fontSize: 12 }}>{situacao}</span>
+                  <strong style={{ whiteSpace: 'nowrap' }}>R$ {c.amount.toFixed(2)}</strong>
+                </span>
+              </div>
+            )
+          })
+        )}
       </div>
 
       {trocarAberto && (

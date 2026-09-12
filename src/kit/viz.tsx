@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react'
-import { BRANCO, DEV_CARD, GREEN, INK, LINE, PAPER, RED, SOFT, TXT2, TXT3, iconBtnStyle } from './kitBase'
+import { BRANCO, DEV_CARD, GREEN, INK, LINE, PAPER, RED, SOFT, TXT2, TXT3, iconBtnStyle, SOMBRA_POPUP, VEU_POPUP, bordaPopup } from './kitBase'
 import { X } from 'lucide-react'
 
 // Biblioteca de gráficos e cartões de indicador do Kit de Estrutura Mínima
@@ -43,8 +43,11 @@ export function InfoDot({ info, titulo, dark }: { info?: ReactNode; titulo?: Rea
         fechar/texto) ignorava a prop `dark` — sempre claro, mesmo dentro do
         painel N0 (que força tema escuro via `.mloc-forcar-escuro`). O Kit já
         tem essa correção (comentário "item 17, Padrão UI" na fonte). */}
-    {open && <div onClick={(e) => { e.stopPropagation(); setOpen(false) }} style={{ position: 'fixed', inset: 0, background: 'rgba(28,27,34,0.5)', zIndex: 60, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ background: dark ? DEV_CARD : PAPER, width: '100%', maxWidth: 'var(--mloc-sheet-maxw, var(--mloc-maxw, 430px))', borderRadius: '20px 20px 0 0', padding: '18px 16px 28px' }}>
+    {/* Centralizada e rolável, igual ao `Sheet` (build 054) — e aqui faltava
+        até o `maxHeight`: um texto longo podia passar da altura da janela sem
+        rolagem nenhuma, cortando o fim. */}
+    {open && <div onClick={(e) => { e.stopPropagation(); setOpen(false) }} style={{ position: 'fixed', inset: 0, background: VEU_POPUP, zIndex: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 12px' }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: dark ? DEV_CARD : PAPER, width: '100%', maxWidth: 'var(--mloc-sheet-maxw, var(--mloc-maxw, 430px))', maxHeight: '100%', overflowY: 'auto', WebkitOverflowScrolling: 'touch', borderRadius: 20, padding: '18px 16px 22px', border: bordaPopup(dark), boxShadow: SOMBRA_POPUP }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
           <h2 style={{ fontSize: 16, fontWeight: 800, color: dark ? '#fff' : INK, margin: 0, textTransform: 'none' }}>{titulo}</h2>
           <button onClick={() => setOpen(false)} style={{ ...iconBtnStyle, background: dark ? 'rgba(255,255,255,0.08)' : SOFT }}><X size={18} color={dark ? '#fff' : INK} /></button>

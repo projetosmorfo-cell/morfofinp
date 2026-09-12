@@ -122,7 +122,7 @@ export default function SeletorIcone({
         <div className="modal-fundo" onClick={() => setModalAberto(false)}>
           <div className="modal-conteudo" onClick={(e) => e.stopPropagation()}>
             <div className="linha" style={{ border: 'none', padding: 0, marginBottom: 8 }}>
-              <h2 style={{ margin: 0 }}>Escolher ícone</h2>
+              <h2 style={{ margin: 0 }}>Escolher Ícone</h2>
               <button
                 type="button"
                 onClick={() => setModalAberto(false)}

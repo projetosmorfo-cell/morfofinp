@@ -1,4 +1,5 @@
 import { db, type Natureza } from './db'
+import { lerDoAmbiente, marcaDoAmbiente } from './ambiente'
 
 // Categorias "de sistema" — usadas internamente por ações do app (transferência
 // entre contas, pagamento de fatura), não cadastradas manualmente pelo Rafael
@@ -11,17 +12,18 @@ import { db, type Natureza } from './db'
 // não existir ainda — nunca falha silenciosamente, sempre devolve um id
 // válido pra usar no `categoriaId` do lançamento.
 async function obterOuCriarCategoriaPorNome(nome: string, natureza: Natureza): Promise<number> {
-  const existente = await db.categorias.where('nome').equals(nome).first()
+  const existente = (await lerDoAmbiente(db.categorias.where('nome').equals(nome).toArray()))[0]
   if (existente) return existente.id!
 
-  const grupos = await db.grupos.toArray()
+  const grupos = await lerDoAmbiente(db.grupos.toArray())
   const grupoPadrao = grupos.find((g) => g.nome === 'Fixo' && g.ativo) ?? grupos.find((g) => g.ativo) ?? grupos[0]
   const nomeGrupo = grupoPadrao?.nome ?? 'Fixo'
   if (!grupoPadrao) {
-    await db.grupos.add({ nome: nomeGrupo, ativo: true })
+    await db.grupos.add({ nome: nomeGrupo, ativo: true, ...marcaDoAmbiente() })
   }
 
   const novoId = await db.categorias.add({
+    ...marcaDoAmbiente(),
     nome,
     grupo: nomeGrupo,
     natureza,

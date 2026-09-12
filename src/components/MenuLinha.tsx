@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 
 // Menu "⋮" por linha (Categorias e Grupos) — extraído em 05/09/2026 (bug
 // reportado pelo Rafael: "janelas de submenus estourando pra fora da tela")
@@ -41,53 +42,52 @@ export default function MenuLinha({
   onFechar: () => void
   children: ReactNode
 }) {
+  const botaoRef = useRef<HTMLButtonElement>(null)
   const popoverRef = useRef<HTMLDivElement>(null)
   const [estiloCorrecao, setEstiloCorrecao] = useState<CSSProperties>({})
 
-  // oxlint avisa "set-state-in-effect" aqui (react/set-state-in-effect) —
-  // esperado e seguro neste caso específico: não dá pra "derivar durante o
-  // render" porque a correção depende da posição REAL do elemento já
-  // renderizado no DOM (`getBoundingClientRect`), que só existe depois do
-  // React montar o popover. É exatamente o padrão "medir e corrigir antes
-  // do paint" que `useLayoutEffect` existe para viabilizar.
-  useLayoutEffect(() => {
-    // Fechado: zera a correção. Garante que, na PRÓXIMA vez que abrir, a
-    // medição abaixo comece da posição natural (só CSS, sem transform
-    // residual de uma correção anterior) — sem isso, a 2ª abertura mediria
-    // a posição já corrigida da 1ª, e o cálculo ficaria errado.
-    if (!aberto) {
-      setEstiloCorrecao({})
-      return
-    }
-    const el = popoverRef.current
-    if (!el) return
+  /* 12/09/2026 — 2ª causa do mesmo sintoma, reportada de novo pelo Rafael
+     ("cadastro de Categorias e Grupos tem submenus estourando tela, exemplo
+     quando clico nos 3 pontinhos deles, esconde quase todo"): a correção de
+     05/09 só empurrava o popover na HORIZONTAL, e ele continuava ancorado
+     dentro da linha — ou seja, (a) se a linha estiver perto do fim da tela,
+     o painel abre pra baixo e some no rodapé, e (b) qualquer ancestral com
+     recorte próprio corta o que passa da borda dele.
 
+     Agora o painel é renderizado num PORTAL no `<body>`, em coordenadas
+     `position: fixed` calculadas a partir do botão: nenhum ancestral pode
+     recortá-lo, e quando não cabe abaixo ele abre PRA CIMA. A correção
+     horizontal de antes continua, agora aplicada na mesma medição. */
+  useLayoutEffect(() => {
+    if (!aberto) { setEstiloCorrecao({}); return }
+    const botao = botaoRef.current
+    const el = popoverRef.current
+    if (!botao || !el) return
     const MARGEM = 8
-    const rect = el.getBoundingClientRect()
-    let deslocamento = 0
-    if (rect.right > window.innerWidth - MARGEM) {
-      deslocamento = window.innerWidth - MARGEM - rect.right
-    }
-    if (rect.left + deslocamento < MARGEM) {
-      deslocamento = MARGEM - rect.left
-    }
-    setEstiloCorrecao(deslocamento !== 0 ? { transform: `translateX(${deslocamento}px)` } : {})
+    const b = botao.getBoundingClientRect()
+    const p = el.getBoundingClientRect()
+    const cabeAbaixo = b.bottom + 4 + p.height <= window.innerHeight - MARGEM
+    const top = cabeAbaixo ? b.bottom + 4 : Math.max(MARGEM, b.top - 4 - p.height)
+    let left = b.right - p.width
+    if (left + p.width > window.innerWidth - MARGEM) left = window.innerWidth - MARGEM - p.width
+    if (left < MARGEM) left = MARGEM
+    setEstiloCorrecao({ position: 'fixed', top, left, right: 'auto', maxHeight: window.innerHeight - 2 * MARGEM, overflowY: 'auto' })
   }, [aberto])
 
   return (
     <div className="menu-linha-wrap">
-      <button type="button" className="botao-menu-linha" aria-label="Mais ações" onClick={onAbrirFechar}>
+      <button type="button" ref={botaoRef} className="botao-menu-linha" aria-label="Mais ações" onClick={onAbrirFechar}>
         ⋮
       </button>
-      {aberto && (
+      {aberto && createPortal(
         <>
-          {/* Camada invisível pra fechar o popover ao clicar fora dele —
-              mesmo padrão do `.menu-engrenagem` em App.tsx. */}
-          <div style={{ position: 'fixed', inset: 0, zIndex: 20 }} onClick={onFechar} />
-          <div className="menu-linha-popover" ref={popoverRef} style={estiloCorrecao}>
+          {/* Camada invisível pra fechar o popover ao clicar fora dele. */}
+          <div style={{ position: 'fixed', inset: 0, zIndex: 60 }} onClick={onFechar} />
+          <div className="menu-linha-popover" ref={popoverRef} style={{ zIndex: 61, ...estiloCorrecao }}>
             {children}
           </div>
-        </>
+        </>,
+        document.body,
       )}
     </div>
   )

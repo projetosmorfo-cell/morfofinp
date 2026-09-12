@@ -7,7 +7,7 @@ import { useState, type ReactNode } from 'react'
 import { MessageCircle, Check } from 'lucide-react'
 import {
   usePlatformN0, paramsGlobais, atualizarDefaultParams, atualizarChatConfig, salvarAlertSettings,
-  atualizarLayoutConfig, atualizarBrandingN0, defaultAlertSettings, cleanupModeLabel,
+  atualizarLayoutConfig, atualizarBrandingN0, atualizarUrlsN0, defaultAlertSettings, cleanupModeLabel,
   BRANDING_APP_LOGADO_PADRAO,
   MENU_POSICOES, normalizarMenuPosModo, posicaoMenuDe,
   ITENS_NAV_N1, ITENS_NAV_N0, ITEM_PROTEGIDO_N1, ITEM_PROTEGIDO_N0,
@@ -70,7 +70,15 @@ function LinhaParam({ label, valor, sufixo, min, max, onSalvar, hint }: {
           onBlur={() => { const n = Number(mostrado); if (Number.isFinite(n)) onSalvar(n); setRascunho(null) }}
           style={{ width: 68, padding: '9px 10px', borderRadius: 10, border: '1.5px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.05)', color: '#fff', fontSize: 14, fontWeight: 700, textAlign: 'right', outline: 'none' }}
         />
-        {sufixo && <span style={{ fontSize: 11.5, color: DEV_TXT2 }}>{sufixo}</span>}
+        {/* Build 056 (12/09/2026, pedido do Rafael): a legenda é uma COLUNA de
+            largura fixa, sempre presente — mesmo quando vazia. Antes ela era
+            um `<span>` que só existia quando havia sufixo, então o campo sem
+            legenda ("Dia de vencimento padrão") ficava deslocado à direita em
+            relação aos outros três da mesma tela. Com a coluna fixa, todo
+            campo desta tela alinha pela mesma borda, independente do texto da
+            legenda — e uma legenda nova, de qualquer tamanho, não desalinha
+            nada. */}
+        <span style={{ fontSize: 11.5, color: DEV_TXT2, width: 56, flexShrink: 0 }}>{sufixo ?? ''}</span>
       </div>
     </div>
   </CartaoDev>
@@ -95,9 +103,18 @@ export function SubParametrosAssinatura({ irParaChat }: { irParaChat: () => void
   const dp = paramsGlobais(platform)
   const tw = dp.trialWarning
   return <>
-    <TituloTela>Valores padrão da assinatura de qualquer cliente novo. Sem backend de cobrança (Backlog 028), eles são o parâmetro guardado — nenhuma cobrança é disparada por aqui.</TituloTela>
+    <TituloTela>Valores padrão da assinatura de qualquer cliente novo. Estes três decidem, de verdade, quando o cliente é avisado e quando o acesso dele é cortado — a cobrança em si é registrada aqui e confirmada por você; o pagamento automático chega com o backend (Backlog 028).</TituloTela>
     <LinhaParam label="Tolerância após vencimento" sufixo=" dia(s)" valor={dp.toleranceDays} min={0} onSalvar={(v) => void atualizarDefaultParams({ toleranceDays: v })} />
-    <LinhaParam label="Dia de vencimento padrão" valor={dp.dueDay} min={1} max={28} onSalvar={(v) => void atualizarDefaultParams({ dueDay: v })} />
+    {/* 12/09/2026, item 3: é ESTE número que decide quantos dias antes do
+        vencimento o app do cliente mostra a tarja de aviso. Diferente de
+        "Meus Alertas", que é a notificação do administrador Morfo. */}
+    <LinhaParam label="Dias de aviso antes do vencimento (tarja no app do cliente)" sufixo=" dia(s)" valor={dp.avisoVencimentoDiasAntes} min={0} onSalvar={(v) => void atualizarDefaultParams({ avisoVencimentoDiasAntes: v })} />
+    {/* Build 056: este campo ganhou legenda pra padronizar com os outros três,
+        mas NÃO é "dia(s)" — os outros contam uma QUANTIDADE de dias, este é um
+        DIA do mês (1 a 28). "5 dia(s)" aqui leria como cinco dias de prazo, que
+        é outra coisa. O alinhamento vem da coluna de largura fixa em
+        `LinhaParam`, não de o texto ser igual. */}
+    <LinhaParam label="Dia de vencimento padrão" sufixo="do mês" valor={dp.dueDay} min={1} max={28} onSalvar={(v) => void atualizarDefaultParams({ dueDay: v })} />
     <LinhaParam label="Dias de teste grátis" sufixo=" dia(s)" valor={dp.trialDays} min={0} onSalvar={(v) => void atualizarDefaultParams({ trialDays: v })} />
     <CartaoDev>
       <div style={{ fontSize: 12, color: DEV_TXT2, marginBottom: 8 }}>Aviso automático de fim de teste (chat)</div>
@@ -147,7 +164,7 @@ export function SubParametrosAmbiente() {
     </CartaoDev>
     <CartaoDev>
       <div style={{ fontSize: 13, fontWeight: 700, color: '#fff', marginBottom: 2 }}>Modo de acesso do suporte no ambiente do cliente</div>
-      <div style={{ fontSize: 11.5, color: DEV_TXT2, marginBottom: 10, lineHeight: 1.45 }}>Independente da autorização acima, define o que o suporte pode fazer ao acessar o ambiente de qualquer cliente (via "Entrar como este tenant").</div>
+      <div style={{ fontSize: 11.5, color: DEV_TXT2, marginBottom: 10, lineHeight: 1.45 }}>Independente da autorização acima, define o que o suporte pode fazer ao acessar o ambiente de qualquer cliente (via "Entrar como este cliente").</div>
       <div style={{ display: 'flex', gap: 8 }}>
         {MODOS_ACESSO.map((o) => {
           const ativo = (dp.modoAcessoSuporte || 'total') === o.v
@@ -467,7 +484,7 @@ function MenusDoNivel({ nivel, draft, setDraft, sujo, onSalvar }: {
               options={[
                 { value: 'rodape' as const, label: 'Barra' },
                 { value: 'menu' as const, label: '"⋮"' },
-                ...(it.key === protegido ? [] : [{ value: 'oculto' as const, label: 'Ocultar' }]),
+                ...((protegido as readonly string[]).includes(it.key) ? [] : [{ value: 'oculto' as const, label: 'Ocultar' }]),
               ]}
             />
           </div>
@@ -494,6 +511,71 @@ function MenusDoNivel({ nivel, draft, setDraft, sujo, onSalvar }: {
 
     <div style={{ marginTop: 14 }}>{botaoSalvar}</div>
   </>
+}
+
+
+/* ---- Ordem dos menus como PADRÃO DA PLATAFORMA (12/09/2026) --------------
+   Pedido do Rafael: "hoje tem mensagem dizendo que é feita dentro do N1, mas
+   precisa evoluir pra permitir as mesmas configs dentro do N0 e gravar como
+   padrão [...] os que já mexeram não devem ser restartados, apenas define o
+   padrão, e dentro do N1 deve ter botão pra Redefinir o padrão".
+
+   Como funciona a cascata: o que é salvo aqui vale pra todo ambiente que
+   NUNCA mexeu na própria ordem; quem já mexeu segue com a dele até tocar em
+   "Redefinir padrão" (N1 › Configurações › Layout e Menus), que apaga a
+   ordem local e passa a seguir esta. A ordem da TELA DE CONFIGURAÇÕES do N1
+   é só daqui — saiu do N1 no mesmo pedido. */
+const ITENS_CONFIG_N1: { key: string; label: string }[] = [
+  { key: 'meusDados', label: 'Meus Dados' },
+  { key: 'categorias', label: 'Categorias, Grupos e Metas' },
+  { key: 'contas', label: 'Contas e carteiras' },
+  { key: 'notificacoes', label: 'Notificações bancárias' },
+  { key: 'ajuda', label: 'Ajuda' },
+  { key: 'meuAmbiente', label: 'Meu Ambiente' },
+  { key: 'assinatura', label: 'Minha Assinatura' },
+  { key: 'layout', label: 'Layout e Menus' },
+  { key: 'manutencao', label: 'Manutenção e Saída' },
+]
+
+function EditorOrdem({ titulo, itens, ordem, onSalvar }: {
+  titulo: string
+  itens: { key: string; label: string }[]
+  ordem: string[] | undefined
+  onSalvar: (nova: string[]) => void
+}) {
+  const base = ordem && ordem.length
+    ? [...ordem.filter((k) => itens.some((i) => i.key === k)), ...itens.filter((i) => !ordem.includes(i.key)).map((i) => i.key)]
+    : itens.map((i) => i.key)
+  const [draft, setDraft] = useState<string[]>(base)
+  const sujo = JSON.stringify(draft) !== JSON.stringify(base)
+  const mover = (i: number, d: number) => {
+    const j = i + d
+    if (j < 0 || j >= draft.length) return
+    const novo = [...draft]
+    ;[novo[i], novo[j]] = [novo[j], novo[i]]
+    setDraft(novo)
+  }
+  const rotulo = (k: string) => itens.find((i) => i.key === k)?.label ?? k
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <div style={{ fontSize: 12.5, fontWeight: 700, color: '#C9C4D4', marginBottom: 8 }}>{titulo}</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {draft.map((k, i) => (
+          <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 8, background: DEV_CARD, borderRadius: 10, padding: '7px 10px' }}>
+            <span style={{ flex: 1, fontSize: 12.5, fontWeight: 700, color: '#fff' }}>{rotulo(k)}</span>
+            <button type="button" disabled={i === 0} onClick={() => mover(i, -1)}
+              style={{ border: 'none', borderRadius: 8, padding: '4px 10px', background: 'rgba(255,255,255,0.08)', color: '#fff', cursor: i === 0 ? 'default' : 'pointer', opacity: i === 0 ? 0.35 : 1 }}>↑</button>
+            <button type="button" disabled={i === draft.length - 1} onClick={() => mover(i, 1)}
+              style={{ border: 'none', borderRadius: 8, padding: '4px 10px', background: 'rgba(255,255,255,0.08)', color: '#fff', cursor: i === draft.length - 1 ? 'default' : 'pointer', opacity: i === draft.length - 1 ? 0.35 : 1 }}>↓</button>
+          </div>
+        ))}
+      </div>
+      <button type="button" disabled={!sujo} onClick={() => onSalvar(draft)}
+        style={{ ...primaryBtn, marginTop: 10, width: '100%', background: DEV_ACCENT, opacity: sujo ? 1 : 0.5, cursor: sujo ? 'pointer' : 'not-allowed' }}>
+        <Check size={16} /> Salvar como padrão
+      </button>
+    </div>
+  )
 }
 
 export function SubParametrosLayout({ notify }: { notify: (m: string) => void }) {
@@ -539,9 +621,17 @@ export function SubParametrosLayout({ notify }: { notify: (m: string) => void })
     </SecaoLayout>
 
     <SecaoLayout dark titulo="Ordem dos menus (N1 e N0)">
-      <div style={{ fontSize: 12, color: DEV_TXT2, lineHeight: 1.55 }}>
-        A ordem da barra de abas do N1 e a ordem da tela de Configurações são editáveis pelo próprio ambiente, em <strong style={{ color: '#fff' }}>Configurações › Layout e Menus</strong> (Decisões 7 e 34) — por isso ela NÃO é repetida aqui: seriam duas fontes de verdade pra mesma coisa. Nenhum item pode ser escondido por lá — só reposicionado —, e o N0 usa a mesma peça de rodapé do N1 (Decisão 50).
+      <div style={{ fontSize: 11.5, color: DEV_TXT2, lineHeight: 1.55, marginBottom: 12 }}>
+        O que for salvo aqui vira o <strong style={{ color: '#fff' }}>padrão de fábrica</strong> pra todos os ambientes.
+        Quem já reordenou o próprio rodapé continua com a ordem dele — até tocar em "Redefinir padrão"
+        (Configurações › Layout e Menus, no ambiente do cliente). A ordem da tela de Configurações é só daqui.
       </div>
+      <EditorOrdem titulo="Barra de abas do N1" itens={ITENS_NAV_N1.filter((i) => i.padrao === 'rodape')} ordem={lc.ordemAbasN1}
+        onSalvar={(o) => { void atualizarLayoutConfig({ ordemAbasN1: o }); notify('Ordem das abas do N1 salva como padrão') }} />
+      <EditorOrdem titulo="Tela de Configurações do N1" itens={ITENS_CONFIG_N1} ordem={lc.ordemConfigN1}
+        onSalvar={(o) => { void atualizarLayoutConfig({ ordemConfigN1: o }); notify('Ordem da tela de Configurações salva como padrão') }} />
+      <EditorOrdem titulo="Barra de abas do N0" itens={ITENS_NAV_N0.filter((i) => i.padrao === 'rodape')} ordem={lc.ordemAbasN0}
+        onSalvar={(o) => { void atualizarLayoutConfig({ ordemAbasN0: o }); notify('Ordem das abas do N0 salva como padrão') }} />
     </SecaoLayout>
 
     <SecaoLayout dark titulo="Personalização avançada (N1 e N0)">
@@ -575,10 +665,77 @@ export function SubParametrosLayout({ notify }: { notify: (m: string) => void })
       <Segmented value={lc.densidade || 'confortavel'} onChange={(v) => set({ densidade: v })} options={[{ value: 'confortavel', label: 'Confortável' }, { value: 'compacta', label: 'Compacta (estilo web)' }]} />
     </SecaoLayout>
 
-    <SecaoLayout dark titulo="Clientes fora do padrão (layout próprio)">
-      <div style={{ fontSize: 12, color: DEV_TXT2, lineHeight: 1.55 }}>
-        Nenhum cliente com layout próprio — o MorfoFinP tem um ambiente real só (<strong style={{ color: '#fff' }}>t0</strong>), que segue o padrão desta tela. ✓
-      </div>
-    </SecaoLayout>
+  </>
+}
+
+/* ================= URLs (12/09/2026, build 053) =================
+   Grupo NOVO, sem equivalente no Kit — o Kit não distribui aplicativo fora de
+   loja, então nunca precisou de um endereço de `.apk`. O Rafael: "para isso
+   nas configs do N0, ter novo menu pra URLs, lá devo preencher com a url pra
+   download do apk", e depois "coloque tbm a URL do Website... mostrar como
+   opcional sempre no compartilhamento".
+
+   São os dois endereços que TODA mensagem de convite/liberação usa
+   (`compartilharAcesso.ts`), e a base do link de pré-cadastro
+   (`preCadastroLink.ts`). Ficam num grupo próprio, e não dentro de "Marca",
+   porque não são identidade visual: são o endereço do produto. */
+function CampoUrlDev({ label, hint, valor, onSalvar, placeholder }: {
+  label: string; hint: string; valor: string; onSalvar: (v: string) => void; placeholder: string
+}) {
+  const [rascunho, setRascunho] = useState<string | null>(null)
+  const texto = rascunho ?? valor
+  /* Só avisa quando tem texto e ele não parece endereço — campo vazio é
+     estado legítimo (o site pode não existir ainda). */
+  const pareceUrl = !texto.trim() || /^https?:\/\/\S+$/i.test(texto.trim())
+  return <CartaoDev>
+    <div style={{ fontSize: 12.5, fontWeight: 700, color: '#fff', marginBottom: 4 }}>{label}</div>
+    <div style={{ fontSize: 11.5, color: DEV_TXT2, marginBottom: 8, lineHeight: 1.5 }}>{hint}</div>
+    <input
+      value={texto}
+      placeholder={placeholder}
+      inputMode="url"
+      autoCapitalize="none"
+      onChange={(e) => setRascunho(e.target.value)}
+      onBlur={() => { if (rascunho != null) onSalvar(rascunho.trim()); setRascunho(null) }}
+      style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 10, border: `1.5px solid ${pareceUrl ? 'rgba(255,255,255,0.12)' : AMBER}`, background: 'rgba(255,255,255,0.05)', color: '#fff', fontSize: 13.5, outline: 'none' }}
+    />
+    {!pareceUrl && <div style={{ fontSize: 11.5, color: AMBER, marginTop: 6, lineHeight: 1.5 }}>
+      Comece com <strong>https://</strong> — sem isso o link não abre quando o cliente toca nele.
+    </div>}
+  </CartaoDev>
+}
+
+export function SubParametrosUrls() {
+  const platform = usePlatformN0()
+  const urls = platform?.urlsProduto ?? {}
+  return <>
+    <TituloTela>Os endereços que entram nas mensagens enviadas aos clientes. Preencha uma vez aqui e todo convite, liberação de acesso e ambiente de teste já sai com o link certo — nenhum texto tem endereço escrito à mão.</TituloTela>
+    <SectionLabel dark>Aplicativo</SectionLabel>
+    <CampoUrlDev
+      label="URL para download do aplicativo (.apk)"
+      hint="Vai na mensagem de liberação de acesso e na de ambiente de teste. É por aqui que o cliente instala fora da loja."
+      valor={urls.apk ?? ''}
+      placeholder="https://…/MorfoFinP.apk"
+      onSalvar={(v) => void atualizarUrlsN0({ apk: v })}
+    />
+    <CampoUrlDev
+      label="URL do aplicativo publicado na web"
+      hint="É esta que forma o link do pré-cadastro. Precisa ser o endereço onde o PRÓPRIO aplicativo está hospedado — não o site institucional: o site não sabe abrir a tela de completar cadastro."
+      valor={urls.appWeb ?? ''}
+      placeholder="https://…"
+      onSalvar={(v) => void atualizarUrlsN0({ appWeb: v })}
+    />
+    <SectionLabel dark>Website</SectionLabel>
+    <CampoUrlDev
+      label="URL do site do produto"
+      hint="Só divulgação: aparece em toda mensagem como um item que você liga ou desliga na hora de compartilhar. Nunca forma link de cadastro."
+      valor={urls.site ?? ''}
+      placeholder="https://…"
+      onSalvar={(v) => void atualizarUrlsN0({ site: v })}
+    />
+    <div style={{ fontSize: 11.5, color: DEV_TXT2, lineHeight: 1.6, background: alpha(DEV_ACCENT, 0.1), border: `1px solid ${alpha(DEV_ACCENT, 0.3)}`, borderRadius: 10, padding: '10px 12px' }}>
+      Enquanto o aplicativo não estiver publicado na web, deixe a 2ª URL vazia: o convite de pré-cadastro
+      avisa que não há link pra enviar, em vez de mandar um endereço que abriria outra coisa.
+    </div>
   </>
 }

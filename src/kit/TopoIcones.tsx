@@ -36,7 +36,7 @@ import { createContext, useContext, useState } from 'react'
 import type { CSSProperties, ComponentType, ReactNode } from 'react'
 import { MoreVertical, User, Monitor, Sun, Moon, Search, MessageCircle, Download, Filter, CheckSquare } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import { alpha, iconBtnStyle, INK, TXT2, TXT3, LINE, SOFT, BRANCO, RED, PURPLE, DEV_BG, DEV_CARD, DEV_ACCENT } from './kitBase'
+import { alpha, iconBtnStyle, INK, TXT3, LINE, BRANCO, RED, PURPLE, DEV_BG, DEV_CARD, DEV_ACCENT, SOMBRA_POPUP, bordaPopup } from './kitBase'
 import { useTemaPreferido, salvarTemaPreferido, type TemaPreferido } from '../configuracaoIcones'
 import type { LayoutConfig } from './kitPlatform'
 
@@ -83,7 +83,7 @@ export function TopIconMenu({ items, dark, hasUnread, panelDir, big }: {
           janela menos a barra do topo, com rolagem própria; e `maxWidth` =
           largura da janela menos 24px de folga, pra nunca vazar de lado numa
           tela estreita. */}
-      <div style={{ position: 'absolute', ...(vert === 'up' ? { bottom: big ? 58 : 42 } : { top: big ? 58 : 42 }), ...(horiz === 'left' ? { left: 0 } : { right: 0 }), background: dark ? DEV_CARD : BRANCO, border: dark ? 'none' : `1px solid ${LINE}`, boxShadow: '0 6px 20px rgba(0,0,0,0.18)', borderRadius: 12, padding: 5, zIndex: 45, minWidth: 190, maxWidth: 'calc(100vw - 24px)', maxHeight: 'calc(100vh - 96px)', overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
+      <div style={{ position: 'absolute', ...(vert === 'up' ? { bottom: big ? 58 : 42 } : { top: big ? 58 : 42 }), ...(horiz === 'left' ? { left: 0 } : { right: 0 }), background: dark ? DEV_CARD : BRANCO, border: bordaPopup(dark), boxShadow: SOMBRA_POPUP, borderRadius: 12, padding: 5, zIndex: 45, minWidth: 190, maxWidth: 'calc(100vw - 24px)', maxHeight: 'calc(100vh - 96px)', overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
         {items.map((it, i) => <button key={i} onClick={() => { setOpen(false); it.onClick() }} style={{ display: 'flex', alignItems: 'center', gap: 9, width: '100%', padding: '9px 10px', background: 'none', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 700, color: it.danger ? RED : (dark ? '#fff' : INK), whiteSpace: 'nowrap', position: 'relative' }}>
           <it.icon size={16} color={it.danger ? RED : (dark ? '#9B96A8' : TXT3)} /> {it.label}
           {it.hasUnread && <span style={{ marginLeft: 'auto', fontSize: 9.5, fontWeight: 900, color: '#fff', background: RED, borderRadius: 999, padding: '1px 6px' }}>!</span>}
@@ -98,8 +98,14 @@ export function UserHoverIcon({ label, dark }: { label?: string; dark?: boolean 
   const [hover, setHover] = useState(false)
   if (!label) return null
   return <span style={{ position: 'relative', flexShrink: 0, display: 'inline-flex' }} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
-    <span title={label} style={{ width: 30, height: 30, borderRadius: 999, background: dark ? alpha(DEV_ACCENT, 15) : SOFT, border: `1px solid ${dark ? alpha(DEV_ACCENT, 30) : LINE}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'default' }}>
-      <User size={14} color={dark ? DEV_ACCENT : TXT2} />
+    {/* 12/09/2026 (pedido do Rafael: "ícone do usuário no topo das telas deve
+        ser azul no padrão do projeto Modelo"): no N1 o ícone passou a usar a
+        cor de destaque do Projeto Modelo (`PURPLE`, o mesmo azul/roxo do
+        ícone de tema ao lado), em vez do cinza de texto secundário — antes
+        ele era o único ícone apagado da barra. No N0 (`dark`) nada muda: lá
+        a cor de destaque já era aplicada. */}
+    <span title={label} style={{ width: 30, height: 30, borderRadius: 999, background: alpha(dark ? DEV_ACCENT : PURPLE, dark ? 15 : 8), border: `1px solid ${alpha(dark ? DEV_ACCENT : PURPLE, dark ? 30 : 18)}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'default' }}>
+      <User size={14} color={dark ? DEV_ACCENT : PURPLE} />
     </span>
     {hover && <span style={{ position: 'absolute', top: 34, right: 0, background: dark ? DEV_CARD : BRANCO, color: dark ? '#fff' : INK, border: dark ? 'none' : `1px solid ${LINE}`, boxShadow: '0 5px 16px rgba(0,0,0,0.22)', borderRadius: 8, padding: '5px 10px', fontSize: 11.5, fontWeight: 700, whiteSpace: 'nowrap', zIndex: 46 }}>{label}</span>}
   </span>

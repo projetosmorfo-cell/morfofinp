@@ -22,6 +22,7 @@
 // "notificação de teste", ferramenta de MVP — ver BACKLOG.md item 030).
 import { Capacitor, registerPlugin, type PluginListenerHandle } from '@capacitor/core'
 import { db, type NotificacaoPendente } from './db'
+import { marcaDoAmbiente } from './ambiente'
 
 interface ItemNativo {
   id: string
@@ -35,6 +36,7 @@ interface ItemNativo {
 interface NotificacaoBancariaPlugin {
   verificarAcesso(): Promise<{ concedido: boolean }>
   abrirConfiguracaoAcesso(): Promise<void>
+  verificarPermissaoAviso(): Promise<{ concedida: boolean }>
   solicitarPermissaoAviso(): Promise<{ concedida: boolean }>
   obterPendentes(): Promise<{ itens: ItemNativo[] }>
   confirmarRecebidas(opcoes: { ids: string[] }): Promise<void>
@@ -91,7 +93,7 @@ function paraPendente(item: ItemNativo): NotificacaoPendente {
 export async function registrarNotificacao(item: ItemNativo): Promise<boolean> {
   const jaExiste = await db.notificacoesPendentes.where('idNativo').equals(item.id).count()
   if (jaExiste > 0) return false
-  await db.notificacoesPendentes.add(paraPendente(item))
+  await db.notificacoesPendentes.add({ ...paraPendente(item), ...marcaDoAmbiente() })
   return true
 }
 
@@ -138,6 +140,18 @@ export async function acessoConcedido(): Promise<boolean> {
 export async function abrirConfiguracaoAcesso(): Promise<void> {
   if (!ehNativo()) return
   await Nativo.abrirConfiguracaoAcesso()
+}
+
+/* Só CONFERE (não abre diálogo nenhum) — usada pelo popup de permissões e
+   pela tela de Notificações bancárias pra mostrar ligado/desligado. */
+export async function avisoConcedido(): Promise<boolean> {
+  if (!ehNativo()) return false
+  try {
+    const r = await Nativo.verificarPermissaoAviso()
+    return !!r?.concedida
+  } catch {
+    return false
+  }
 }
 
 export async function solicitarPermissaoAviso(): Promise<boolean> {

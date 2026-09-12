@@ -4,11 +4,26 @@ import { db, type Conta, type TipoConta } from '../db'
 import ModalCadastro from '../components/ModalCadastro'
 import SeletorInstituicao, { type IconeCarteira } from '../components/SeletorInstituicao'
 import SeloInstituicao from '../components/SeloInstituicao'
+import MenuLinha from '../components/MenuLinha'
+import SeletorComExplicacao, { type OpcaoExplicada } from '../components/SeletorComExplicacao'
+import { PencilSquareIcon } from '@heroicons/react/24/outline'
+import { lerDoAmbiente, marcaDoAmbiente } from '../ambiente'
 
 const ROTULO_TIPO: Record<TipoConta, string> = {
   corrente: 'Conta corrente',
   cartao: 'Cartão de crédito',
   cofre: 'Cofrinho / investimento',
+}
+
+/* O que cada tipo muda de verdade (12/09/2026, pedido do Rafael: "campo Tipo
+   também deve ter explicação no mesmo sentido que pedi pro campo Natureza").
+   Os textos descrevem o comportamento real das telas: Carteira soma o mês na
+   conta corrente, calcula ciclo de fatura no cartão e saldo acumulado no
+   cofrinho. */
+const EXPLICACAO_TIPO: Record<TipoConta, string> = {
+  corrente: 'Dinheiro disponível agora (banco, carteira). A Carteira mostra o total do mês escolhido.',
+  cartao: 'Compras que viram fatura. Ganha dia de fechamento/vencimento e a Carteira navega por ciclo de fatura.',
+  cofre: 'Dinheiro guardado (poupança, investimento, cofrinho). A Carteira mostra o saldo acumulado, não o mês.',
 }
 
 interface RascunhoConta {
@@ -46,12 +61,13 @@ function hoje() {
 // lógica de "campo já no schema, UI ainda não usa de verdade" que já vale
 // pra outros campos de conciliação, ver db.ts).
 export default function Contas({ aoVoltar }: { aoVoltar: () => void }) {
-  const contas = useLiveQuery(() => db.contas.toArray(), [])
-  const lancamentos = useLiveQuery(() => db.lancamentos.toArray(), [])
+  const contas = useLiveQuery(() => lerDoAmbiente(db.contas.toArray()), [])
+  const lancamentos = useLiveQuery(() => lerDoAmbiente(db.lancamentos.toArray()), [])
 
   const [editandoId, setEditandoId] = useState<number | null>(null)
   const [rascunho, setRascunho] = useState<RascunhoConta>(rascunhoVazio())
   const [confirmandoExclusaoId, setConfirmandoExclusaoId] = useState<number | null>(null)
+  const [menuContaAberta, setMenuContaAberta] = useState<number | null>(null)
   const [mostrarNova, setMostrarNova] = useState(false)
   const [novaConta, setNovaConta] = useState<RascunhoConta>(rascunhoVazio())
 
@@ -81,20 +97,16 @@ export default function Contas({ aoVoltar }: { aoVoltar: () => void }) {
           onEscolher={(icone) => setRasc((r) => ({ ...r, icone }))}
         />
         <label htmlFor="conta-tipo">Tipo</label>
-        <select
+        <SeletorComExplicacao<TipoConta>
           id="conta-tipo"
-          value={rasc.tipo}
-          onChange={(e) => setRasc((r) => ({ ...r, tipo: e.target.value as TipoConta }))}
-        >
-          {(Object.keys(ROTULO_TIPO) as TipoConta[]).map((t) => (
-            <option key={t} value={t}>
-              {ROTULO_TIPO[t]}
-            </option>
-          ))}
-        </select>
+          titulo="Tipo da carteira"
+          valor={rasc.tipo}
+          opcoes={(Object.keys(ROTULO_TIPO) as TipoConta[]).map((t): OpcaoExplicada<TipoConta> => ({ valor: t, rotulo: ROTULO_TIPO[t], explicacao: EXPLICACAO_TIPO[t] }))}
+          onEscolher={(tipo) => setRasc((r) => ({ ...r, tipo }))}
+        />
         {rasc.tipo === 'cartao' && (
           <>
-            <label htmlFor="conta-fechamento">Dia de fechamento da fatura</label>
+            <label htmlFor="conta-fechamento">Dia de Fechamento da Fatura</label>
             <input
               id="conta-fechamento"
               type="number"
@@ -103,7 +115,7 @@ export default function Contas({ aoVoltar }: { aoVoltar: () => void }) {
               value={rasc.diaFechamento}
               onChange={(e) => setRasc((r) => ({ ...r, diaFechamento: e.target.value }))}
             />
-            <label htmlFor="conta-vencimento">Dia de vencimento da fatura</label>
+            <label htmlFor="conta-vencimento">Dia de Vencimento da Fatura</label>
             <input
               id="conta-vencimento"
               type="number"
@@ -163,6 +175,7 @@ export default function Contas({ aoVoltar }: { aoVoltar: () => void }) {
   async function adicionarConta() {
     if (!novaConta.nome.trim()) return
     await db.contas.add({
+      ...marcaDoAmbiente(),
       nome: novaConta.nome.trim(),
       tipo: novaConta.tipo,
       instituicao: novaConta.icone.instituicao || novaConta.nome.trim(),
@@ -186,7 +199,7 @@ export default function Contas({ aoVoltar }: { aoVoltar: () => void }) {
         <button type="button" className="botao-voltar-config" onClick={aoVoltar}>
           ‹ Voltar
         </button>
-        <h1>Contas e carteiras</h1>
+        <h1>Contas e Carteiras</h1>
       </div>
       <p className="texto-fraco">
         Todo lugar onde o dinheiro está — conta corrente, cartão de crédito ou cofrinho/investimento.
@@ -200,70 +213,73 @@ export default function Contas({ aoVoltar }: { aoVoltar: () => void }) {
           const temLancamentos = (contagemPorConta.get(c.id!) ?? 0) > 0
 
           return (
-            <div key={c.id} style={{ padding: '10px 0', borderBottom: '1px solid var(--borda)' }}>
-              <div className="linha" style={{ border: 'none', padding: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+            <div key={c.id} style={{ padding: '5px 0', borderBottom: '1px solid var(--borda)' }}>
+              {/* UMA linha por conta (12/09/2026, mesmo pedido feito pra
+                  Categorias): ícone · nome · tipo/ciclo · lápis · "⋮" —
+                  antes eram duas faixas (conteúdo e ações). */}
+              <div className="linha" style={{ border: 'none', padding: 0, gap: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1 }}>
                   <SeloInstituicao
                     instituicao={c.iconeInstituicao}
                     cor={c.iconeCor}
                     imagemUri={c.iconeImagemUri}
                     nome={c.nome}
-                    tamanho={36}
+                    tamanho={28}
                   />
-                  <div style={{ minWidth: 0 }}>
-                  <div style={{ opacity: c.ativa ? 1 : 0.5 }}>
+                  <span style={{ opacity: c.ativa ? 1 : 0.5, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {c.nome}
-                    {!c.ativa && <span className="texto-fraco"> · inativa</span>}
-                  </div>
-                  <div className="texto-fraco">
-                    {ROTULO_TIPO[c.tipo]}
-                    {c.tipo === 'cartao' && c.diaFechamento ? ` · fecha dia ${c.diaFechamento}` : ''}
-                    {c.tipo === 'cartao' && c.diaVencimento ? ` · vence dia ${c.diaVencimento}` : ''}
-                  </div>
-                  </div>
+                    <span className="texto-fraco" style={{ fontSize: 11.5 }}>
+                      {' · '}{ROTULO_TIPO[c.tipo]}
+                      {!c.ativa && ' · inativa'}
+                      {c.tipo === 'cartao' && c.diaFechamento ? ` · fecha ${c.diaFechamento}` : ''}
+                      {c.tipo === 'cartao' && c.diaVencimento ? ` · vence ${c.diaVencimento}` : ''}
+                    </span>
+                  </span>
                 </div>
-              </div>
-              <div style={{ display: 'flex', gap: 16, marginTop: 8 }}>
-                <button
-                  type="button"
-                  style={{ background: 'none', border: 'none', color: 'var(--azul)', cursor: 'pointer', padding: 0 }}
-                  onClick={() => iniciarEdicao(c)}
-                >
-                  Editar
-                </button>
-                {temLancamentos ? (
-                  <button
-                    type="button"
-                    style={{ background: 'none', border: 'none', color: 'var(--texto-fraco)', cursor: 'pointer', padding: 0 }}
-                    onClick={() => alternarAtiva(c)}
-                  >
-                    {c.ativa ? 'Inativar' : 'Reativar'}
-                  </button>
-                ) : confirmandoExclusaoId === c.id ? (
+                {confirmandoExclusaoId === c.id ? (
                   <>
                     <button
                       type="button"
-                      style={{ background: 'none', border: 'none', color: 'var(--vermelho)', cursor: 'pointer', padding: 0 }}
+                      style={{ background: 'none', border: 'none', color: 'var(--vermelho)', cursor: 'pointer', padding: 0, fontSize: 12 }}
                       onClick={() => excluir(c.id!)}
                     >
-                      Confirmar exclusão
+                      Confirmar
                     </button>
                     <button
                       type="button"
-                      style={{ background: 'none', border: 'none', color: 'var(--texto-fraco)', cursor: 'pointer', padding: 0 }}
+                      style={{ background: 'none', border: 'none', color: 'var(--texto-fraco)', cursor: 'pointer', padding: 0, fontSize: 12 }}
                       onClick={() => setConfirmandoExclusaoId(null)}
                     >
                       Cancelar
                     </button>
                   </>
                 ) : (
-                  <button
-                    type="button"
-                    style={{ background: 'none', border: 'none', color: 'var(--vermelho)', cursor: 'pointer', padding: 0 }}
-                    onClick={() => setConfirmandoExclusaoId(c.id!)}
-                  >
-                    Excluir
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      aria-label={`Editar ${c.nome}`}
+                      title="Editar"
+                      style={{ background: 'none', border: 'none', color: 'var(--azul)', cursor: 'pointer', padding: 2, display: 'flex', flex: '0 0 auto' }}
+                      onClick={() => iniciarEdicao(c)}
+                    >
+                      <PencilSquareIcon width={16} height={16} />
+                    </button>
+                    <MenuLinha
+                      aberto={menuContaAberta === c.id}
+                      onAbrirFechar={() => setMenuContaAberta((atual) => (atual === c.id ? null : c.id!))}
+                      onFechar={() => setMenuContaAberta(null)}
+                    >
+                      {temLancamentos ? (
+                        <button type="button" onClick={() => { alternarAtiva(c); setMenuContaAberta(null) }}>
+                          {c.ativa ? 'Inativar' : 'Reativar'}
+                        </button>
+                      ) : (
+                        <button type="button" onClick={() => { setConfirmandoExclusaoId(c.id!); setMenuContaAberta(null) }}>
+                          Excluir
+                        </button>
+                      )}
+                    </MenuLinha>
+                  </>
                 )}
               </div>
             </div>
@@ -271,7 +287,7 @@ export default function Contas({ aoVoltar }: { aoVoltar: () => void }) {
         })}
       </div>
 
-      <h2>Nova conta</h2>
+      <h2>Nova Conta</h2>
       <div className="cartao">
         <button
           type="button"

@@ -15,7 +15,8 @@ import { fmtBRL, formatarMoeda, aplicarMascaraValor, paraNumero } from '../forma
 import { useHojeSimuladoISO } from '../hojeSimulado'
 import TituloTelaN1 from '../kit/CabecalhoN1'
 import { ExportSheet, type ExportRow } from '../kit/ExportSheet'
-import { DismissibleTip, ESPACO_LINHA } from '../kit/PadraoUI'
+import { EXPLICACAO_CARTEIRA, SUBTITULO_CARTEIRA } from '../subtitulosTelas'
+import { lerDoAmbiente, marcaDoAmbiente } from '../ambiente'
 
 function fmtBRLComSinal(v: number) {
   return `${v < 0 ? '-' : ''}${fmtBRL(v)}`
@@ -79,9 +80,9 @@ function janelaFaturaEmAberto(diaFechamento: number): { inicio: string; fim: str
 // deixando claro que é só um AJUSTE DE FLUXO daquele mês (ex.: "esse gasto
 // substituiu parte do aporte que eu faria"), nunca uma movimentação real.
 export default function Carteira({ mes, aoMudarMes, aoAbrirLancamento }: TelaProps) {
-  const todasContas = useLiveQuery(() => db.contas.toArray(), [])
-  const categorias = useLiveQuery(() => db.categorias.toArray(), [])
-  const todosLancamentos = useLiveQuery(() => db.lancamentos.toArray(), [])
+  const todasContas = useLiveQuery(() => lerDoAmbiente(db.contas.toArray()), [])
+  const categorias = useLiveQuery(() => lerDoAmbiente(db.categorias.toArray()), [])
+  const todosLancamentos = useLiveQuery(() => lerDoAmbiente(db.lancamentos.toArray()), [])
   // Só pra forçar re-render quando a data simulada mudar (05/09/2026, Etapa
   // 7 — Ferramentas de teste), mesmo motivo de `Lancamentos.tsx`: o
   // drill-in desta tela usa `LinhaLancamentoCompleta`/`statusDoLancamento`.
@@ -178,7 +179,12 @@ export default function Carteira({ mes, aoMudarMes, aoAbrirLancamento }: TelaPro
   return (
     <>
       <div className="cabecalho-fixo">
-        <TituloTelaN1 titulo="Carteira" onExportar={() => setExportOpen(true)} />
+        <TituloTelaN1
+          titulo="Carteira"
+          subtitulo={SUBTITULO_CARTEIRA}
+          explicacao={EXPLICACAO_CARTEIRA}
+          onExportar={() => setExportOpen(true)}
+        />
       </div>
       {exportOpen && <ExportSheet title="Carteira" filenameBase={`morfofinp-carteira-${mes}`}
         screenColumns={[
@@ -196,10 +202,7 @@ export default function Carteira({ mes, aoMudarMes, aoAbrirLancamento }: TelaPro
         ]}
         detailRows={linhasCarteira}
         onClose={() => setExportOpen(false)} />}
-      {/* Padrão de Interface Morfo (UI), seção 6 — ver nota em `Situacao.tsx`. */}
-      <DismissibleTip screenKey="carteira" style={{ marginBottom: ESPACO_LINHA }}>
-        Onde o dinheiro está agora — toque num card pra ver e mexer nos lançamentos dele.
-      </DismissibleTip>
+      {/* 12/09/2026 (build 053) — ver nota em `Situacao.tsx`. */}
 
       {contas.map((conta) => {
         const lancamentosDaConta = todosLancamentos.filter((l) => l.contaId === conta.id)
@@ -508,6 +511,7 @@ function DetalheConta({
     await db.transaction('rw', db.lancamentos, db.categorias, db.grupos, async () => {
       const catFaturaId = await obterOuCriarCategoriaPagamentoFatura()
       const novoId = await db.lancamentos.add({
+        ...marcaDoAmbiente(),
         dataCompetencia: dataPagamento,
         dataCaixa: dataPagamento,
         descricao: `Pagamento fatura ${conta.nome}`,
@@ -648,7 +652,7 @@ function DetalheConta({
                   value={valorPagamento}
                   onChange={(e) => setValorPagamento(aplicarMascaraValor(e.target.value))}
                 />
-                <label>Data do pagamento</label>
+                <label>Data do Pagamento</label>
                 <input type="date" value={dataPagamento} onChange={(e) => setDataPagamento(e.target.value)} />
                 <p className="texto-fraco" style={{ marginTop: 8, marginBottom: 0 }}>
                   Lança 1 saída neutra na conta escolhida e marca todos os lançamentos deste ciclo como pagos — a
@@ -680,7 +684,7 @@ function DetalheConta({
       )}
 
       <div className="cartao" style={{ padding: '0 12px' }}>
-        {isCartao && <h2 style={{ marginTop: 12 }}>Compras da fatura</h2>}
+        {isCartao && <h2 style={{ marginTop: 12 }}>Compras da Fatura</h2>}
         {sessoes.length === 0 && (
           <p className="texto-fraco" style={{ padding: '14px 4px' }}>
             Nenhum lançamento encontrado {isCartao ? 'neste ciclo' : 'neste mês'}.

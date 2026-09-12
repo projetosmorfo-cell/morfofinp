@@ -86,6 +86,19 @@ public class NotificacaoBancariaPlugin extends Plugin {
         call.resolve();
     }
 
+    /* Consulta SEM pedir nada (12/09/2026): a tela precisa saber se a
+       permissão de aviso já foi concedida pra mostrar "ligado"/"desligado"
+       ao lado do botão, igual ao acesso às notificações. `solicitarPermissaoAviso`
+       ABRE o diálogo do Android — não serve pra só conferir. */
+    @PluginMethod
+    public void verificarPermissaoAviso(PluginCall call) {
+        JSObject r = new JSObject();
+        boolean ok = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU
+                || getPermissionState(ALIAS_AVISO) == PermissionState.GRANTED;
+        r.put("concedida", ok);
+        call.resolve(r);
+    }
+
     @PluginMethod
     public void solicitarPermissaoAviso(PluginCall call) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {

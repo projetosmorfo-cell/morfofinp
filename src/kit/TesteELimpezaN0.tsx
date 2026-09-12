@@ -12,8 +12,8 @@ import { DEV_CARD, AMBER, RED, Segmented, SectionLabel, primaryBtn, dangerBtn, u
 import { ConfirmDeleteSheet } from './PerfisAcesso'
 import { TituloTela } from './ParametrosN0'
 import {
-  tenantTemRegistros, gerarPlanosFicticios, gerarEmpresasFicticias, gerarUsuariosMorfoFicticios,
-  gerarLancamentosFicticios, apagarLancamentosFicticios, apagarTodosLancamentos, contarLancamentosFicticios,
+  tenantTemRegistros, contarLancamentosPorAmbiente, contarFicticiosPorAmbiente, gerarPlanosFicticios, gerarEmpresasFicticias, gerarUsuariosMorfoFicticios,
+  gerarLancamentosFicticios, apagarLancamentosFicticios, apagarTodosLancamentos,
 } from './massaTeste'
 
 // N0 → Parâmetros: "Gerar Teste no Cliente" (Kit L1818-L1842), "Gerar Teste
@@ -42,24 +42,46 @@ function TotalRegistros({ n, label }: { n: number; label: string }) {
   return <div style={{ fontSize: 11, fontWeight: 700, color: DEV_TXT2, padding: '4px 2px' }}>{n} {label}</div>
 }
 
+/* Uma escolha do "Tamanho do ambiente" (12/09/2026, item 23): opções em
+   `Segmented` com a explicação AO LADO do rótulo, como o Rafael pediu
+   ("com uma explicação ao lado"). */
+function LinhaTamanho({ rotulo, valor, opcoes, onEscolher, explicacao }: {
+  rotulo: string; valor: number; opcoes: number[]; onEscolher: (v: number) => void; explicacao: string
+}) {
+  return <div style={{ marginBottom: 10 }}>
+    <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 5, flexWrap: 'wrap' }}>
+      <span style={{ fontSize: 12, fontWeight: 700, color: '#fff' }}>{rotulo}</span>
+      <span style={{ fontSize: 11, color: DEV_TXT2, flex: 1, minWidth: 140, lineHeight: 1.45 }}>{explicacao}</span>
+    </div>
+    <Segmented value={String(valor)} onChange={(v) => onEscolher(Number(v))} options={opcoes.map((o) => ({ value: String(o), label: String(o) }))} />
+  </div>
+}
+
 /* ================= Gerar Teste no Cliente (Kit L1818-L1842) ================= */
 export function SubTesteCliente({ notify }: { notify: (m: string) => void }) {
   const platform = usePlatformN0()
-  const qtdLancamentos = useLiveQuery(() => db.lancamentos.count(), [], -1)
+  const porAmbiente = useLiveQuery(() => contarLancamentosPorAmbiente(), [], null)
   const [alvo, setAlvo] = useState<TenantKit | null>(null)
-  const [qtd, setQtd] = useState(50)
+  /* Item 23 do Rafael (12/09/2026): a quantidade passou a ser POR MÊS, e o
+     intervalo (meses pra trás e pra frente) virou escolha — antes era um
+     número solto de registros espalhados por 12 meses fixos. */
+  const [porMes, setPorMes] = useState(12)
+  const [mesesAtras, setMesesAtras] = useState(6)
+  const [mesesFrente, setMesesFrente] = useState(3)
   const [etapa, setEtapa] = useState(0)
   const [bloqueado, setBloqueado] = useState<TenantKit | null>(null)
+  const totalMeses = mesesAtras + 1 + mesesFrente
+  const qtd = porMes * totalMeses
 
   async function gerar() {
     if (!alvo) return
     try {
-      if (alvo.real) {
-        const n = await gerarLancamentosFicticios(qtd)
-        await salvarTenantsN0((ts) => ts.map((t) => (t.id === alvo.id ? { ...t, env: { registros: n, ambienteTeste: true }, accessLog: [{ id: uid(), ts: agoraISO(), action: `Massa de dados de teste gerada pela Morfo (${n} lançamentos)`, ator: 'suporte' }, ...(t.accessLog || [])].slice(0, 50) } : t)))
-      } else {
-        await salvarTenantsN0((ts) => ts.map((t) => (t.id === alvo.id ? { ...t, env: { registros: qtd, ambienteTeste: true }, accessLog: [{ id: uid(), ts: agoraISO(), action: `Massa de dados de teste gerada pela Morfo (${qtd} registros)`, ator: 'suporte' }, ...(t.accessLog || [])].slice(0, 50) } : t)))
-      }
+      /* 12/09/2026 (itens 14/23): a massa entra SEMPRE dentro do ambiente do
+         cliente escolhido — inclusive nos de exemplo, que antes só ganhavam um
+         número decorativo no `env`. Agora todo ambiente tem dado de verdade e
+         dá pra entrar nele e conferir. */
+      const n = await gerarLancamentosFicticios({ porMes, mesesAtras, mesesFrente, ambiente: alvo.id })
+      await salvarTenantsN0((ts) => ts.map((t) => (t.id === alvo.id ? { ...t, env: { registros: n, ambienteTeste: true }, accessLog: [{ id: uid(), ts: agoraISO(), action: `Massa de dados de teste gerada pela Morfo (${n} lançamentos)`, ator: 'admin' }, ...(t.accessLog || [])].slice(0, 50) } : t)))
       notify('Ambiente de teste gerado')
     } catch (e) {
       notify(e instanceof Error ? e.message : 'Não foi possível gerar a massa')
@@ -68,16 +90,16 @@ export function SubTesteCliente({ notify }: { notify: (m: string) => void }) {
   }
 
   return <>
-    <TituloTela>Popula o ambiente de um cliente com dados fictícios (12 meses de histórico). Só ambientes <strong style={{ color: '#fff' }}>vazios</strong> podem receber massa — os demais aparecem travados. Escolha o cliente:</TituloTela>
+    <TituloTela>Popula o ambiente de um cliente com uma massa realista — receita de R$ 5.000 por mês, gastos calibrados pelas metas (alguns estourando, outros sobrando), série fixa e compra parcelada em andamento. Só ambientes <strong style={{ color: '#fff' }}>vazios</strong> podem receber massa — os demais aparecem travados. Escolha o cliente:</TituloTela>
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       {platform.tenants.map((t) => {
-        const temRegistros = qtdLancamentos < 0 ? true : tenantTemRegistros(t, qtdLancamentos)
+        const temRegistros = porAmbiente === null ? true : tenantTemRegistros(t, porAmbiente)
         return <div key={t.id} onClick={() => (temRegistros ? setBloqueado(t) : setAlvo(t))}
           style={{ display: 'flex', alignItems: 'center', gap: 10, background: DEV_CARD, borderRadius: 12, padding: '11px 12px', cursor: 'pointer', opacity: temRegistros ? 0.55 : 1, border: alvo?.id === t.id ? `1.5px solid ${DEV_ACCENT}` : '1.5px solid transparent' }}>
           {temRegistros ? <Lock size={16} color={DEV_TXT2} /> : <Building2 size={16} color={DEV_ACCENT} />}
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 13.5, fontWeight: 700, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.companyName}{t.real && <span style={{ fontSize: 9.5, fontWeight: 800, color: DEV_ACCENT, marginLeft: 6 }}>REAL</span>}</div>
-            <div style={{ fontSize: 11, color: DEV_TXT2 }}>{temRegistros ? `${t.real ? qtdLancamentos : (t.env?.registros || 0)} registro(s) — já tem dados` : 'ambiente vazio — pode receber massa'}</div>
+            <div style={{ fontSize: 11, color: DEV_TXT2 }}>{temRegistros ? `${porAmbiente?.[t.id] ?? 0} registro(s) — já tem dados` : 'ambiente vazio — pode receber massa'}</div>
           </div>
           {alvo?.id === t.id && <Check size={16} color={DEV_ACCENT} />}
         </div>
@@ -85,7 +107,19 @@ export function SubTesteCliente({ notify }: { notify: (m: string) => void }) {
     </div>
     {alvo && <div style={{ marginTop: 14 }}>
       <div style={{ fontSize: 12.5, fontWeight: 700, color: '#C9C4D4', marginBottom: 6 }}>Tamanho do ambiente</div>
-      <div style={{ marginBottom: 12 }}><Segmented value={String(qtd)} onChange={(v) => setQtd(Number(v))} options={[{ value: '25', label: '25' }, { value: '50', label: '50' }, { value: '100', label: '100' }]} /></div>
+      <LinhaTamanho rotulo="Lançamentos por mês" valor={porMes} onEscolher={setPorMes} opcoes={[6, 12, 25, 40]}
+        explicacao="Quantos lançamentos cada mês recebe — inclui o salário, a conta fixa e a parcela do mês." />
+      <LinhaTamanho rotulo="Meses para trás" valor={mesesAtras} onEscolher={setMesesAtras} opcoes={[0, 3, 6, 12]}
+        explicacao="Histórico já fechado: tudo antes de hoje entra como pago/recebido." />
+      <LinhaTamanho rotulo="Meses para frente" valor={mesesFrente} onEscolher={setMesesFrente} opcoes={[0, 1, 3, 6]}
+        explicacao="Meses futuros: entram em aberto (A pagar/A receber) e alimentam a projeção." />
+      <div style={{ background: DEV_CARD, borderRadius: 10, padding: '10px 12px', fontSize: 11.5, color: DEV_TXT2, lineHeight: 1.6, margin: '4px 0 12px' }}>
+        <strong style={{ color: '#fff' }}>{qtd} lançamentos</strong> ao todo ({porMes} × {totalMeses} meses).
+        Receita de <strong style={{ color: '#fff' }}>R$ 5.000</strong> por mês, gasto calibrado pela meta de cada
+        grupo — parte dos grupos e das categorias fica <strong style={{ color: '#fff' }}>acima</strong> do limite e
+        parte <strong style={{ color: '#fff' }}>abaixo</strong>, com série fixa mensal e uma compra em 6× com
+        parcelas já pagas, a do mês e as futuras.
+      </div>
       <button type="button" onClick={() => setEtapa(1)} style={{ ...primaryBtn, width: '100%', background: DEV_ACCENT }}><Plus size={16} /> Gerar em {alvo.companyName}</button>
     </div>}
     {alvo && etapa === 1 && <ConfirmDeleteSheet title="Confirmar geração de dados" irreversible={false} confirmLabel="Continuar" confirmIcon={Plus}
@@ -177,22 +211,30 @@ export function SubTesteMorfo({ notify }: { notify: (m: string) => void }) {
 /* ========== Limpar Dados do Cliente — teste e reais (Kit L1875-L1922) ========== */
 export function SubLimpezaCliente({ notify }: { notify: (m: string) => void }) {
   const platform = usePlatformN0()
-  const qtdFicticios = useLiveQuery(() => contarLancamentosFicticios(), [], 0)
-  const qtdTotal = useLiveQuery(() => db.lancamentos.count(), [], 0)
+  const ficticiosPorAmb = useLiveQuery(() => contarFicticiosPorAmbiente(), [], {} as Record<string, number>)
+  const totalPorAmb = useLiveQuery(() => contarLancamentosPorAmbiente(), [], {} as Record<string, number>)
   const [modo, setModo] = useState<'teste' | 'reais'>('teste')
   const [sel, setSel] = useState<Set<string>>(new Set())
   const [confirma, setConfirma] = useState(0)
 
-  const visiveis = platform.tenants.filter((t) => (modo === 'teste' ? !!t.env?.ambienteTeste : !t.env?.ambienteTeste))
+  /* 12/09/2026: pro ambiente DESTE APARELHO, "tem massa de teste" é a
+     contagem real de lançamentos fictícios, nunca a marca gravada — ela era
+     escrita na geração e só zerada por esta tela, então sobrevivia a "Limpar
+     dados", "Apagar tudo" e restauração de backup, deixando o painel acusando
+     massa que não existia mais. Pros demais ambientes (que não têm banco
+     próprio) a marca continua sendo a única informação possível. */
+  const temMassa = (t: TenantKit) => (ficticiosPorAmb[t.id] ?? 0) > 0
+  const visiveis = platform.tenants.filter((t) => (modo === 'teste' ? temMassa(t) : !temMassa(t)))
   const toggle = (id: string) => setSel((s) => { const nx = new Set(s); if (nx.has(id)) nx.delete(id); else nx.add(id); return nx })
 
   async function limpar() {
     let apagados = 0
     for (const t of platform.tenants.filter((x) => sel.has(x.id))) {
-      if (t.real) apagados += modo === 'teste' ? await apagarLancamentosFicticios() : await apagarTodosLancamentos()
-      else apagados += t.env?.registros || 0
+      /* Item 23: apaga só o que é DAQUELE ambiente. Era aqui que "limpar os
+         dados desse cliente" levava junto tudo do ambiente do aparelho. */
+      apagados += modo === 'teste' ? await apagarLancamentosFicticios(t.id) : await apagarTodosLancamentos(t.id)
     }
-    await salvarTenantsN0((ts) => ts.map((t) => (sel.has(t.id) ? { ...t, env: { registros: 0, ambienteTeste: false }, accessLog: [{ id: uid(), ts: agoraISO(), action: modo === 'teste' ? 'Dados de TESTE do ambiente apagados pela Morfo' : 'Dados do ambiente apagados pela Morfo', ator: 'suporte' }, ...(t.accessLog || [])].slice(0, 50) } : t)))
+    await salvarTenantsN0((ts) => ts.map((t) => (sel.has(t.id) ? { ...t, env: { registros: 0, ambienteTeste: false }, accessLog: [{ id: uid(), ts: agoraISO(), action: modo === 'teste' ? 'Dados de TESTE do ambiente apagados pela Morfo' : 'Dados do ambiente apagados pela Morfo', ator: 'admin' }, ...(t.accessLog || [])].slice(0, 50) } : t)))
     notify(`${apagados} registro(s) apagado(s)`)
     setSel(new Set()); setConfirma(0)
   }
@@ -211,13 +253,13 @@ export function SubLimpezaCliente({ notify }: { notify: (m: string) => void }) {
     {visiveis.length > 0 && <TotalRegistros n={visiveis.length} label={visiveis.length === 1 ? 'ambiente' : 'ambientes'} />}
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 6 }}>
       {visiveis.map((t) => {
-        const n = t.real ? (modo === 'teste' ? qtdFicticios : qtdTotal) : (t.env?.registros || 0)
+        const n = modo === 'teste' ? (ficticiosPorAmb[t.id] ?? 0) : (totalPorAmb[t.id] ?? 0)
         return <div key={t.id} onClick={() => toggle(t.id)}
           style={{ display: 'flex', alignItems: 'center', gap: 10, background: DEV_CARD, borderRadius: 12, padding: '10px 12px', cursor: 'pointer', border: sel.has(t.id) ? `1.5px solid ${RED}` : '1.5px solid transparent' }}>
           <CaixaSelecao marcado={sel.has(t.id)} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 13, fontWeight: 700, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.companyName}{t.real && <span style={{ fontSize: 9.5, fontWeight: 800, color: DEV_ACCENT, marginLeft: 6 }}>REAL</span>}</div>
-            <div style={{ fontSize: 10.5, color: DEV_TXT2 }}>{n} registro(s){t.env?.ambienteTeste ? ' · ambiente com massa de teste' : ''}</div>
+            <div style={{ fontSize: 10.5, color: DEV_TXT2 }}>{n} registro(s){temMassa(t) ? ' · ambiente com massa de teste' : ''}</div>
           </div>
         </div>
       })}

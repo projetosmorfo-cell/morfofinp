@@ -13,6 +13,11 @@ import { Icone } from '../icones'
 import { useConfiguracaoIcones, tamanhoIconePx } from '../configuracaoIcones'
 import TituloTelaN1 from '../kit/CabecalhoN1'
 import { ExportSheet, type ExportRow } from '../kit/ExportSheet'
+import { lerDoAmbiente } from '../ambiente'
+import { baseMetaDoMes } from '../baseMeta'
+import { EXPLICACAO_RESUMO, SUBTITULO_RESUMO } from '../subtitulosTelas'
+import ExplicacaoDaTela from '../components/ExplicacaoDaTela'
+import AvisoBaseMetaZerada from '../components/AvisoBaseMetaZerada'
 
 // Resumo do Mês = "o que já aconteceu de verdade este mês + o que ainda vai
 // acontecer antes dele fechar" (visão de caixa) — diferente da Situação, que
@@ -20,16 +25,16 @@ import { ExportSheet, type ExportRow } from '../kit/ExportSheet'
 // a mesma pergunta (ver nota em Situacao.tsx).
 export default function ResumoDoMes({ mes, aoMudarMes, aoAbrirLancamento, aoAbrirPlanejamento }: TelaProps) {
   const [exportOpen, setExportOpen] = useState(false) /* G44 regra 11b */
-  const categorias = useLiveQuery(() => db.categorias.toArray(), [])
-  const grupos = useLiveQuery(() => db.grupos.toArray(), [])
+  const categorias = useLiveQuery(() => lerDoAmbiente(db.categorias.toArray()), [])
+  const grupos = useLiveQuery(() => lerDoAmbiente(db.grupos.toArray()), [])
   const lancamentosDoMes = useLiveQuery(
-    () => db.lancamentos.where('dataCompetencia').startsWith(mes).toArray(),
+    () => lerDoAmbiente(db.lancamentos.where('dataCompetencia').startsWith(mes).toArray()),
     [mes],
   )
   // Histórico completo — só pra achar a última ocorrência de cada série fixa
   // (ver "Vai entrar"/"Vai sair" abaixo), igual à Situação.
-  const lancamentosTodos = useLiveQuery(() => db.lancamentos.toArray(), [])
-  const metas = useLiveQuery(() => db.metas.toArray(), [])
+  const lancamentosTodos = useLiveQuery(() => lerDoAmbiente(db.lancamentos.toArray()), [])
+  const metas = useLiveQuery(() => lerDoAmbiente(db.metas.toArray()), [])
 
   const [expandidas, setExpandidas] = useState<Set<number>>(new Set())
   // F-02 da revisão de UI (04/09/2026): "Por categoria" era uma lista achatada
@@ -152,15 +157,12 @@ export default function ResumoDoMes({ mes, aoMudarMes, aoAbrirLancamento, aoAbri
     gastoPorGrupo.set(cat.grupo, (gastoPorGrupo.get(cat.grupo) ?? 0) + -l.valor)
   }
 
-  // Base pra calcular a Meta R$ de cada grupo: só o salário do mês (categoria
-  // "Salário"), não a receita total. Cashback, reembolso e outras entradas
-  // avulsas não expandem a meta de gasto — é a mesma regra que você fixou na
-  // planilha (célula "Forçar base fixa"), agora sempre ligada, sem precisar
-  // configurar mês a mês.
-  let baseSalario = 0
-  for (const l of lancamentosDoMes) {
-    if (categoriaPorId.get(l.categoriaId)?.nome === 'Salário') baseSalario += l.valor
-  }
+  /* Base pra calcular a Meta R$ de cada grupo — ver `src/baseMeta.ts`. Cashback,
+     reembolso e outras entradas avulsas continuam de fora (só entra receita
+     marcada como FIXA), que é a mesma regra da planilha ("Forçar base fixa").
+     Desde 12/09/2026 a seleção é pela flag da categoria, não pelo nome
+     "Salário" — e é a MESMA função que Planejamento e Categorias usam. */
+  const baseSalario = baseMetaDoMes(lancamentosDoMes, categorias, mes)
 
   const gruposComMeta = grupos.map((g) => {
     const meta = metas.find((m) => m.grupo === g.nome)
@@ -216,7 +218,17 @@ export default function ResumoDoMes({ mes, aoMudarMes, aoAbrirLancamento, aoAbri
   return (
     <>
       <div className="cabecalho-fixo">
-        <TituloTelaN1 titulo="Resumo do mês" onExportar={() => setExportOpen(true)} />
+        {/* 12/09/2026 (build 053): o "i" do cabeçalho explica A TELA. O botão
+            "O que esse número quer dizer?", lá embaixo, PERMANECE onde está —
+            ele não explica a tela, explica um número específico (o resultado
+            projetado) e precisa ficar colado nele. Migrar pro "i" do topo
+            separaria a explicação do número que ela explica. */}
+        <TituloTelaN1
+          titulo="Resumo do mês"
+          subtitulo={SUBTITULO_RESUMO}
+          explicacao={EXPLICACAO_RESUMO}
+          onExportar={() => setExportOpen(true)}
+        />
         <SeletorMes mes={mes} onMudar={aoMudarMes} />
       </div>
       {exportOpen && <ExportSheet title="Resumo do mês" filenameBase={`morfofinp-resumo-${mes}`}
@@ -237,18 +249,29 @@ export default function ResumoDoMes({ mes, aoMudarMes, aoAbrirLancamento, aoAbri
           <span>Saiu</span>
           <span className="valor-neg">-{fmt(saiu)}</span>
         </div>
-        {(vaiEntrar > 0 || vaiSair > 0) && (
-          <>
-            <div className="linha">
-              <span className="texto-fraco">Vai entrar (previsto, ainda não recebido)</span>
-              <span className="texto-fraco">+{fmt(vaiEntrar)}</span>
-            </div>
-            <div className="linha">
-              <span className="texto-fraco">Vai sair (comprometido, ainda não pago)</span>
-              <span className="texto-fraco">-{fmt(vaiSair)}</span>
-            </div>
-          </>
-        )}
+        {/* Item 1 (12/09/2026) e a confirmação do Rafael na rodada seguinte:
+            as duas linhas ficam sob UM agrupador só, "Compromisso" — ele
+            fechou a questão dizendo que receita já previsionada também é
+            compromisso, de RECEBIMENTO. Aparecem SEMPRE, mesmo zeradas:
+            escondê-las quando não há nada previsto sonegava justamente a
+            informação de que aquele mês não tem compromisso nenhum. */}
+        {/* 12/09/2026 (build 055): "as 2 linhas devem estar indentadas e o
+            título é pra englobar as duas, não só na primeira linha". O rótulo
+            ficava solto e as duas linhas alinhadas com o resto do card, então
+            ele parecia um subtítulo da linha de cima. Agora as duas ficam
+            recuadas sob um filete, e o filete é o que mostra até onde o
+            agrupamento vai. */}
+        <div className="subtitulo-agrupador" data-testid="rotulo-compromisso">Compromisso</div>
+        <div className="linhas-agrupadas" data-testid="linhas-compromisso">
+          <div className="linha">
+            <span className="texto-fraco">A receber (ainda não recebido)</span>
+            <span className="texto-fraco">+{fmt(vaiEntrar)}</span>
+          </div>
+          <div className="linha">
+            <span className="texto-fraco">A pagar (ainda não pago)</span>
+            <span className="texto-fraco">-{fmt(vaiSair)}</span>
+          </div>
+        </div>
         <div className="linha">
           <span>Resultado até agora</span>
           <strong className={resultado >= 0 ? 'valor-pos' : 'valor-neg'}>
@@ -257,12 +280,27 @@ export default function ResumoDoMes({ mes, aoMudarMes, aoAbrirLancamento, aoAbri
         </div>
         <div className="total-geral">
           <div className="linha" style={{ border: 'none', padding: 0 }}>
-            <strong>Resultado projetado (com o que ainda falta)</strong>
+            <strong>Resultado projetado (já descontado o comprometido)</strong>
             <strong className={resultadoProjetado >= 0 ? 'valor-pos' : 'valor-neg'} style={{ fontSize: 18 }}>
               {resultadoProjetado >= 0 ? '+' : '-'}{fmt(resultadoProjetado)}
             </strong>
           </div>
         </div>
+        {/* Item 1: o número acima não é dinheiro livre, e a tela precisa dizer
+            isso — o gasto variável que ainda não aconteceu não tem projeção
+            nenhuma e vai sair daqui. */}
+        <ExplicacaoDaTela rotulo="O que esse número quer dizer?">
+          <>
+            <strong>Esse valor não é dinheiro livre.</strong> Ele é o que já aconteceu de verdade no mês mais o
+            que está comprometido — parcelas em andamento e contas fixas recorrentes que ainda não foram pagas.
+            O gasto variável que você ainda vai fazer neste mês <strong>não</strong> está descontado aqui, porque
+            ele não tem compromisso nenhum registrado: vai sair desse valor conforme for acontecendo.
+            <br />
+            Compromisso não é o mesmo que meta: o cálculo <strong>não</strong> usa a meta de grupo nem a
+            meta de categoria nenhuma — só lançamento real e compromisso real. Meta é assunto do
+            Planejamento.
+          </>
+        </ExplicacaoDaTela>
       </div>
 
       {/* 04/09/2026, rodada seguinte — achado central da revisão de UI
@@ -273,7 +311,8 @@ export default function ResumoDoMes({ mes, aoMudarMes, aoAbrirLancamento, aoAbri
           Planejamento (que já é "o" lugar de planejado×realizado); aqui fica
           só o total geral (pra não perder de vista se o mês como um todo
           está dentro do combinado) mais um link pro detalhamento completo. */}
-      <h2>Metas por grupo</h2>
+      <h2>Metas de Grupo</h2>
+      {baseSalario === 0 && <AvisoBaseMetaZerada />}
       <div className="cartao">
         {gruposComMeta.length === 0 ? (
           <p className="texto-fraco">Nenhum grupo cadastrado ainda.</p>
@@ -288,7 +327,7 @@ export default function ResumoDoMes({ mes, aoMudarMes, aoAbrirLancamento, aoAbri
       {/* F-02: agrupada por Grupo (Fixo/Variável/Objetivos/Receitas…),
           recolhida por padrão — mesmo padrão de árvore que Planejamento já
           usa, em vez da lista achatada de ~19 categorias que havia antes. */}
-      <h2>Por categoria</h2>
+      <h2>Por Categoria</h2>
       <div className="cartao">
         {gruposParaExibir.length === 0 && (
           <p className="texto-fraco">Nenhum lançamento neste mês ainda.</p>

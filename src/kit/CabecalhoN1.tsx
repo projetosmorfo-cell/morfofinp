@@ -9,11 +9,22 @@
    usando exatamente a mesma linha — o Projeto Modelo também tem um
    componente só. Reconferido em 11/09/2026: sem divergência. */
 import type { ReactNode } from 'react'
+import { tituloCasoSeTexto } from '../tituloCaso'
 import { IconesDeTela } from './TopoIcones'
-import { ESPACO_LINHA } from './PadraoUI'
+import { ESPACO_LINHA, InfoDot } from './PadraoUI'
 
-export default function TituloTelaN1({ titulo, onExportar, extra, antes, acoesLista }: {
+export default function TituloTelaN1({ titulo, subtitulo, explicacao, onExportar, extra, antes, acoesLista }: {
   titulo: ReactNode
+  /* Frase curta em destaque logo abaixo do título, dizendo o que a tela
+     compara (12/09/2026, itens 4/5/6). Os textos vivem em
+     `src/subtitulosTelas.ts` — o onboarding usa os mesmos. */
+  subtitulo?: string
+  /* Texto longo da tela, aberto pelo "i" ao lado do subtítulo (12/09/2026,
+     build 053). Antes era um botão no corpo da tela ("O que essa tela
+     mostra?"); o Rafael pediu para virar o ícone de informação, junto do
+     subtítulo. Continua vindo de `src/subtitulosTelas.ts`, então subtítulo e
+     explicação seguem sendo a mesma ideia em dois tamanhos. */
+  explicacao?: ReactNode
   onExportar?: () => void
   extra?: ReactNode
   /* Elemento à ESQUERDA do título (o "‹ Voltar" do detalhe de uma carteira,
@@ -38,11 +49,54 @@ export default function TituloTelaN1({ titulo, onExportar, extra, antes, acoesLi
        colada na linha do mês (medido: 0px de respiro em todas as telas). O
        valor é o ritmo único do Padrão de Interface (10px). O `<h1>` perde a
        margem própria aqui pra ficar centralizado com os ícones. */
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: ESPACO_LINHA }}>
-      {antes}
-      <h1 style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', margin: 0, marginRight: 'auto' }}>{titulo}</h1>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-        <IconesDeTela {...acoesLista} onExportar={onExportar} incluir={extra} />
+    <div style={{ marginBottom: ESPACO_LINHA }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+        {antes}
+        {/* 12/09/2026 (build 053): o subtítulo saiu de baixo do título e veio
+            para o lado dele, com o "i" logo em seguida — pedido do Rafael.
+            Fonte e cor são as mesmas de antes; só o lugar mudou.
+            O título encolhe primeiro (`flexShrink` no h1, `minWidth: 0` nos
+            dois) para que o subtítulo não seja o primeiro a ser cortado numa
+            tela estreita: ele é a frase que explica a tela. */}
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, minWidth: 0, marginRight: 'auto' }}>
+          <h1 style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', margin: 0, flexShrink: 1 }}>{tituloCasoSeTexto(titulo) as ReactNode}</h1>
+          {(subtitulo || explicacao) && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, minWidth: 0 }}>
+              {subtitulo && (
+                <span
+                  data-testid="subtitulo-tela"
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: 'var(--azul)',
+                    lineHeight: 1.35,
+                    minWidth: 0,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {/* 12/09/2026 (build 055), pedido do Rafael: "subtítulos
+                      (azul) devem ter as 1ªs letras maiúsculas". Passa pela
+                      MESMA função que já trata título de tela, rótulo de campo
+                      e item de menu (`emTituloCaso`) — que deixa conectivo em
+                      minúscula ("Onde o Dinheiro Está") e preserva sigla. Um
+                      subtítulo novo nasce certo sem ninguém lembrar de digitar
+                      em caixa. */}
+                  {tituloCasoSeTexto(subtitulo) as ReactNode}
+                </span>
+              )}
+              {explicacao && (
+                <span data-testid="info-tela" style={{ flexShrink: 0 }}>
+                  <InfoDot info={explicacao} titulo={tituloCasoSeTexto(titulo) as ReactNode} />
+                </span>
+              )}
+            </span>
+          )}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+          <IconesDeTela {...acoesLista} onExportar={onExportar} incluir={extra} />
+        </div>
       </div>
     </div>
   )

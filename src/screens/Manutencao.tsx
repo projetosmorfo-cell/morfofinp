@@ -13,11 +13,10 @@ import {
   salvarModoVisao,
   useOrdemAbas,
   salvarOrdemAbas,
-  useOrdemMenuEngrenagem,
-  salvarOrdemMenuEngrenagem,
 } from '../configuracaoIcones'
 import { sair } from '../kit/auth'
 import { usePlanoAtual } from '../kit/planoAtual'
+import { contarDoAmbiente } from '../ambiente'
 import {
   usePlatformN0,
   usePosicaoN1Proprio,
@@ -56,22 +55,6 @@ const ORDEM_ABAS_PADRAO = ['resumo', 'situacao', 'lancamentos', 'carteira', 'pla
 // `ROTULO_MENU_ENGRENAGEM` em `App.tsx`), e a ordem salva aqui reordena cada
 // item DENTRO da sua sessão do Kit ("Do dia a dia" / "Ajustes do sistema" /
 // "Dados e saída") — nunca esconde nenhum, como sempre.
-const ROTULO_MENU_ENGRENAGEM: Record<string, string> = {
-  meusDados: 'Meus Dados',
-  categorias: 'Categorias e Grupos',
-  contas: 'Contas e carteiras',
-  notificacoes: 'Notificações bancárias',
-  usuarios: 'Usuários',
-  ajuda: 'Ajuda',
-  permissoes: 'Permissões',
-  meuAmbiente: 'Meu Ambiente',
-  assinatura: 'Minha Assinatura',
-  layout: 'Layout e Menus',
-  manutencao: 'Manutenção e dados',
-  limpar: 'Limpar todos os dados',
-  sair: 'Sair',
-}
-const ORDEM_MENU_ENGRENAGEM_PADRAO = ['meusDados', 'categorias', 'contas', 'notificacoes', 'usuarios', 'ajuda', 'permissoes', 'meuAmbiente', 'assinatura', 'layout', 'manutencao', 'limpar', 'sair']
 
 // Tela "Manutenção" (01/09/2026, rodada seguinte) — pedido direto do Rafael
 // depois de um susto real: pra conseguir ver a versão mais nova do app, ele
@@ -101,7 +84,6 @@ const ORDEM_MENU_ENGRENAGEM_PADRAO = ['meusDados', 'categorias', 'contas', 'noti
 // mesmo gap que gerou a Lição 16 (`Lições Aprendidas.md` do Project).
 export default function Manutencao({
   aoVoltar,
-  onAbrirTour,
   onAbrirFerramentasTeste,
   onIrParaAssinatura,
   secao,
@@ -123,7 +105,6 @@ export default function Manutencao({
   focarLimparDados?: boolean
   // Roteiro de Parametrização Morfo, Etapa 6 (05/09/2026) — abre o tour
   // guiado (spotlight), ver `src/kit/GuidedTour.tsx`.
-  onAbrirTour: () => void
   // Roteiro de Parametrização Morfo, Etapa 7 (05/09/2026) — abre a
   // ferramenta de simular data de hoje, ver `src/kit/SimularData.tsx`.
   onAbrirFerramentasTeste: () => void
@@ -143,7 +124,14 @@ export default function Manutencao({
   // Morfo, Etapa 4 — Kit de Estrutura Mínima, adaptação da seção "Ordem dos
   // menus" de `LayoutTenantScreen` do Kit). Só reordena — visibilidade de
   // cada aba continua sendo só o Light×Premium acima, nunca duplicado aqui.
-  const ordemSalva = useOrdemAbas()
+  /* Ordem própria do ambiente × padrão da Morfo (12/09/2026): sem ordem
+     própria, vale a do N0 (`layoutConfig.ordemAbasN1`), como em `App.tsx`.
+     Uma lista vazia gravada é o "sem ordem própria" — é o que o botão
+     "Redefinir padrão" grava. */
+  const layoutCfgN0 = usePlatformN0().layoutConfig
+  const ordemSalvaBruta = useOrdemAbas()
+  const ordemSalvaPropria = ordemSalvaBruta && ordemSalvaBruta.length > 0 ? ordemSalvaBruta : undefined
+  const ordemSalva = ordemSalvaPropria ?? layoutCfgN0?.ordemAbasN1
   const ordemAbas = ordemSalva ?? ORDEM_ABAS_PADRAO
   function moverAba(chave: string, direcao: -1 | 1) {
     const i = ordemAbas.indexOf(chave)
@@ -154,27 +142,6 @@ export default function Manutencao({
     salvarOrdemAbas(nova)
   }
 
-  // Layout do menu de engrenagem (08/09/2026, correção pós-G59) — mesmo
-  // padrão de "Layout do rodapé" acima: só reordena, sem esconder/remover
-  // item nenhum. `ordemMenuSalva` sem entradas novas (ex.: banco de antes
-  // desta correção, sem "sair" gravado ainda) recebe qualquer chave
-  // faltando no final, na ordem padrão — mesma lógica que garante em
-  // `App.tsx` que "Sair" nunca desaparece do menu de verdade.
-  const ordemMenuSalva = useOrdemMenuEngrenagem()
-  const ordemMenuEngrenagem = ordemMenuSalva
-    ? [
-        ...ordemMenuSalva.filter((k) => ORDEM_MENU_ENGRENAGEM_PADRAO.includes(k)),
-        ...ORDEM_MENU_ENGRENAGEM_PADRAO.filter((k) => !ordemMenuSalva.includes(k)),
-      ]
-    : ORDEM_MENU_ENGRENAGEM_PADRAO
-  function moverItemMenuEngrenagem(chave: string, direcao: -1 | 1) {
-    const i = ordemMenuEngrenagem.indexOf(chave)
-    const j = i + direcao
-    if (i < 0 || j < 0 || j >= ordemMenuEngrenagem.length) return
-    const nova = [...ordemMenuEngrenagem]
-    ;[nova[i], nova[j]] = [nova[j], nova[i]]
-    salvarOrdemMenuEngrenagem(nova)
-  }
 
   // "Posição dos menus (Barra × "⋮" × Ocultar)" e "Posição do botão "⋮""
   // (11/09/2026 — achado real, comparação visual pixel a pixel contra o
@@ -193,7 +160,6 @@ export default function Manutencao({
   // `kit/planos.ts`).
   const planoAtual = usePlanoAtual()
   const layoutLiberado = !!planoAtual?.restricoes?.layoutPersonalizado
-  const layoutCfgN0 = usePlatformN0().layoutConfig
   const posicaoProprio = usePosicaoN1Proprio()
   const menuPosProprio = useMenuPosN1Proprio()
   const posicaoEfetivaDoItem = (item: { key: string; padrao: PosicaoMenu }): PosicaoMenu => {
@@ -220,13 +186,13 @@ export default function Manutencao({
   // existia perde a última ocorrência de referência, então
   // `avancarSeriesFixasPendentes()` não tem mais de onde continuar — só
   // volta a gerar sozinha se um lançamento fixo novo for cadastrado depois.
-  const totalLancamentos = useLiveQuery(() => db.lancamentos.count(), [])
+  const totalLancamentos = useLiveQuery(() => contarDoAmbiente(db.lancamentos.toArray()), [])
   const [confirmandoLimpeza, setConfirmandoLimpeza] = useState(false)
   const [entendiLimpeza, setEntendiLimpeza] = useState(false)
   const [resultadoLimpeza, setResultadoLimpeza] = useState<string | null>(null)
 
   async function limparTodosLancamentos() {
-    const total = await db.lancamentos.count()
+    const total = await contarDoAmbiente(db.lancamentos.toArray())
     await db.lancamentos.clear()
     setResultadoLimpeza(
       `${total} lançamento(s) apagado(s), incluindo os de séries fixas e parcelas. Categorias, contas, grupos e configurações continuam intactos.`,
@@ -416,12 +382,12 @@ export default function Manutencao({
         <button type="button" className="botao-voltar-config" onClick={aoVoltar}>
           ‹ Voltar
         </button>
-        <h1>{secao === 'layout' ? 'Layout e Menus' : secao === 'dados' ? 'Manutenção e dados' : 'Manutenção'}</h1>
+        <h1>{secao === 'layout' ? 'Layout e Menus' : secao === 'dados' ? 'Manutenção e Saída' : 'Manutenção'}</h1>
       </div>
 
       {mostraLayout && (
       <>
-      <h2 style={{ marginTop: 0 }}>Visão do app</h2>
+      <h2 style={{ marginTop: 0 }}>Visão do App</h2>
       <div className="cartao">
         <p className="texto-fraco" style={{ marginTop: 0 }}>
           <strong>Light</strong> mostra o essencial no rodapé (Resumo, Lançamentos, Carteira e
@@ -450,7 +416,7 @@ export default function Manutencao({
         </div>
       </div>
 
-      <h2>Layout do rodapé</h2>
+      <h2>Layout do Rodapé</h2>
       <div className="cartao">
         <p className="texto-fraco" style={{ marginTop: 0 }}>
           Ordem das abas do rodapé — não muda o que aparece (isso é o Light/Premium acima), só a
@@ -489,60 +455,22 @@ export default function Manutencao({
             </div>
           ))}
         </div>
+        {/* Redefinir padrão (12/09/2026, pedido do Rafael): apaga a ordem
+            DESTE ambiente e volta a seguir o padrão que a Morfo salvou no N0
+            (Parâmetros › Layout do Sistema › "Ordem dos menus"). Quem nunca
+            mexeu já segue esse padrão — por isso o botão só aparece quando
+            existe ordem própria gravada. */}
+        {ordemSalvaPropria && (
+          <button type="button" className="primario" style={{ marginTop: 12 }} onClick={() => void salvarOrdemAbas([])}>
+            Redefinir padrão (voltar à ordem da Morfo)
+          </button>
+        )}
       </div>
 
-      <h2>Ordem da tela de Configurações</h2>
-      <div className="cartao">
-        {/* 08/09/2026, correção pós-G59 — Rafael: "o menu sair tem que ser
-            menu sem permitir retirar ele, só reposicionar". Mesmo mecanismo
-            e mesma limitação de propósito da seção "Layout do rodapé" logo
-            acima: só ↑/↓, nunca um botão de esconder/remover. Diferente do
-            rodapé (onde a VISIBILIDADE de cada aba é controlada à parte,
-            pelo Light×Premium), o menu de engrenagem não tem — e não vai
-            ganhar — nenhum mecanismo de visibilidade separado: todo item
-            listado aqui (inclusive "Sair") está sempre presente no menu de
-            verdade, só a ordem muda. Ver `ITENS_MENU_ENGRENAGEM_PADRAO`
-            em `App.tsx`. */}
-        <p className="texto-fraco" style={{ marginTop: 0 }}>
-          Ordem dos itens da tela de Configurações — todo item listado abaixo, incluindo "Sair",
-          está sempre presente na tela; só é possível mudar a posição de cada um dentro da sua
-          sessão ("Do dia a dia", "Ajustes do sistema" ou "Dados e saída"), nunca escondê-lo ou
-          removê-lo.
-        </p>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {ordemMenuEngrenagem.map((chave, i) => (
-            <div
-              key={chave}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                border: '1px solid var(--borda)',
-                borderRadius: 10,
-                padding: '7px 10px',
-              }}
-            >
-              <span style={{ flex: 1, fontWeight: 700, fontSize: 13.5 }}>{ROTULO_MENU_ENGRENAGEM[chave] ?? chave}</span>
-              <button
-                type="button"
-                disabled={i === 0}
-                onClick={() => moverItemMenuEngrenagem(chave, -1)}
-                style={{ marginTop: 0, padding: '4px 10px', opacity: i === 0 ? 0.35 : 1 }}
-              >
-                ↑
-              </button>
-              <button
-                type="button"
-                disabled={i === ordemMenuEngrenagem.length - 1}
-                onClick={() => moverItemMenuEngrenagem(chave, 1)}
-                style={{ marginTop: 0, padding: '4px 10px', opacity: i === ordemMenuEngrenagem.length - 1 ? 0.35 : 1 }}
-              >
-                ↓
-              </button>
-            </div>
-          ))}
-        </div>
-      </div>
+      {/* "Ordem da tela de Configurações" saiu daqui em 12/09/2026 (pedido do
+          Rafael: "no N1 essa configuração deve deixar de existir e deve ir pro
+          N0"). Agora é padrão da plataforma, editado em N0 › Parâmetros ›
+          Layout do Sistema › "Ordem dos menus" — ver `LayoutConfig.ordemConfigN1`. */}
 
       <h2>Posição dos menus (Barra × "⋮" × Ocultar)</h2>
       <div className="cartao">
@@ -568,7 +496,7 @@ export default function Manutencao({
               const atual = posicaoEfetivaDoItem(item)
               const temOverride = posicaoProprio?.[item.key] !== undefined
               const opcoes: { v: PosicaoMenu; l: string }[] =
-                item.key === ITEM_PROTEGIDO_N1
+                (ITEM_PROTEGIDO_N1 as readonly string[]).includes(item.key)
                   ? [{ v: 'rodape', l: 'Barra' }, { v: 'menu', l: '"⋮"' }]
                   : [{ v: 'rodape', l: 'Barra' }, { v: 'menu', l: '"⋮"' }, { v: 'oculto', l: 'Ocultar' }]
               return (
@@ -613,7 +541,7 @@ export default function Manutencao({
         )}
       </div>
 
-      <h2>Posição do botão "⋮"</h2>
+      <h2>Posição do Botão "⋮"</h2>
       <div className="cartao">
         <p className="texto-fraco" style={{ marginTop: 0 }}>
           Onde o botão "⋮" aparece, quando pelo menos um menu acima está marcado como "⋮".
@@ -686,6 +614,7 @@ export default function Manutencao({
         </p>
         <button
           type="button"
+          className="perigo"
           disabled={saindo}
           onClick={async () => {
             setSaindo(true)
@@ -700,26 +629,17 @@ export default function Manutencao({
         </button>
       </div>
 
-      <h2>Tour guiado</h2>
-      <div className="cartao">
-        <p className="texto-fraco" style={{ marginTop: 0 }}>
-          Passeio rápido pelas telas principais do app (Resumo, Situação, Lançamentos, Carteira,
-          Planejamento e Configurações) — aponta pros elementos reais da tela, não uma ilustração.
-          Nunca abre sozinho, só quando você pedir.
-        </p>
-        <button type="button" onClick={onAbrirTour}>
-          Ver tour guiado
-        </button>
-      </div>
+      {/* "Tour guiado" saiu daqui em 12/09/2026: estava duplicado — o mesmo
+          botão já vive em Configurações › Ajuda, que é o lugar dele. */}
 
-      <h2>Ferramentas de teste</h2>
+      <h2>Ferramentas de Teste</h2>
       <div className="cartao">
         <p className="texto-fraco" style={{ marginTop: 0 }}>
           Simular data de hoje — testa status (Atrasado/A pagar/A receber), projeção e séries fixas
           como se o tempo tivesse passado. Nunca edita nem apaga lançamento existente. Enquanto ativa,
           um aviso fixo aparece no topo do app inteiro, em qualquer tela.
         </p>
-        <button type="button" onClick={onAbrirFerramentasTeste}>
+        <button type="button" className="primario" onClick={onAbrirFerramentasTeste}>
           Simular data de hoje
         </button>
       </div>
@@ -732,7 +652,7 @@ export default function Manutencao({
       </p>
 
       <div className="cartao">
-        <button type="button" onClick={limparCacheSemPerderDados} disabled={rodando}>
+        <button type="button" className="primario" onClick={limparCacheSemPerderDados} disabled={rodando}>
           {rodando ? 'Limpando…' : 'Limpar cache do app (mantém meus lançamentos)'}
         </button>
         {resultado && (
@@ -743,7 +663,7 @@ export default function Manutencao({
       </div>
 
       {/* ---- Backup, restauração e apagar tudo (10/09/2026) ---- */}
-      <h2>Backup de tudo</h2>
+      <h2>Backup de Tudo</h2>
       <div className="cartao">
         <p className="texto-fraco" style={{ marginTop: 0 }}>
           Gera <strong>um arquivo</strong> com o app inteiro: lançamentos (com as séries fixas e
@@ -761,7 +681,7 @@ export default function Manutencao({
           <button type="button" className="primario" disabled={ocupadoBackup !== ''} onClick={() => void gerarBackup()}>
             {ocupadoBackup === 'gerando' ? 'Gerando…' : 'Fazer backup de tudo'}
           </button>
-          <button type="button" disabled={ocupadoBackup !== ''} onClick={() => void escolherBackupParaRestaurar()}>
+          <button type="button" className="primario" disabled={ocupadoBackup !== ''} onClick={() => void escolherBackupParaRestaurar()}>
             {ocupadoBackup === 'lendo' ? 'Abrindo…' : 'Restaurar backup'}
           </button>
         </div>
@@ -778,7 +698,7 @@ export default function Manutencao({
               onFocus={(e) => e.currentTarget.select()}
               style={{ width: '100%', minHeight: 120, marginTop: 10, fontFamily: 'monospace', fontSize: 11 }}
             />
-            <button type="button" onClick={() => { void navigator.clipboard?.writeText(backupNaTela).then(() => setAvisoBackup('Copiado. Cole num arquivo .json e guarde.')) }}>
+            <button type="button" className="secundario" style={{ marginTop: 8 }} onClick={() => { void navigator.clipboard?.writeText(backupNaTela).then(() => setAvisoBackup('Copiado. Cole num arquivo .json e guarde.')) }}>
               Copiar
             </button>
           </>
@@ -817,7 +737,7 @@ export default function Manutencao({
               >
                 {ocupadoBackup === 'restaurando' ? 'Restaurando…' : 'Sim, substituir tudo'}
               </button>
-              <button type="button" style={{ marginTop: 0 }} onClick={() => setPendenteRestauro(null)}>
+              <button type="button" className="secundario" style={{ marginTop: 0, flex: 1 }} onClick={() => setPendenteRestauro(null)}>
                 Cancelar
               </button>
             </div>
@@ -836,16 +756,20 @@ export default function Manutencao({
           cadastros. <strong>Faça um backup antes: não tem como desfazer.</strong>
         </p>
         {confirmandoApagarTudo === 0 && (
-          <button type="button" style={{ color: 'var(--vermelho)', borderColor: 'var(--vermelho)' }} onClick={() => setConfirmandoApagarTudo(1)}>
+          <button type="button" className="perigo" onClick={() => setConfirmandoApagarTudo(1)}>
             Apagar tudo
           </button>
         )}
         {confirmandoApagarTudo === 1 && (
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <button type="button" style={{ marginTop: 0 }} onClick={() => setConfirmandoApagarTudo(2)}>
+            {/* Item 19 da lista de 12/09/2026: estas duas opções eram botões
+                sem classe nenhuma — na tela pareciam dois pedaços de texto
+                lado a lado. Viraram botões de verdade, no par azul (seguir) e
+                neutro (cancelar), com o vermelho reservado pro passo final. */}
+            <button type="button" className="primario" style={{ marginTop: 0, flex: 1 }} onClick={() => setConfirmandoApagarTudo(2)}>
               Entendi, continuar
             </button>
-            <button type="button" style={{ marginTop: 0 }} onClick={() => setConfirmandoApagarTudo(0)}>
+            <button type="button" className="secundario" style={{ marginTop: 0, flex: 1 }} onClick={() => setConfirmandoApagarTudo(0)}>
               Cancelar
             </button>
           </div>
@@ -859,12 +783,13 @@ export default function Manutencao({
               <button
                 type="button"
                 disabled={ocupadoBackup !== ''}
-                style={{ marginTop: 0, background: 'var(--vermelho)', borderColor: 'var(--vermelho)' }}
+                className="perigo"
+                style={{ marginTop: 0, flex: 1 }}
                 onClick={() => void executarApagarTudo()}
               >
                 {ocupadoBackup === 'apagando' ? 'Apagando…' : 'Apagar tudo de vez'}
               </button>
-              <button type="button" style={{ marginTop: 0 }} onClick={() => setConfirmandoApagarTudo(0)}>
+              <button type="button" className="secundario" style={{ marginTop: 0, flex: 1 }} onClick={() => setConfirmandoApagarTudo(0)}>
                 Cancelar
               </button>
             </div>
@@ -872,7 +797,7 @@ export default function Manutencao({
         )}
       </div>
 
-      <h2 ref={refLimpar}>Limpar dados</h2>
+      <h2 ref={refLimpar}>Limpar Dados</h2>
       <div className="cartao">
         <p className="texto-fraco" style={{ marginTop: 0 }}>
           Apaga TODOS os lançamentos ({totalLancamentos ?? 0} hoje) — inclusive os gerados por série
@@ -922,11 +847,25 @@ export default function Manutencao({
                 de séries fixas e parceladas, e não tem como desfazer.
               </span>
             </button>
+            {/* Backup ANTES de apagar (12/09/2026, pedido do Rafael: "limpar
+                dados [...] este deve oferecer backup antes de limpar"). Mesma
+                função do cartão "Backup de tudo" — nada de um 2º caminho de
+                backup pra divergir depois. */}
+            <button
+              type="button"
+              className="primario"
+              style={{ marginTop: 0, marginBottom: 10 }}
+              disabled={ocupadoBackup !== ''}
+              onClick={() => void gerarBackup()}
+            >
+              {ocupadoBackup === 'gerando' ? 'Gerando…' : 'Fazer backup antes de limpar'}
+            </button>
             <div style={{ display: 'flex', gap: 8 }}>
               <button
                 type="button"
+                className="perigo"
                 disabled={!entendiLimpeza}
-                style={{ marginTop: 0, background: 'var(--vermelho)', borderColor: 'var(--vermelho)' }}
+                style={{ marginTop: 0, flex: 1 }}
                 onClick={limparTodosLancamentos}
               >
                 Sim, apagar todos os lançamentos
@@ -951,7 +890,7 @@ export default function Manutencao({
             </div>
           </>
         ) : (
-          <button type="button" onClick={() => setConfirmandoLimpeza(true)}>
+          <button type="button" className="perigo" onClick={() => setConfirmandoLimpeza(true)}>
             Limpar dados
           </button>
         )}
@@ -962,14 +901,14 @@ export default function Manutencao({
         )}
       </div>
 
-      <h2>Exportar configuração de ícones</h2>
+      <h2>Exportar Configuração de Ícones</h2>
       <div className="cartao">
         <p className="texto-fraco" style={{ marginTop: 0 }}>
           Gera um texto com o ícone/estilo/cor de cada categoria e grupo cadastrados agora mesmo. Use
           pra mandar de volta na conversa quando pedir pra travar os ícones atuais como padrão do
           sistema.
         </p>
-        <button type="button" onClick={exportarIcones}>
+        <button type="button" className="primario" onClick={exportarIcones}>
           Exportar
         </button>
         {exportacaoIcones && (
@@ -982,7 +921,7 @@ export default function Manutencao({
               style={{ width: '100%', marginTop: 12, fontFamily: 'monospace', fontSize: 12 }}
               onFocus={(e) => e.currentTarget.select()}
             />
-            <button type="button" style={{ marginTop: 8 }} onClick={copiarExportacao}>
+            <button type="button" className="primario" style={{ marginTop: 8 }} onClick={copiarExportacao}>
               {copiado ? 'Copiado!' : 'Copiar'}
             </button>
             <p className="texto-fraco" style={{ marginTop: 8 }}>

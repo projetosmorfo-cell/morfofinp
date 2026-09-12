@@ -96,6 +96,7 @@ export function useConfiguracaoIcones(): Required<
     | 'sessaoAtivaN0'
     | 'loggedDevUserId'
     | 'loggedUserIdN1'
+    | 'loggedTenantIdN1'
     | 'marcaSeloEcossistema'
     | 'marcaWhatsappNumero'
     | 'marcaWhatsappMensagemPadrao'
@@ -106,12 +107,20 @@ export function useConfiguracaoIcones(): Required<
     | 'siteMenu'
     | 'platformN0'
     | 'temaPreferido'
+    | 'permissoesAdiadasEm'
+    | 'permissoesNuncaMostrar'
     | 'memoriaDescricaoDias'
     | 'logosInstituicoes'
     | 'pctGrupoRevisado'
+    | 'receitaFixaRevisada'
     | 'gruposTipoRevisado'
     | 'posicaoN1Proprio'
     | 'menuPosN1Proprio'
+    | 'padraoCatVersaoAplicada'
+    | 'catsEditadasPeloUsuario'
+    | 'ambienteAtivoId'
+    | 'tourNaoExibir'
+    | 'padraoCatVersaoPorAmbiente'
   >
 > {
   const config = useLiveQuery(() => db.configuracoes.get(1), [])

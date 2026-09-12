@@ -143,7 +143,7 @@ export default function SimularData({ aoVoltar }: { aoVoltar: () => void }) {
         <button type="button" className="botao-voltar-config" onClick={aoVoltar}>
           ‹ Voltar
         </button>
-        <h1>Ferramentas de teste</h1>
+        <h1>Ferramentas de Teste</h1>
       </div>
 
       <p className="texto-fraco">
@@ -153,9 +153,9 @@ export default function SimularData({ aoVoltar }: { aoVoltar: () => void }) {
         ocorrência de série fixa que já deveria ter acontecido até a data escolhida.
       </p>
 
-      <h2 style={{ marginTop: 0 }}>Data de hoje</h2>
+      <h2 style={{ marginTop: 0 }}>Data de Hoje</h2>
       <div className="cartao">
-        <label>Simular esta data</label>
+        <label>Simular Esta Data</label>
         <input
           type="date"
           value={rascunho}

@@ -39,10 +39,21 @@ async function garantirTenantUsersMigrados(): Promise<UsuarioTenant[]> {
   return migrados
 }
 
-async function entrarComoTenantUserId(userId: string | undefined): Promise<void> {
+async function entrarComoTenantUserId(userId: string | undefined, tenantId?: string): Promise<void> {
+  /* 12/09/2026: o login passou a valer pra QUALQUER ambiente cadastrado no
+     N0, não só o deste aparelho — quando o usuário logado é de outro
+     ambiente, `loggedTenantIdN1` guarda qual (ver `useTenantN1`). Sem
+     `tenantId`, o comportamento é o de sempre: o ambiente `t0`. */
+  if (tenantId && tenantId !== TENANT_N1_ID) {
+    const platform = await lerPlatformN0Persistida()
+    const t = platform.tenants.find((x) => x.id === tenantId)
+    const u = (userId && t?.users?.find((x) => x.id === userId)) || t?.users?.[0]
+    await salvarConfiguracaoIcones({ sessaoAtiva: true, loggedUserIdN1: u?.id, loggedTenantIdN1: tenantId })
+    return
+  }
   const users = await garantirTenantUsersMigrados()
   const user = (userId && users.find((u) => u.id === userId)) || users[0]
-  await salvarConfiguracaoIcones({ sessaoAtiva: true, loggedUserIdN1: user?.id })
+  await salvarConfiguracaoIcones({ sessaoAtiva: true, loggedUserIdN1: user?.id, loggedTenantIdN1: TENANT_N1_ID })
 }
 
 // Autocadastro ("Contratar um plano") — cria o ÚNICO usuário do ambiente
@@ -58,7 +69,7 @@ async function entrarComoTenantUserId(userId: string | undefined): Promise<void>
 export async function criarAcesso(
   login: string,
   senha: string,
-  dados?: { nome?: string; email?: string; telefone?: string; nomeAmbiente?: string },
+  dados?: { nome?: string; email?: string; telefone?: string; cpf?: string; nomeAmbiente?: string },
 ): Promise<void> {
   const loginN = login.trim().toLowerCase()
   const platform = await lerPlatformN0Persistida()
@@ -75,7 +86,8 @@ export async function criarAcesso(
     createdAt: new Date().toISOString(),
   }
   const nomeAmbiente = dados?.nomeAmbiente?.trim()
-  await atualizarTenantN0(TENANT_N1_ID, (t) => ({ ...t, users: [novo], ...(nomeAmbiente ? { companyName: nomeAmbiente } : {}) }))
+  const cpf = dados?.cpf?.trim()
+  await atualizarTenantN0(TENANT_N1_ID, (t) => ({ ...t, users: [novo], ...(cpf ? { doc: cpf } : {}), ...(nomeAmbiente ? { companyName: nomeAmbiente } : {}) }))
   await salvarConfiguracaoIcones({ sessaoAtiva: true, loggedUserIdN1: novo.id })
 }
 
@@ -92,7 +104,7 @@ export async function entrar(login: string, senha: string): Promise<boolean> {
 }
 
 export async function sair(): Promise<void> {
-  await salvarConfiguracaoIcones({ sessaoAtiva: false, loggedUserIdN1: undefined })
+  await salvarConfiguracaoIcones({ sessaoAtiva: false, loggedUserIdN1: undefined, loggedTenantIdN1: undefined })
 }
 
 // Acesso demo/rápido, sem digitar credencial (08/09/2026, G44 regra 3).
@@ -107,8 +119,8 @@ export async function entrarDemo(): Promise<void> {
 // Chamado pelo adaptador de Login (`LoginView.tsx`) quando `LoginViewKit`
 // já resolveu QUAL usuário bateu, ou quando um atalho aponta um usuário
 // específico — nunca refaz checagem de senha.
-export async function entrarComoTenantUser(userId?: string): Promise<void> {
-  await entrarComoTenantUserId(userId)
+export async function entrarComoTenantUser(userId?: string, tenantId?: string): Promise<void> {
+  await entrarComoTenantUserId(userId, tenantId)
 }
 
 // "Esqueci minha senha" — como não existe backend/servidor de recuperação

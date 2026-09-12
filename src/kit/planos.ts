@@ -17,12 +17,17 @@ export type Plano = PlanoRegistro
 // `db.ts`). Mesmo recurso da Lição 39: plano gravado por um build anterior
 // não tem esses campos, então o padrão é aplicado POR BAIXO na leitura — em
 // vez de migração de dado. Sem isto, um plano antigo abriria o formulário
-// com "Porte" vazio e o "Limite de usuários" em branco.
+// com "Porte" vazio.
+//
+// 12/09/2026 — "Limite de usuários" saiu de todo lugar (pedido do Rafael:
+// "limite de usuário também perde o sentido de existir, retira de todo
+// lugar"): o ambiente do cliente é de UM usuário desde a Decisão 67, então
+// um teto configurável por plano não tinha mais o que limitar. O campo
+// eventualmente gravado num plano antigo simplesmente deixa de ser lido.
 export const PLANO_PADRAO_KIT = {
   porte: 'Pequeno' as const,
   gratuito: false,
   validadeDias: null,
-  limiteUsuarios: 3,
   descricaoCurta: '',
   restricoes: { exportacaoDetalhada: false, layoutPersonalizado: false },
 }
@@ -44,9 +49,7 @@ export function planoComPadroes(p: PlanoRegistro): Plano {
    da lista — igual ao Kit. */
 export function recursosAutomaticos(p: Partial<Plano>): string[] {
   const r = p.restricoes || {}
-  const usuarios = p.limiteUsuarios ?? 1
   return [
-    `${usuarios} usuário${usuarios > 1 ? 's' : ''}`,
     r.exportacaoDetalhada ? 'Exportação detalhada (CSV/PDF completo)' : 'Exportação simples',
     r.layoutPersonalizado ? 'Layout e menus personalizáveis' : 'Layout padrão da Morfo',
     ...(p.funcionalidades || []),

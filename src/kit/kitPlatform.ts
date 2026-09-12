@@ -74,7 +74,23 @@ export function chatReadTs(mensagens: MensagemChat[] | undefined) {
 export function hasUnreadTenant(t: Pick<TenantKit, 'supportMessages' | 'chatLastReadTenant'>) {
   return (t.supportMessages || []).some((m) => m.from === 'suporte' && (!t.chatLastReadTenant || m.ts > t.chatLastReadTenant))
 }
-export function hasUnreadMorfo(t: Pick<TenantKit, 'supportMessages' | 'chatLastReadMorfo'>) {
+/* BUG REAL corrigido em 12/09/2026 (build 052), relatado pelo Rafael: na
+   Central de Suporte, "marcar como não lida" funcionava às vezes e às vezes
+   não.
+
+   A causa é a definição, não o clique. "Não lida" era DERIVADA: existe alguma
+   mensagem DO CLIENTE mais nova que o carimbo de leitura. O botão só apagava o
+   carimbo — o que só produz efeito numa conversa em que o cliente já escreveu
+   alguma coisa. Numa conversa em que só o suporte falou (o aviso automático de
+   fim de teste, por exemplo), apagar o carimbo não mudava nada e a conversa
+   continuava "LIDA", sem nenhum sinal de que o clique tinha sido registrado.
+
+   Marcar como não lida é uma decisão de quem está atendendo ("volto nessa
+   depois"), então virou estado EXPLÍCITO — e a regra derivada continua valendo
+   por cima dela, para a mensagem nova do cliente seguir acendendo o aviso
+   sozinha. Abrir a conversa limpa as duas coisas. */
+export function hasUnreadMorfo(t: Pick<TenantKit, 'supportMessages' | 'chatLastReadMorfo' | 'chatMarcadaNaoLidaMorfo'>) {
+  if (t.chatMarcadaNaoLidaMorfo) return true
   return (t.supportMessages || []).some((m) => m.from === 'cliente' && (!t.chatLastReadMorfo || m.ts > t.chatLastReadMorfo))
 }
 /* ---- Kit L3661-L3668 ---- */
@@ -102,9 +118,20 @@ export const OPCOES_FILTRO_DADOS: { v: FiltroDados; l: string; info: string }[] 
   { v: 'teste', l: 'Dados Teste', info: 'Considera só as empresas fictícias, geradas pela massa de dados de teste — as empresas reais são ignoradas em Início, Clientes, Financeiro e Indicadores.' },
   { v: 'ambos', l: 'Ambos', info: 'Soma empresas reais e fictícias juntas — é como os números sempre foram calculados. Se você gerou massa de dados de teste, os números aqui ficam maiores/diferentes dos reais de verdade.' },
 ]
+/* Critério ÚNICO de "isto é dado de teste" (12/09/2026 — bug real reportado
+   pelo Rafael: "a barra do topo diz que tem dados de teste gerados, mas não
+   tem, nem me dá opção de apagar").
+
+   Causa: existiam DOIS critérios em telas diferentes. A barra de filtro
+   considerava teste tudo que não fosse `real` — o que inclui os 3 ambientes
+   de exemplo que a plataforma sempre semeou —, enquanto a tela de limpeza
+   listava só o que tem `ficticio: true`, marca que só a massa gerada recebia.
+   Resultado: a barra aparecia sempre, e o que ela acusava não aparecia em
+   lugar nenhum pra apagar. Agora as duas telas usam esta função. */
+export const ehTenantDeTeste = (t: TenantKit) => !!t.ficticio
 export function filtrarTenantsPorDados(tenants: TenantKit[], filtroDados: FiltroDados): TenantKit[] {
-  const temDadosTeste = tenants.some((t) => !t.real)
-  return tenants.filter((t) => !temDadosTeste || filtroDados === 'ambos' || (filtroDados === 'real' ? !!t.real : !t.real))
+  const temDadosTeste = tenants.some(ehTenantDeTeste)
+  return tenants.filter((t) => !temDadosTeste || filtroDados === 'ambos' || (filtroDados === 'real' ? !ehTenantDeTeste(t) : ehTenantDeTeste(t)))
 }
 
 /* ---- Kit L150 / L155: situação de uma parcela da assinatura ---- */
@@ -114,16 +141,84 @@ export function instCobravel(i: Parcela) { return !i.paid && !i.cancelada && !i.
    trial vencido e cancelamento expirado; as travas que dependem de cobrança
    real chegam com o backend, Backlog 028) ---- */
 export function tenantCanceledExpired(t: TenantKit) { return !!(t.cancellation && (daysUntil(t.cancellation.accessUntil) ?? 0) < 0) }
-export function tenantBlocked(t: TenantKit) {
+/* ---- Cobrança × acesso (12/09/2026, item 3) ----------------------------
+   Até aqui `tenantBlocked` só olhava bloqueio manual, cancelamento expirado e
+   teste vencido: uma mensalidade podia vencer e passar da tolerância sem
+   consequência nenhuma no app do cliente. O pedido do Rafael fecha esse ciclo:
+   avisa antes de vencer, bloqueia quando vence, e libera de novo quando o
+   pagamento é confirmado. */
+
+/** Parcelas que ainda contam como dívida (não pagas, não canceladas, não perda). */
+export function parcelasEmAberto(t: TenantKit): Parcela[] {
+  return (t.billing?.installments ?? []).filter(instCobravel).sort((a, b) => a.dueDate.localeCompare(b.dueDate))
+}
+
+/** A parcela em aberto mais antiga — é ela que decide aviso e bloqueio. */
+export function parcelaMaisAntigaEmAberto(t: TenantKit): Parcela | null {
+  return parcelasEmAberto(t)[0] ?? null
+}
+
+/** Bloqueio POR PAGAMENTO: existe parcela vencida além do prazo de tolerância. */
+export function bloqueadoPorPagamento(t: TenantKit, toleranceDays?: number): boolean {
+  const tol = toleranceDays ?? t.billing?.toleranceDays ?? 0
+  return parcelasEmAberto(t).some((i) => (daysUntil(i.dueDate) ?? 0) < -tol)
+}
+
+export type EstadoCobranca =
+  | 'ok'                      // nada em aberto, ou vencimento ainda longe
+  | 'avisando'                // dentro da janela de aviso, ainda não venceu
+  | 'vencido_na_tolerancia'   // passou do dia, mas ainda dentro da tolerância
+  | 'bloqueado'               // passou da tolerância — acesso cortado
+  | 'aguardando_confirmacao'  // cliente informou o pagamento; a Morfo ainda não confirmou
+
+export interface SituacaoCobranca {
+  estado: EstadoCobranca
+  /** Dias até o vencimento da parcela mais antiga em aberto (negativo = atrasado). */
+  diasParaVencer: number | null
+  parcela: Parcela | null
+  emAberto: Parcela[]
+  totalEmAberto: number
+}
+
+export function situacaoCobranca(t: TenantKit, params?: Partial<GlobalParams>): SituacaoCobranca {
+  const emAberto = parcelasEmAberto(t)
+  const parcela = emAberto[0] ?? null
+  const total = emAberto.reduce((s, i) => s + i.amount, 0)
+  const base: SituacaoCobranca = { estado: 'ok', diasParaVencer: null, parcela, emAberto, totalEmAberto: total }
+  if (!parcela) return base
+  const dias = daysUntil(parcela.dueDate) ?? 0
+  const tol = params?.toleranceDays ?? t.billing?.toleranceDays ?? 0
+  const aviso = params?.avisoVencimentoDiasAntes ?? 5
+  /* Pagamento informado manda em tudo: mesmo vencido, o estado é "aguardando"
+     — quem está esperando é a Morfo confirmar, não o cliente pagar. */
+  if (emAberto.some((i) => !!i.pagamentoInformadoEm)) return { ...base, estado: 'aguardando_confirmacao', diasParaVencer: dias }
+  if (dias < -tol) return { ...base, estado: 'bloqueado', diasParaVencer: dias }
+  if (dias < 0) return { ...base, estado: 'vencido_na_tolerancia', diasParaVencer: dias }
+  if (dias <= aviso) return { ...base, estado: 'avisando', diasParaVencer: dias }
+  return { ...base, diasParaVencer: dias }
+}
+
+export function tenantBlocked(t: TenantKit, toleranceDays?: number) {
   if (t.manualBlock) return true
   if (tenantCanceledExpired(t)) return true
   if (t.plan === 'trial' && t.trial) return (daysUntil(addDays(t.trial.startDate, t.trial.days)) ?? 0) < 0
+  /* 12/09/2026, item 3: mensalidade vencida além da tolerância bloqueia. Um
+     pagamento já informado pelo cliente NÃO destrava sozinho — ele continua
+     bloqueado, vendo o extrato com "aguardando confirmação", como pedido. */
+  if (t.plan === 'pagante' && bloqueadoPorPagamento(t, toleranceDays)) return true
   return false
 }
 
 /* ---- Tipos (o formato que `makeTenant` do Kit produz, L465-L489) ---- */
 export interface MensagemChat { id: string; from: 'cliente' | 'suporte'; text: string; imageUrl?: string | null; ts: string; automatica?: boolean; followUpEnviado?: boolean }
-export interface Parcela { id: string; dueDate: string; amount: number; paid: boolean; paidDate?: string | null; method?: string; cancelada?: boolean; perda?: boolean }
+/* `pagamentoInformadoEm` (12/09/2026, item 3): data em que o CLIENTE avisou
+   que pagou. Não libera nada sozinho — quem confirma é a Morfo, na ficha do
+   cliente, e é a confirmação que marca `paid`. Enquanto está informado e não
+   confirmado, o acesso segue bloqueado e a tela de planos mostra o status
+   ("aguardando confirmação"), que é exatamente o que ele pediu. Sem servidor
+   não existe baixa automática de pagamento; quando houver (Backlog 028), o
+   gateway substitui a confirmação manual e nada mais muda. */
+export interface Parcela { id: string; dueDate: string; amount: number; paid: boolean; paidDate?: string | null; method?: string; cancelada?: boolean; perda?: boolean; pagamentoInformadoEm?: string | null }
 /* `demo: true` marca o usuário de DEMONSTRAÇÃO que o ambiente `t0` já nasce
    com ele (login "rafael"/senha "1234", herdado da massa do Kit). Ele existe
    só pra quem quer olhar o app sem cadastrar nada — e é justamente ele que o
@@ -134,7 +229,26 @@ export interface Parcela { id: string; dueDate: string; amount: number; paid: bo
    (a marca cai fora, ver `ConfigN1.tsx`), os atalhos sem senha somem e
    login+senha passa a ser o único caminho — 11/09/2026, Decisão 67. */
 export interface UsuarioTenant { id: string; name: string; login: string; senha: string; phone?: string; email?: string; status: string; role?: string; perfilId?: string; createdAt?: string; demo?: boolean }
-export interface RegistroAcesso { id: string; ts: string; action: string; ator?: string }
+/* `tipo`/`atorNome`/`atorUserId` (12/09/2026, item 19 do Rafael — Auditoria do
+   N0 com os filtros do Kit): campos ADITIVOS e opcionais. O Kit guarda isso num
+   log global (`platform.auditLog`); aqui o log continua sendo um só
+   (`tenants[].accessLog`, decisão já registrada acima de
+   `verificarVencimentoPrecadastro`) — são os mesmos campos, no registro que já
+   existe. Registro antigo sem eles cai nos padrões ('geral'/'admin'). */
+export type TipoAuditoria = 'cliente' | 'financeiro' | 'assinatura' | 'usuario' | 'acesso' | 'ambiente' | 'layout' | 'geral'
+export interface RegistroAcesso { id: string; ts: string; action: string; ator?: string; tipo?: TipoAuditoria; atorNome?: string; atorUserId?: string }
+/* Kit L2497 (AUDIT_TIPOS) e L5652 (ATOR_INFO), literais. */
+export const AUDIT_TIPOS: Record<string, string> = { cliente: 'Cliente', financeiro: 'Financeiro', assinatura: 'Assinatura', usuario: 'Usuário', acesso: 'Acesso', ambiente: 'Ambiente', layout: 'Layout', geral: 'Geral' }
+/* Item 12 da lista de 12/09/2026: "os logs mostrados como Suporte
+   (impersonado) deveriam ser Morfo — não foram feitos acessando o ambiente do
+   cliente, e sim pela tela gerencial da Morfo". As ações do painel N0 passaram
+   a registrar `admin`; `suporte` fica reservado pro que é feito DENTRO do
+   ambiente do cliente, em modo consulta. */
+export const ATOR_INFO: Record<string, { l: string; cor: string }> = {
+  admin: { l: 'Morfo', cor: '#9B96A8' },
+  suporte: { l: 'Suporte (dentro do ambiente)', cor: 'var(--mloc-amber, #D9A227)' },
+  n1: { l: 'Cliente (N1)', cor: 'var(--mloc-purple, #5E2E97)' },
+}
 export interface TenantKit {
   id: string
   companyName: string
@@ -166,6 +280,10 @@ export interface TenantKit {
   supportMessages: MensagemChat[]
   chatLastReadTenant?: string | null
   chatLastReadMorfo?: string | null
+  /* Marcação manual de "não lida" feita pela Morfo na Central de Suporte —
+     ver `hasUnreadMorfo`. Aditivo e opcional: ausente = comportamento
+     derivado de sempre. */
+  chatMarcadaNaoLidaMorfo?: boolean
   users: UsuarioTenant[]
   userLimit?: number
   accessLog?: RegistroAcesso[]
@@ -254,6 +372,7 @@ export interface GlobalParams {
   precadastroMaxDias: number
   respeitarAutorizacaoAcesso: boolean
   modoAcessoSuporte: 'total' | 'consulta'
+  avisoVencimentoDiasAntes: number
   trialWarning: TrialWarningCfg
   chat: ChatConfig
 }
@@ -262,6 +381,11 @@ export function defaultGlobalParams(): GlobalParams {
     toleranceDays: 5, dataRetentionDays: 90, cleanupMode: 'days', trialDays: 15, dueDay: 5,
     paymentCardsVisibleCount: 3, precadastroMaxDias: 15, respeitarAutorizacaoAcesso: false,
     modoAcessoSuporte: 'total',
+    /* Quantos dias ANTES do vencimento o ambiente do cliente passa a mostrar
+       a tarja de aviso (item 3, 12/09/2026). É diferente de
+       `alertSettings.vencendo.diasAntes`, que é a notificação do ADMIN Morfo
+       sobre as assinaturas — este aqui é o que o cliente vê no app dele. */
+    avisoVencimentoDiasAntes: 5,
     trialWarning: { diasAntes: 3, texto: 'Seu período de teste no MorfoFinP termina em breve! Fale com a gente pra continuar usando sem interrupção.', repetirTodoDia: false },
     chat: { ...CHAT_CONFIG_PADRAO },
   }
@@ -321,7 +445,7 @@ export const ITENS_NAV_N1: { key: string; label: string; padrao: PosicaoMenu }[]
 ]
 export const ITENS_NAV_N0: { key: string; label: string; padrao: PosicaoMenu }[] = [
   { key: 'inicio', label: 'Início', padrao: 'rodape' },
-  { key: 'tenants', label: 'Tenants', padrao: 'rodape' },
+  { key: 'tenants', label: 'Clientes', padrao: 'rodape' },
   { key: 'financeiro', label: 'Financeiro', padrao: 'rodape' },
   { key: 'auditoria', label: 'Auditoria', padrao: 'rodape' },
   { key: 'parametros', label: 'Parâmetros', padrao: 'rodape' },
@@ -329,8 +453,13 @@ export const ITENS_NAV_N0: { key: string; label: string; padrao: PosicaoMenu }[]
   { key: 'atualizar', label: 'Atualizar', padrao: 'menu' },
   { key: 'sair', label: 'Sair', padrao: 'menu' },
 ]
-export const ITEM_PROTEGIDO_N1 = 'config'
-export const ITEM_PROTEGIDO_N0 = 'parametros'
+/* Itens que NUNCA aceitam "Ocultar" (12/09/2026, pedido do Rafael: "menu
+   Sair, na config dos 3 pontinhos, deve ser igual ao 'Configuração', não
+   permitir ocultar"). Esconder a saída tranca a pessoa dentro do ambiente
+   do mesmo jeito que esconder as Configurações — as duas são portas, não
+   conteúdo. Continuam reposicionáveis (barra × "⋮"), só não somem. */
+export const ITEM_PROTEGIDO_N1 = ['config', 'sair'] as const
+export const ITEM_PROTEGIDO_N0 = ['parametros', 'sair'] as const
 
 /* Posição efetiva de um item, com o padrão do próprio item por baixo (Lição
    39): config salva por um build anterior não tem o mapa, e o item novo que
@@ -339,10 +468,11 @@ export const ITEM_PROTEGIDO_N0 = 'parametros'
 export function posicaoMenuDe(
   mapa: Record<string, PosicaoMenu> | undefined,
   item: { key: string; padrao: PosicaoMenu },
-  protegido: string,
+  protegido: string | readonly string[],
 ): PosicaoMenu {
   const v = mapa?.[item.key] ?? item.padrao
-  if (item.key === protegido && v === 'oculto') return item.padrao
+  const lista = typeof protegido === 'string' ? [protegido] : protegido
+  if (lista.includes(item.key) && v === 'oculto') return item.padrao
   return v
 }
 
@@ -365,6 +495,19 @@ export interface LayoutConfig {
   menuPosN1?: { modo: MenuPosModo }
   posicaoN0?: Record<string, PosicaoMenu>
   menuPosN0?: { modo: MenuPosModo }
+  /* ORDEM dos menus como PADRÃO DA PLATAFORMA (12/09/2026, pedido do
+     Rafael: "precisa evoluir pra permitir as mesmas configs dentro do N0 e
+     gravar como padrão [...] os que já mexeram não devem ser restartados,
+     apenas define o padrão, e dentro do N1 deve ter botão pra Redefinir o
+     padrão"). Isso REVOGA a nota anterior de "não repetir aqui": a ordem do
+     rodapé do N1 continua editável pelo próprio ambiente, mas o que está
+     aqui é o padrão de fábrica que vale pra quem nunca mexeu — e é o que o
+     botão "Redefinir padrão" do N1 devolve. A ordem da TELA DE
+     CONFIGURAÇÕES do N1 passou a ser SÓ daqui (saiu do N1 por pedido do
+     mesmo dia). */
+  ordemAbasN1?: string[]
+  ordemConfigN1?: string[]
+  ordemAbasN0?: string[]
 }
 
 // Override de "Posição dos menus" / "Posição do botão ⋮" DO PRÓPRIO
@@ -426,6 +569,28 @@ export interface FuncaoPerfil { k: string; l: string; sessao?: string; sub?: { k
    e-mail e telefone mas nenhum dos dois campos era preenchido por tela
    nenhuma. Todos opcionais: usuário gravado antes disso continua válido. */
 export interface DevUserN0 { id: string; name: string; login: string; senha: string; cpf?: string; email?: string; phone?: string; address?: Endereco; status?: string; perfilId?: string; createdAt?: string; ficticio?: boolean }
+/* Item 7 (12/09/2026) — o cadastro-modelo da plataforma. Os nomes dos campos
+   são os mesmos de `Categoria`/`GrupoRegistro`/`Meta` (`db.ts`): esta é a
+   MESMA configuração do N1, só que guardada como padrão, nunca uma segunda
+   modelagem paralela. */
+export interface GrupoPadraoN0 { nome: string; icone?: string; iconeEstilo?: string; iconeCor?: string; percentual: number }
+/* Build 056 (12/09/2026): `aceitavelMensal`/`esperadoMensal` continuam no tipo
+   SÓ pra ler padrão gravado por uma build anterior sem quebrar — nenhuma tela
+   do N0 os edita e `aplicarPadrao` não os escreve mais. Valor é do ambiente
+   (N1); o padrão da plataforma é estrutura. */
+export interface CategoriaPadraoN0 { nome: string; grupo: string; natureza: string; aceitavelMensal?: number; esperadoMensal?: number; /* 12/09/2026: a flag entra no padrão da plataforma junto com o resto do cadastro — sem ela, um ambiente que recebe o padrão nasce com a base de metas zerada. */ receitaFixa?: boolean; icone?: string; iconeEstilo?: string; iconeCor?: string }
+export interface PadraoCategoriasN0 {
+  versao: number
+  atualizadoEm: string
+  grupos: GrupoPadraoN0[]
+  categorias: CategoriaPadraoN0[]
+  /* Os 3 percentuais de tamanho de ícone (`configuracaoIcones.ts`) — fazem
+     parte do mesmo pedido ("Categorias/Grupos/ícones"). */
+  pctCompleta?: number
+  pctCategoria?: number
+  pctGrupo?: number
+}
+
 export interface PlatformN0 {
   tenants: TenantKit[]
   defaultParams?: Partial<GlobalParams>
@@ -445,6 +610,37 @@ export interface PlatformN0 {
      do produto (`logosProduto.ts`); trocar a logo do app é trocar este
      parâmetro em N0 → Parâmetros → Marca, nunca o código. `appLogadoPos` e
      `appLogadoAltura` completam o "parâmetro de layout do app logado". */
+  /* Padrão de Categorias/Grupos/ícones da PLATAFORMA (12/09/2026, item 7 do
+     Rafael: "o N0 deveria ter as mesmas configurações de Categorias/Grupos/
+     ícones, e ao salvar, virariam o novo padrão pros N1 que não editaram —
+     e já carregar o padrão atual lá"). Guarda o cadastro-modelo que todo
+     ambiente novo recebe; `versao` sobe a cada salvamento e é o que um N1
+     compara com o que já aplicou (`padraoCatVersaoAplicada`, `db.configuracoes`)
+     pra saber se tem padrão novo pra receber. Ver `padraoCategorias.ts`. */
+  padraoCategorias?: PadraoCategoriasN0
+  /* URLs do produto (12/09/2026, build 053 — pedido do Rafael: "nas configs do
+     N0, ter novo menu pra URLs, lá devo preencher com a url pra download do
+     apk", e mais adiante "coloque tbm a URL do Website... mostrar como
+     opcional sempre no compartilhamento").
+
+     Moram aqui, e não em `defaultParams`, porque não são regra de negócio de
+     assinatura — são endereços da plataforma, do mesmo naipe das logos de
+     `brandingN0`. Quem monta mensagem de convite/liberação lê daqui
+     (`compartilharAcesso.ts`); nenhum texto tem endereço escrito à mão. */
+  urlsProduto?: {
+    /** Link direto do .apk (instalação fora da loja). */
+    apk?: string
+    /** Site institucional do produto — opcional em toda mensagem. */
+    site?: string
+    /* Endereço onde o PRÓPRIO APLICATIVO está publicado na web (build
+       hospedado). Separado do `site` desde a build 054, por um motivo achado
+       em uso real: o Rafael cadastrou o site da Morfo em `site`, o link de
+       pré-cadastro foi montado em cima dele, e abrir o link caiu na home da
+       Morfo — que não é o aplicativo e não sabe o que fazer com o endereço.
+       Site institucional e aplicativo publicado são coisas diferentes, e só o
+       segundo consegue abrir a tela de completar cadastro. */
+    appWeb?: string
+  }
   brandingN0?: {
     morfoTopo?: string; morfoDocs?: string; produtoTopo?: string; produtoDocs?: string
     appLogadoClara?: string; appLogadoEscura?: string
@@ -466,7 +662,7 @@ export interface PlatformN0 {
    si são idênticos ao Kit). */
 export const FUNCOES_PERFIL_N0: FuncaoPerfil[] = [
   { k: 'inicio', l: 'Início' },
-  { k: 'tenants', l: 'Tenants' },
+  { k: 'tenants', l: 'Clientes' },
   { k: 'financeiro', l: 'Financeiro' },
   { k: 'auditoria', l: 'Auditoria' },
   /* ---- Kit L524-L539: a árvore de "Parâmetros" desmembrada pelas MESMAS 3
@@ -484,9 +680,11 @@ export const FUNCOES_PERFIL_N0: FuncaoPerfil[] = [
     { k: 'parametros.assinatura', l: 'Assinatura e Bloqueio', sessao: 'Ambiente do Cliente' },
     { k: 'parametros.ambiente', l: 'Ambiente dos Clientes', sessao: 'Ambiente do Cliente' },
     { k: 'parametros.chat', l: 'Gerenciar Chat', sessao: 'Ambiente do Cliente' },
+    { k: 'parametros.padraoCategorias', l: 'Categorias e Grupos (padrão)', sessao: 'Ambiente do Cliente' },
     { k: 'parametros.testesCliente', l: 'Gerar Teste no Cliente', sessao: 'Ambiente do Cliente' },
     { k: 'parametros.limpezasCliente', l: 'Limpar Dados do Cliente (teste e reais)', sessao: 'Ambiente do Cliente' },
     { k: 'parametros.marca', l: 'Marca', sessao: 'Ambiente MorfoFinP ADM' },
+    { k: 'parametros.urls', l: 'URLs', sessao: 'Ambiente MorfoFinP ADM' },
     { k: 'parametros.planos', l: 'Gerenciar Planos', sessao: 'Ambiente MorfoFinP ADM' },
     { k: 'parametros.usuarios', l: 'Usuários Morfo', sessao: 'Ambiente MorfoFinP ADM' },
     { k: 'parametros.permissoes', l: 'Permissões Morfo', sessao: 'Ambiente MorfoFinP ADM' },
@@ -507,7 +705,7 @@ export const FUNCOES_PERFIL_N1: FuncaoPerfil[] = [
      aparencia/ajuda) entraram na Decisão 55 (Parte B), junto das telas. ---- */
   { k: 'config', l: 'Configurações', sub: [
     { k: 'config.meusDados', l: 'Meus Dados' },
-    { k: 'config.categorias', l: 'Categorias e Grupos' },
+    { k: 'config.categorias', l: 'Categorias, Grupos e Metas' },
     { k: 'config.contas', l: 'Contas e carteiras' },
     { k: 'config.notificacoes', l: 'Notificações bancárias' },
     { k: 'config.meuAmbiente', l: 'Meu Ambiente' },
@@ -674,7 +872,7 @@ export function gerarPlatformN0(): PlatformN0 {
     userLimit: 1, accessLog: [], real: true,
   }
   const t1: TenantKit = {
-    id: uid(), companyName: 'Empresa Modelo', ownerName: 'Ana Souza', phone: '(11) 98689-7908', hasWhatsapp: true, email: 'contato@empresamodelo.com.br',
+    id: uid(), ficticio: true, companyName: 'Empresa Modelo', ownerName: 'Ana Souza', phone: '(11) 98689-7908', hasWhatsapp: true, email: 'contato@empresamodelo.com.br',
     createdAt: '2026-01-15', plan: 'pagante', planId: null, manualBlock: false, onboarding: 'completo', trial: null,
     billing: { monthlyValue: 249, dueDay: 5, toleranceDays: 5, installments: [
       { id: uid(), dueDate: '2026-05-05', amount: 249, paid: true, paidDate: '2026-05-05', method: 'pix' },
@@ -691,12 +889,17 @@ export function gerarPlatformN0(): PlatformN0 {
     users: [{ id: uid(), name: 'Ana Souza', login: 'anasouza', senha: '1234', status: 'ativo', perfilId: 'admin', createdAt: '2026-01-15' }],
     userLimit: 5,
     accessLog: [
-      { id: uid(), ts: '2026-06-30T15:22:00', action: 'Limite de usuários alterado para 5' },
+      /* 12/09/2026: o texto deste evento de exemplo citava "Limite de
+         usuários", que saiu do produto inteiro a pedido do Rafael — como ele
+         aparece na Auditoria e no histórico do cliente, era o último lugar da
+         tela onde a expressão sobrevivia. Trocado por um evento real do
+         produto. */
+      { id: uid(), ts: '2026-06-30T15:22:00', action: 'Plano alterado pela Morfo' },
       { id: uid(), ts: '2026-03-02T11:45:00', action: 'Convertido de teste para pagante' },
     ],
   }
   const t2: TenantKit = {
-    id: uid(), companyName: 'Cliente Demo Ltda', ownerName: 'Renata Souza', phone: '(51) 99123-4455', hasWhatsapp: true, email: 'renata@clientedemo.com.br',
+    id: uid(), ficticio: true, companyName: 'Cliente Demo Ltda', ownerName: 'Renata Souza', phone: '(51) 99123-4455', hasWhatsapp: true, email: 'renata@clientedemo.com.br',
     createdAt: addDays(todayISO(), -10), plan: 'trial', planId: null, manualBlock: false, onboarding: 'completo',
     trial: { days: 15, startDate: addDays(todayISO(), -10) }, billing: null,
     supportAuthorized: false, supportMessages: [], chatLastReadTenant: null, chatLastReadMorfo: null,
@@ -704,7 +907,7 @@ export function gerarPlatformN0(): PlatformN0 {
     userLimit: 3, accessLog: [],
   }
   const t3: TenantKit = {
-    id: uid(), companyName: 'Comércio Exemplo Ltda', ownerName: 'Diego Ferreira', phone: '(13) 99665-3344', hasWhatsapp: true, email: 'diego@comercioexemplo.com.br',
+    id: uid(), ficticio: true, companyName: 'Comércio Exemplo Ltda', ownerName: 'Diego Ferreira', phone: '(13) 99665-3344', hasWhatsapp: true, email: 'diego@comercioexemplo.com.br',
     createdAt: '2026-02-20', plan: 'pagante', planId: null, manualBlock: true, onboarding: 'completo', trial: null,
     billing: { monthlyValue: 249, dueDay: 15, toleranceDays: 5, installments: [
       { id: uid(), dueDate: '2026-06-15', amount: 249, paid: true, paidDate: '2026-06-15', method: 'pix' },
@@ -750,7 +953,18 @@ export const BRANDING_APP_LOGADO_PADRAO = {
 /* Mescla os valores de fábrica por baixo do que está gravado. Usada em toda
    leitura da plataforma (persistida ou recém-gerada). */
 function comBrandingPadrao(p: PlatformN0): PlatformN0 {
-  return { ...p, brandingN0: { ...BRANDING_APP_LOGADO_PADRAO, ...(p.brandingN0 || {}) } }
+  return { ...p, brandingN0: { ...BRANDING_APP_LOGADO_PADRAO, ...(p.brandingN0 || {}) }, tenants: p.tenants.map(comMarcaDeExemplo) }
+}
+
+/* Base que já existe: os 3 ambientes de exemplo foram gravados antes de a
+   marca `ficticio` existir. Sem isto eles continuariam invisíveis pra tela de
+   limpeza — que é metade do bug acima. Um ambiente cadastrado pela Morfo
+   sempre nasce com `real: true`, e a massa gerada já nasce com `ficticio`,
+   então só os semeados caem nesta regra; nenhum ambiente de cliente é
+   marcado como teste por engano. */
+function comMarcaDeExemplo(t: TenantKit): TenantKit {
+  if (t.real || t.ficticio !== undefined) return t
+  return { ...t, ficticio: true }
 }
 
 /* ---- Housekeeping da plataforma (achado 11/09/2026, ao reconferir
@@ -826,6 +1040,62 @@ export function avisoTrialSeNecessario(t: TenantKit, trialWarning: TrialWarningC
    no Projeto Modelo (item 215) — uma plataforma persistida ANTES de
    `trialWarning` existir teria esse campo `undefined`, e sem o merge de
    fábrica o aviso ficaria permanentemente desligado sem erro nenhum. */
+/* Item 11 da lista de 12/09/2026: "ao virar o dia de pagamento, gerar o
+   próximo pagamento como 'a vencer' e mostrar no Financeiro, dentro do cliente
+   no N0 e na tela de assinatura do N1".
+
+   Antes, a cobrança de um cliente pagante só existia se alguém lançasse à
+   mão: `billing.installments` nascia vazio na conversão pra pagante e nunca
+   crescia sozinho. Agora, a cada abertura do painel, todo cliente pagante
+   ganha as parcelas que já deveriam existir até o mês corrente, sempre com
+   `paid: false` (ou seja, "a vencer"/"vencido" conforme a data e a tolerância
+   — quem decide o rótulo é `installmentDisplayStatus`, que já existe).
+
+   É idempotente: a parcela é identificada pela DATA de vencimento, então rodar
+   de novo não duplica nada. Também não cria nada retroativo além de 12 meses,
+   pra um cliente antigo não nascer com uma lista gigante. */
+export function gerarParcelasPendentes(t: TenantKit): Partial<TenantKit> | null {
+  if (t.plan !== 'pagante' || !t.billing || !(t.billing.monthlyValue > 0)) return null
+  const hoje = new Date(todayISO() + 'T00:00:00')
+  const dia = Math.min(Math.max(1, t.billing.dueDay || 1), 28)
+  const existentes = new Set((t.billing.installments || []).map((i) => i.dueDate))
+  const inicio = t.createdAt ? new Date(t.createdAt + 'T00:00:00') : hoje
+  const novas: Parcela[] = []
+  for (let k = 12; k >= 0; k--) {
+    const ref = new Date(hoje.getFullYear(), hoje.getMonth() - k, dia)
+    if (ref < inicio) continue
+    if (ref > hoje) continue // só depois que o dia vira é que a parcela passa a existir
+    const iso = `${ref.getFullYear()}-${String(ref.getMonth() + 1).padStart(2, '0')}-${String(ref.getDate()).padStart(2, '0')}`
+    if (existentes.has(iso)) continue
+    existentes.add(iso)
+    novas.push({ id: uid(), dueDate: iso, amount: t.billing.monthlyValue, paid: false, paidDate: null })
+  }
+  /* 12/09/2026 (build 052): além das vencidas, o cliente pagante SEMPRE tem
+     uma cobrança em aberto — a próxima. O laço acima só cria parcela com
+     vencimento já passado, então um cliente que virou pagante no dia 12 com
+     vencimento no dia 20 ficava sem nada no Financeiro até o dia 20 chegar, e
+     quem quitava tudo ficava com o extrato zerado. O Rafael pediu o oposto:
+     "quando mudo pra cliente pagante já tem que nascer um pagamento a vencer".
+     Só entra quando não sobrou nenhuma em aberto, então não empilha meses
+     futuros — e continua idempotente, porque a chave é a data. */
+  const apos = [...(t.billing.installments || []), ...novas]
+  if (!apos.some(instCobravel)) {
+    const ref = new Date(hoje.getFullYear(), hoje.getMonth(), dia)
+    if (ref <= hoje) ref.setMonth(ref.getMonth() + 1)
+    const iso = `${ref.getFullYear()}-${String(ref.getMonth() + 1).padStart(2, '0')}-${String(ref.getDate()).padStart(2, '0')}`
+    if (!existentes.has(iso)) {
+      existentes.add(iso)
+      novas.push({ id: uid(), dueDate: iso, amount: t.billing.monthlyValue, paid: false, paidDate: null })
+    }
+  }
+  if (novas.length === 0) return null
+  const todas = [...(t.billing.installments || []), ...novas].sort((a, b) => a.dueDate.localeCompare(b.dueDate))
+  return {
+    billing: { ...t.billing, installments: todas },
+    accessLog: [...(t.accessLog ?? []), { id: uid(), ts: agoraISO(), action: `${novas.length} cobrança(s) gerada(s) automaticamente (a vencer)`, ator: 'admin' }],
+  }
+}
+
 export function runPlatformHousekeeping(p: PlatformN0): { tenants: TenantKit[] } | null {
   const globais = paramsGlobais(p)
   let mudou = false
@@ -835,6 +1105,8 @@ export function runPlatformHousekeeping(p: PlatformN0): { tenants: TenantKit[] }
     if (patchPrecadastro) { novo = { ...novo, ...patchPrecadastro }; mudou = true }
     const patchAviso = avisoTrialSeNecessario(novo, globais.trialWarning)
     if (patchAviso) { novo = { ...novo, ...patchAviso }; mudou = true }
+    const patchCobranca = gerarParcelasPendentes(novo)
+    if (patchCobranca) { novo = { ...novo, ...patchCobranca }; mudou = true }
     return novo
   })
   return mudou ? { tenants } : null
@@ -894,11 +1166,107 @@ export async function atualizarTenantN0(tenantId: string, patch: (t: TenantKit) 
   const atual = (await db.configuracoes.get(1))?.platformN0 ?? gerarPlatformN0()
   await salvarPlatformN0({ ...atual, tenants: atual.tenants.map(t => (t.id === tenantId ? patch(t) : t)) })
 }
+/* ---- Ações de cobrança (12/09/2026, item 3) ----
+   Duas metades do mesmo fluxo: o CLIENTE informa que pagou (não libera nada) e
+   a MORFO confirma (é a confirmação que libera). Ficam aqui, junto do resto do
+   modelo, pra N0 e N1 usarem a mesma escrita e o mesmo registro de auditoria —
+   se cada lado tivesse a sua, um dia divergiriam. */
+
+/** O cliente avisa que pagou uma parcela. Marca, registra e NÃO libera acesso. */
+export async function informarPagamento(tenantId: string, parcelaId: string) {
+  await atualizarTenantN0(tenantId, (t) => {
+    if (!t.billing) return t
+    return {
+      ...t,
+      billing: {
+        ...t.billing,
+        installments: (t.billing.installments ?? []).map((i) =>
+          i.id === parcelaId ? { ...i, pagamentoInformadoEm: todayISO() } : i),
+      },
+      accessLog: [...(t.accessLog ?? []), { id: uid(), ts: agoraISO(), action: 'Cliente informou o pagamento — aguardando confirmação da Morfo', ator: 'tenant' }],
+    }
+  })
+}
+
+/** A Morfo confirma o pagamento. É ISTO que quita a parcela e libera o acesso. */
+export async function confirmarPagamento(tenantId: string, parcelaId: string) {
+  await atualizarTenantN0(tenantId, (t) => {
+    if (!t.billing) return t
+    return {
+      ...t,
+      billing: {
+        ...t.billing,
+        installments: (t.billing.installments ?? []).map((i) =>
+          i.id === parcelaId ? { ...i, paid: true, paidDate: todayISO(), pagamentoInformadoEm: null } : i),
+      },
+      accessLog: [...(t.accessLog ?? []), { id: uid(), ts: agoraISO(), action: 'Pagamento confirmado pela Morfo — acesso liberado', ator: 'admin' }],
+    }
+  })
+}
+
+/* =====================================================================
+   FERRAMENTA DE MVP — REMOVER ANTES DA PUBLICAÇÃO EM PRODUÇÃO
+   ---------------------------------------------------------------------
+   Pedido do Rafael em 12/09/2026: "N0, permitir Forçar pagamento em modo de
+   MVP (anotar também essa função para ser retirada na publicação em
+   produção)".
+
+   Por que existe: sem servidor não há gateway nem baixa automática, e o
+   caminho honesto de teste (cliente informa que pagou → Morfo confirma)
+   precisa de duas pessoas em dois aparelhos. Isto quita todas as cobranças
+   em aberto de um cliente de uma vez, para conferir num aparelho só o que
+   acontece quando o acesso é liberado.
+
+   Por que é perigoso em produção: registra pagamento que ninguém fez. O log de
+   auditoria por isso NÃO mente — ele diz "forçado (ferramenta de MVP)", nunca
+   "pagamento confirmado".
+
+   Como remover quando houver backend (Backlog #035): apagar esta função e o
+   bloco `FORCAR_PAGAMENTO_MVP` em `DevApp.tsx`. Nada mais depende dela.
+   ===================================================================== */
+export async function forcarPagamentoMVP(tenantId: string) {
+  let quitadas = 0
+  await atualizarTenantN0(tenantId, (t) => {
+    if (!t.billing) return t
+    const installments = (t.billing.installments ?? []).map((i) => {
+      if (!instCobravel(i)) return i
+      quitadas++
+      return { ...i, paid: true, paidDate: todayISO(), pagamentoInformadoEm: null, method: 'mvp' }
+    })
+    if (quitadas === 0) return t
+    return {
+      ...t,
+      billing: { ...t.billing, installments },
+      accessLog: [...(t.accessLog ?? []), {
+        id: uid(),
+        ts: agoraISO(),
+        action: `${quitadas} cobrança(s) marcada(s) como paga(s) à força (ferramenta de MVP, sem pagamento real)`,
+        ator: 'admin',
+        tipo: 'financeiro' as TipoAuditoria,
+      }],
+    }
+  })
+  return quitadas
+}
+
 /* Conveniência do lado N1: o app do produto é sempre o tenant `t0`. */
 export const TENANT_N1_ID = 't0'
+/* 12/09/2026 (bug real relatado pelo Rafael: "pegando usuário e senha dos
+   clientes que já existem, não to conseguindo logar com eles, acusa login ou
+   senha inválidos"): o Login só enxergava os usuários de `t0`, então a
+   credencial de um cliente cadastrado no N0 nunca batia. Agora o Login
+   procura em TODOS os ambientes e grava qual entrou (`loggedTenantIdN1`);
+   este hook devolve esse ambiente — sem nada gravado, segue sendo `t0`.
+
+   Limitação honesta, a mesma de sempre: o MOVIMENTO (lançamentos) vive no
+   IndexedDB do aparelho, não dentro do tenant — entrar como outro cliente
+   mostra o nome/plano dele, mas os dados continuam sendo os deste aparelho
+   enquanto não existir backend (Backlog #028). */
 export function useTenantN1(): TenantKit | undefined {
   const p = usePlatformN0()
-  return p.tenants.find(t => t.id === TENANT_N1_ID)
+  const config = useLiveQuery(() => db.configuracoes.get(1), [])
+  const id = config?.loggedTenantIdN1 || TENANT_N1_ID
+  return p.tenants.find(t => t.id === id) ?? p.tenants.find(t => t.id === TENANT_N1_ID)
 }
 /* ---- CRUD de `devUsers`/`perfisMorfo` (10/09/2026, Decisão 54 Parte B) —
    mesmo padrão de `atualizarTenantN0`: lê o registro persistido de verdade
@@ -950,6 +1318,18 @@ export async function salvarAlertSettings(s: AlertSettings) {
 export async function atualizarLayoutConfig(patch: Partial<LayoutConfig>) {
   const atual = await lerPlatformN0Persistida()
   await salvarPlatformN0({ ...atual, layoutConfig: { ...(atual.layoutConfig || {}), ...patch } })
+}
+/* Grava o padrão da plataforma subindo `versao` — é a subida de versão que
+   faz cada N1 não-editado receber o padrão novo na abertura seguinte. */
+export async function salvarPadraoCategoriasN0(dados: Omit<PadraoCategoriasN0, 'versao' | 'atualizadoEm'>) {
+  const atual = await lerPlatformN0Persistida()
+  const versao = (atual.padraoCategorias?.versao ?? 0) + 1
+  await salvarPlatformN0({ ...atual, padraoCategorias: { ...dados, versao, atualizadoEm: agoraISO() } })
+  return versao
+}
+export async function atualizarUrlsN0(patch: Partial<NonNullable<PlatformN0['urlsProduto']>>) {
+  const atual = await lerPlatformN0Persistida()
+  await salvarPlatformN0({ ...atual, urlsProduto: { ...(atual.urlsProduto || {}), ...patch } })
 }
 export async function atualizarBrandingN0(patch: Partial<NonNullable<PlatformN0['brandingN0']>>) {
   const atual = await lerPlatformN0Persistida()

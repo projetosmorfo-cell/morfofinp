@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, NATUREZAS_ORCAMENTAVEIS, type Categoria, type GrupoRegistro, type Lancamento } from '../db'
-import { mesAtualISO, somarMes, type TelaProps } from '../mes'
+import { mesAtualISO, type TelaProps } from '../mes'
 import { proximaDataRecorrencia } from '../recorrencia'
 import { hojeEfetivoISO } from '../hojeSimulado'
 import { tipoDoGrupo } from '../gruposUtil'
@@ -15,7 +15,10 @@ import { Icone } from '../icones'
 import { useConfiguracaoIcones, tamanhoIconePx } from '../configuracaoIcones'
 import TituloTelaN1 from '../kit/CabecalhoN1'
 import { ExportSheet, type ExportRow } from '../kit/ExportSheet'
-import { DismissibleTip, ESPACO_LINHA } from '../kit/PadraoUI'
+import { lerDoAmbiente } from '../ambiente'
+import { baseMetaDoMes } from '../baseMeta'
+import { SUBTITULO_PLANEJAMENTO, EXPLICACAO_PLANEJAMENTO } from '../subtitulosTelas'
+import AvisoBaseMetaZerada from '../components/AvisoBaseMetaZerada'
 
 type Classe = 'entrada' | 'saida'
 
@@ -51,13 +54,13 @@ function somaTotais(xs: Totais[]): Totais {
 // aconteceu" e "o que ainda vai acontecer", com um fechamento (sobra/falta)
 // em cada nível.
 export default function Planejamento({ mes, aoMudarMes, aoAbrirLancamento }: TelaProps) {
-  const categorias = useLiveQuery(() => db.categorias.toArray(), [])
-  const grupos = useLiveQuery(() => db.grupos.toArray(), [])
+  const categorias = useLiveQuery(() => lerDoAmbiente(db.categorias.toArray()), [])
+  const grupos = useLiveQuery(() => lerDoAmbiente(db.grupos.toArray()), [])
   const lancamentosDoMes = useLiveQuery(
-    () => db.lancamentos.where('dataCompetencia').startsWith(mes).toArray(),
+    () => lerDoAmbiente(db.lancamentos.where('dataCompetencia').startsWith(mes).toArray()),
     [mes],
   )
-  const lancamentosTodos = useLiveQuery(() => db.lancamentos.toArray(), [])
+  const lancamentosTodos = useLiveQuery(() => lerDoAmbiente(db.lancamentos.toArray()), [])
 
   const [grupoAberto, setGrupoAberto] = useState<string | null>(null)
   const [exportOpen, setExportOpen] = useState(false) /* G44 regra 11b */
@@ -72,7 +75,7 @@ export default function Planejamento({ mes, aoMudarMes, aoAbrirLancamento }: Tel
      aberta e posição de rolagem continuam onde estavam ao fechar. */
   const [editandoCategoria, setEditandoCategoria] = useState<Categoria | null>(null)
   const [editandoGrupo, setEditandoGrupo] = useState<GrupoRegistro | null>(null)
-  const metas = useLiveQuery(() => db.metas.toArray(), [])
+  const metas = useLiveQuery(() => lerDoAmbiente(db.metas.toArray()), [])
   const { pctGrupo, pctCategoria } = useConfiguracaoIcones()
 
   if (!categorias || !grupos || !lancamentosDoMes || !lancamentosTodos) return null
@@ -150,15 +153,11 @@ export default function Planejamento({ mes, aoMudarMes, aoAbrirLancamento }: Tel
   const sobraProjetada =
     totalEntradas.realizado + totalEntradas.previsto - (totalSaidas.realizado + totalSaidas.previsto)
 
-  /* Base da meta do grupo: o salário do mês ANTERIOR — a mesma regra da aba
-     Metas (decisão de 30/08/2026: a base é só o salário, nunca a receita
-     total). Calculada aqui pra o popup de meta mostrar o equivalente em R$
-     sem inventar uma segunda conta do mesmo número. */
-  const mesAnterior = somarMes(mes, -1)
-  const categoriaSalarioId = categorias.find((c) => c.nome === 'Salário')?.id
-  const baseMetaEmReais = lancamentosTodos
-    .filter((l) => l.dataCompetencia.startsWith(mesAnterior) && l.categoriaId === categoriaSalarioId)
-    .reduce((sm, l) => sm + l.valor, 0)
+  /* Base da meta do grupo — ver `src/baseMeta.ts`. Desde 12/09/2026 é a soma
+     das categorias de receita marcadas como FIXA, do mês que está na tela
+     (antes: a categoria de nome "Salário", do mês ANTERIOR — que divergia do
+     card "Metas por grupo" do Resumo, que já usava o mês atual). */
+  const baseMetaEmReais = baseMetaDoMes(lancamentosTodos, categorias, mes)
 
   const porGrupo = grupos
     .map((g) => {
@@ -179,6 +178,14 @@ export default function Planejamento({ mes, aoMudarMes, aoAbrirLancamento }: Tel
      mesma conta da aba Metas (percentual × salário do mês anterior); o
      realizado e o previsto vêm dos mesmos totais que a tela inteira usa — o
      gráfico nunca calcula um número por conta própria. */
+  /* Meta em R$ do grupo — a MESMA conta do donut e da aba Metas (percentual ×
+     salário do mês anterior). Existe como função pra o cabeçalho do grupo
+     poder mostrar, ao lado da soma dos limites, o número que o gráfico usa. */
+  function metaEmReaisDoGrupo(nome: string) {
+    const pct = metas?.find((m) => m.grupo === nome)?.percentual ?? 0
+    return (baseMetaEmReais * pct) / 100
+  }
+
   const fatiasMeta: FatiaGrupo[] = porGrupo
     .map((g) => {
       const pct = metas?.find((m) => m.grupo === g.grupo)?.percentual ?? 0
@@ -231,7 +238,7 @@ export default function Planejamento({ mes, aoMudarMes, aoAbrirLancamento }: Tel
     const pct = t.planejado > 0 ? Math.min(100, (movimento / t.planejado) * 100) : movimento > 0 ? 100 : 0
     return (
       <div>
-        <div className={`linha ${icone ? 'linha-cabecalho-grupo' : ''}`} style={{ border: 'none', padding: 0 }}>
+        <div className={`linha linha-barra-topo ${icone ? 'linha-cabecalho-grupo' : ''}`} style={{ border: 'none', padding: 0 }}>
           <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             {icone}
             {rotulo}
@@ -267,7 +274,7 @@ export default function Planejamento({ mes, aoMudarMes, aoAbrirLancamento }: Tel
   return (
     <>
       <div className="cabecalho-fixo">
-        <TituloTelaN1 titulo="Planejamento" onExportar={() => setExportOpen(true)} />
+        <TituloTelaN1 titulo="Planejamento" subtitulo={SUBTITULO_PLANEJAMENTO} explicacao={<>{EXPLICACAO_PLANEJAMENTO} São 4 níveis: Geral, Grupo, Categoria e Lançamento — toque num grupo pra descer de nível.</>} onExportar={() => setExportOpen(true)} />
         <SeletorMes mes={mes} onMudar={aoMudarMes} />
       </div>
       {exportOpen && <ExportSheet title="Planejamento" filenameBase={`morfofinp-planejamento-${mes}`}
@@ -297,13 +304,11 @@ export default function Planejamento({ mes, aoMudarMes, aoAbrirLancamento }: Tel
           planejado: fmt(x.totais.planejado), realizado: fmt(x.totais.realizado), previsto: fmt(x.totais.previsto),
         }))}
         onClose={() => setExportOpen(false)} />}
-      {/* Padrão de Interface Morfo (UI), seção 6 — ver nota em `Situacao.tsx`. */}
-      <DismissibleTip screenKey="planejamento" style={{ marginBottom: ESPACO_LINHA }}>
-        Planejado (o que era esperado) × Realizado (o que já aconteceu) × Previsto (o que ainda vai
-        acontecer) — em 4 níveis: Geral, Grupo, Categoria e Lançamento. Toque num grupo pra descer de
-        nível.
-      </DismissibleTip>
+      {/* 12/09/2026 (build 053) — ver nota em `Situacao.tsx`. */}
 
+      {/* Base zerada não pode passar em silêncio: sem ela toda meta vira
+          R$ 0,00 e o donut desenha contra zero (bug real de 12/09/2026). */}
+      {baseMetaEmReais === 0 && <AvisoBaseMetaZerada />}
       <GraficoMetasGrupos fatias={fatiasMeta} />
 
       <h2>Nível Geral</h2>
@@ -396,7 +401,7 @@ export default function Planejamento({ mes, aoMudarMes, aoAbrirLancamento }: Tel
                 </div>
                 <button
                   type="button"
-                  aria-label={`Editar aceitável de ${cat.nome}`}
+                  aria-label={`Editar meta de ${cat.nome}`}
                   data-testid={`editar-aceitavel-${cat.id}`}
                   onClick={(e) => {
                     e.stopPropagation()
@@ -463,7 +468,45 @@ export default function Planejamento({ mes, aoMudarMes, aoAbrirLancamento }: Tel
                     mesma linhaTotais() do nível Geral/Categoria. */}
                 {temMovimentoNoGrupo && (
                   <div className="total-geral" style={{ marginTop: 8 }}>
-                    {linhaTotais('Total do grupo', classeGrupo, totalGrupo)}
+                    {/* Item 8 da lista de 12/09/2026. Até aqui a barra do grupo
+                        usava a SOMA DAS METAS DAS CATEGORIAS (de baixo pra
+                        cima) enquanto o donut usava a META DO GRUPO — dois
+                        números diferentes para a mesma coisa, na mesma tela.
+                        A rodada anterior propôs só rotular os dois; ele
+                        recusou, e com razão: o card tem que bater com o
+                        gráfico. Agora a barra é X de Y sobre a META DO GRUPO,
+                        e a diferença entre essa meta e a soma das metas de
+                        categoria virou uma linha PRÓPRIA logo abaixo, em
+                        verde (sobra) ou vermelho (falta) — o mesmo aviso que
+                        a tela de Metas de Grupo já dá, agora aqui também.
+                        Assim o real × previsto da meta do grupo e o
+                        fechamento das categorias ficam separados e nítidos. */}
+                    {linhaTotais(
+                      'Total do grupo',
+                      classeGrupo,
+                      classeGrupo === 'saida' && metaEmReaisDoGrupo(grupo) > 0
+                        ? { ...totalGrupo, planejado: metaEmReaisDoGrupo(grupo) }
+                        : totalGrupo,
+                    )}
+                    {classeGrupo === 'saida' && metaEmReaisDoGrupo(grupo) > 0 && (
+                      (() => {
+                        const metaGrupo = metaEmReaisDoGrupo(grupo)
+                        const somaCategorias = totalGrupo.planejado
+                        const diferenca = metaGrupo - somaCategorias
+                        return (
+                          <p style={{ margin: '4px 0 0', fontSize: 11.5 }} className="texto-fraco">
+                            Metas das categorias somam {fmt(somaCategorias)} ·{' '}
+                            {Math.abs(diferenca) < 1 ? (
+                              <span className="valor-pos texto-quebra">fecham certinho com a meta do grupo</span>
+                            ) : diferenca > 0 ? (
+                              <span className="valor-pos texto-quebra">sobram {fmt(diferenca)} da meta do grupo por distribuir</span>
+                            ) : (
+                              <span className="valor-neg texto-quebra">excedem a meta do grupo em {fmt(-diferenca)}</span>
+                            )}
+                          </p>
+                        )
+                      })()
+                    )}
                   </div>
                 )}
               </div>
@@ -546,7 +589,7 @@ export default function Planejamento({ mes, aoMudarMes, aoAbrirLancamento }: Tel
         +
       </button>
       {editandoCategoria && (
-        <PopupAceitavelCategoria categoria={editandoCategoria} onFechar={() => setEditandoCategoria(null)} />
+        <PopupAceitavelCategoria categoria={editandoCategoria} baseEmReais={baseMetaEmReais} onFechar={() => setEditandoCategoria(null)} />
       )}
       {editandoGrupo && (
         <PopupMetaGrupo

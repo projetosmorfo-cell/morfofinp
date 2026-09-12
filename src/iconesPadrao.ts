@@ -1,5 +1,6 @@
 import { db, type Categoria, type GrupoRegistro } from './db'
 import type { EstiloIcone } from './icones'
+import { lerDoAmbiente, doAmbiente, ambienteDoBanco } from './ambiente'
 
 // Padrão de ícones do sistema (04/09/2026, pedido do Rafael) — depois de
 // escolher manualmente o ícone/estilo/cor de cada categoria e grupo em
@@ -95,7 +96,7 @@ export function comIconePadraoGrupo<T extends Omit<GrupoRegistro, 'id'>>(g: T): 
 // genérico "outros"), porque isso também é uma escolha válida a preservar
 // como padrão.
 export async function exportarConfiguracaoIcones(): Promise<string> {
-  const [categorias, grupos] = await Promise.all([db.categorias.toArray(), db.grupos.toArray()])
+  const [categorias, grupos] = await Promise.all([lerDoAmbiente(db.categorias.toArray()), lerDoAmbiente(db.grupos.toArray())])
   const paraExport = (icone?: string, iconeEstilo?: EstiloIcone, iconeCor?: string): IconePadrao => ({
     icone: icone ?? 'outros',
     iconeEstilo: iconeEstilo ?? 'colorido',
@@ -116,8 +117,9 @@ export async function exportarConfiguracaoIcones(): Promise<string> {
 // correspondente no padrão) fica intocado.
 export async function restaurarPadraoIconesGeral(): Promise<number> {
   let alterados = 0
+  const amb = await ambienteDoBanco() /* ver nota em gruposUtil.ts */
   await db.transaction('rw', db.categorias, db.grupos, async () => {
-    const categorias = await db.categorias.toArray()
+    const categorias = doAmbiente(await db.categorias.toArray(), amb)
     for (const c of categorias) {
       const padrao = ICONES_PADRAO_CATEGORIA[c.nome]
       if (!padrao) continue
@@ -128,7 +130,7 @@ export async function restaurarPadraoIconesGeral(): Promise<number> {
       })
       alterados++
     }
-    const grupos = await db.grupos.toArray()
+    const grupos = doAmbiente(await db.grupos.toArray(), amb)
     for (const g of grupos) {
       const padrao = ICONES_PADRAO_GRUPO[g.nome]
       if (!padrao) continue

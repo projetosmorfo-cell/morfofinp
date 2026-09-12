@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Lock, LogOut, MessageCircle } from 'lucide-react'
-import { alpha, primaryBtn, secondaryBtn, RED, INK, TXT2, BRANCO } from './kitBase'
+import { alpha, primaryBtn, secondaryBtn, RED, INK, TXT2, BRANCO, PAPER } from './kitBase'
 import { tenantCanceledExpired, hasUnreadTenant, fmtDate, type TenantKit } from './kitPlatform'
 import SuporteChat from './SuporteChat'
 
@@ -34,8 +34,20 @@ export default function AmbienteBloqueado({ tenant, onLogoff }: { tenant: Tenant
 
   return (
     <div
+      /* 12/09/2026 (build 055), pedido do Rafael: "a tela de usuário no tema
+         escuro está com texto e fundo apagado em relação aos botões".
+
+         Causa exata: `.mloc-sempre-claro` (shell.css) só REDEFINE as variáveis
+         `--mloc-*` — não pinta fundo nenhum. Então o texto vinha escuro (INK)
+         por cima do `--bg` escuro do app, praticamente invisível, enquanto os
+         botões (que trazem fundo próprio) apareciam normais. É a mesma
+         superfície clara que o Login e a tela de completar pré-cadastro já
+         pintam explicitamente; faltava aqui. */
       className="mloc-sempre-claro"
+      data-testid="ambiente-bloqueado"
       style={{
+        background: PAPER,
+        color: INK,
         minHeight: '100%',
         maxHeight: '100%',
         overflowY: 'auto',
@@ -51,7 +63,7 @@ export default function AmbienteBloqueado({ tenant, onLogoff }: { tenant: Tenant
       <div style={{ width: 60, height: 60, borderRadius: 18, background: alpha(RED, 8.6), display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
         <Lock size={26} color={RED} />
       </div>
-      <div style={{ fontSize: 18, fontWeight: 800, color: INK, marginBottom: 6 }}>
+      <div data-testid="titulo-bloqueado" style={{ fontSize: 18, fontWeight: 800, color: INK, marginBottom: 6 }}>
         {encerrado ? 'Assinatura encerrada' : 'Ambiente bloqueado'}
       </div>
       <div style={{ fontSize: 13.5, color: TXT2, lineHeight: 1.5, marginBottom: 18 }}>

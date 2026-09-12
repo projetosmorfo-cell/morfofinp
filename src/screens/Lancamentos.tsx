@@ -11,6 +11,7 @@ import { statusDoLancamento, FUNDO_STATUS } from '../statusPagamento'
 import { useHojeSimuladoISO } from '../hojeSimulado'
 import TituloTelaN1 from '../kit/CabecalhoN1'
 import { ExportSheet, type ExportRow } from '../kit/ExportSheet'
+import { lerDoAmbiente } from '../ambiente'
 import {
   useSelecao, BarraSelecao, TotaisEntradaSaida, MarcadorLinha, blocosPorCorte, RodapeTotais,
 } from '../components/SelecaoETotais'
@@ -28,11 +29,11 @@ import {
 // avançados no topo (ver BuscaEFiltros) — pontos 1, 8, 9 e 10 do feedback.
 export default function Lancamentos({ mes, aoMudarMes, aoAbrirLancamento }: TelaProps) {
   const lancamentosDoMes = useLiveQuery(
-    () => db.lancamentos.where('dataCompetencia').startsWith(mes).toArray(),
+    () => lerDoAmbiente(db.lancamentos.where('dataCompetencia').startsWith(mes).toArray()),
     [mes],
   )
-  const categorias = useLiveQuery(() => db.categorias.orderBy('nome').toArray(), [])
-  const contas = useLiveQuery(() => db.contas.toArray(), [])
+  const categorias = useLiveQuery(() => lerDoAmbiente(db.categorias.orderBy('nome').toArray()), [])
+  const contas = useLiveQuery(() => lerDoAmbiente(db.contas.toArray()), [])
   // Só pra forçar re-render quando a data simulada mudar (05/09/2026, Etapa
   // 7 — Ferramentas de teste): esta tela não tinha motivo prévio pra se
   // inscrever em `db.configuracoes`, mas `statusDoLancamento` abaixo lê

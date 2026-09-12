@@ -4,9 +4,6 @@ import { db, type NotificacaoPendente } from '../db'
 import { fmtBRL } from '../formatoMoeda'
 import {
   ehNativo,
-  acessoConcedido,
-  abrirConfiguracaoAcesso,
-  solicitarPermissaoAviso,
   sincronizarPendentesNativas,
   descartarNotificacao,
   limparHistorico,
@@ -15,6 +12,8 @@ import {
   ignorarPacote,
   deixarDeIgnorarPacote,
 } from '../notificacaoBancaria'
+import { BotoesPermissaoNotificacao, lerPermissoes, type EstadoPermissoes } from '../components/PermissoesNotificacao'
+import { lerDoAmbiente } from '../ambiente'
 
 // Tela "Notificações bancárias" (09/09/2026) — aberta pela engrenagem. Lista
 // o que o Android capturou das notificações do banco/cartão e deixa a pessoa
@@ -43,14 +42,14 @@ export default function NotificacoesBancarias({
 }) {
   const nativo = ehNativo()
   const pendentes = useLiveQuery(
-    () => db.notificacoesPendentes.where('status').equals('pendente').reverse().sortBy('recebidoEm'),
+    () => lerDoAmbiente(db.notificacoesPendentes.where('status').equals('pendente').reverse().sortBy('recebidoEm')),
     [],
   )
   const historico = useLiveQuery(
-    () => db.notificacoesPendentes.where('status').anyOf(['confirmada', 'descartada']).reverse().sortBy('recebidoEm'),
+    () => lerDoAmbiente(db.notificacoesPendentes.where('status').anyOf(['confirmada', 'descartada']).reverse().sortBy('recebidoEm')),
     [],
   )
-  const [acesso, setAcesso] = useState<boolean | null>(null)
+  const [permissoes, setPermissoes] = useState<EstadoPermissoes>({ acesso: false, aviso: false })
   const [aviso, setAviso] = useState<string | null>(null)
   const [ignorados, setIgnorados] = useState<string[]>([])
   const [mostrarHistorico, setMostrarHistorico] = useState(false)
@@ -58,7 +57,7 @@ export default function NotificacoesBancarias({
 
   async function atualizarStatus() {
     if (!nativo) return
-    setAcesso(await acessoConcedido())
+    setPermissoes(await lerPermissoes())
     setIgnorados(await obterPacotesIgnorados())
     const novas = await sincronizarPendentesNativas()
     if (novas > 0) setAviso(`${novas} notificação(ões) nova(s) lida(s) do aparelho.`)
@@ -86,7 +85,7 @@ export default function NotificacoesBancarias({
         <button type="button" className="botao-voltar-config" onClick={aoVoltar}>
           ‹ Voltar
         </button>
-        <h1>Notificações bancárias</h1>
+        <h1>Notificações Bancárias</h1>
       </div>
       <p className="texto-fraco">
         {somentePendentes
@@ -96,7 +95,7 @@ export default function NotificacoesBancarias({
 
       {!somentePendentes && (
       <>
-      <h2>Leitura no celular</h2>
+      <h2>Leitura no Celular</h2>
       <div className="cartao" data-testid="notif-status">
         {!nativo ? (
           <p className="texto-fraco" style={{ margin: 0 }}>
@@ -105,33 +104,13 @@ export default function NotificacoesBancarias({
           </p>
         ) : (
           <>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-              <span style={{ fontWeight: 700 }}>Acesso às notificações</span>
-              <span className={acesso ? 'valor-pos' : 'valor-neg'} style={{ fontSize: 13 }}>
-                {acesso == null ? 'verificando…' : acesso ? 'ligado' : 'desligado'}
-              </span>
-            </div>
-            {!acesso && (
-              <>
-                <p className="texto-fraco" style={{ fontSize: 13 }}>
-                  Toque abaixo, encontre <b>MorfoFinP</b> na lista do Android e ligue "Acesso a notificações". Depois volte pro
-                  app — o status atualiza sozinho.
-                </p>
-                <button type="button" className="primario" style={{ marginTop: 0 }} onClick={() => abrirConfiguracaoAcesso()}>
-                  Ligar acesso às notificações
-                </button>
-              </>
-            )}
-            <button
-              type="button"
-              style={{ marginTop: 10, width: '100%' }}
-              onClick={async () => {
-                const ok = await solicitarPermissaoAviso()
-                setAviso(ok ? 'Aviso de "movimentação detectada" liberado.' : 'Sem permissão pra avisar — as notificações ainda entram na lista ao abrir o app.')
-              }}
-            >
-              Permitir aviso "movimentação detectada"
-            </button>
+            {/* 12/09/2026: as DUAS permissões com o mesmo peso, cada uma no
+                seu botão azul — antes a 2ª era um botão neutro solto e passava
+                despercebida (ver src/components/PermissoesNotificacao.tsx). */}
+            <BotoesPermissaoNotificacao
+              estado={permissoes}
+              aoMudar={(novo) => { setPermissoes(novo); setAviso(novo.aviso ? 'Aviso de "movimentação detectada" liberado.' : 'Sem permissão pra avisar — as notificações ainda entram na lista ao abrir o app.') }}
+            />
             {ignorados.length > 0 && (
               <div style={{ marginTop: 12 }}>
                 <span className="texto-fraco" style={{ fontSize: 12 }}>Apps ignorados:</span>

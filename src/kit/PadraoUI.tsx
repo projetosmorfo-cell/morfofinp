@@ -130,11 +130,14 @@ export function IndicatorStrip({ items, dark, style, sheetTitle }: {
    corrigido. Sem efeito visível hoje (nenhuma tela do N1 usa `QuickAction`
    ainda, só o N0 via `dark`) — corrigido mesmo assim, pra já nascer certo
    se/quando o N1 adotar. */
-export function QuickAction({ icon: Icon, label, onClick, info, badge, dark }: {
+export function QuickAction({ icon: Icon, label, onClick, info, badge, dark, shake }: {
   icon: LucideIcon; label: ReactNode; onClick: () => void
   info?: ReactNode; badge?: ReactNode; dark?: boolean
+  /* 12/09/2026: o atalho treme igual aos outros pontos de acesso ao chat
+     quando há mensagem não lida (`mloc-shake`, mesma classe do Kit). */
+  shake?: boolean
 }) {
-  return <div role="button" tabIndex={0} onClick={onClick} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick() } }}
+  return <div role="button" tabIndex={0} className={shake ? 'mloc-shake' : ''} onClick={onClick} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick() } }}
     style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 9, background: dark ? DEV_CARD : 'var(--mloc-quickaction, #1C1B22)', color: '#fff', border: 'none', borderRadius: 12, padding: '9px 11px', minHeight: 52, cursor: 'pointer', textAlign: 'left' }}>
     <Icon size={17} color={dark ? DEV_ACCENT : CORAL} style={{ flexShrink: 0 }} />
     <span style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 700, lineHeight: 1.25, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{label}</span>

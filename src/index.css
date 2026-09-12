@@ -15,6 +15,24 @@
   --rodape-borda: var(--borda);
   --rodape-acento: #8b7cf6;
   --rodape-inativo: var(--texto-fraco);
+  /* Elevação de popup (12/09/2026, build 053). O Rafael: "todas telas de popup
+     deve ter alguma diferença dela pra tela de trás, alguma sombra ou borda,
+     pois hoje ela está se misturando tanto no claro quanto no escuro".
+
+     Era verdade nos dois temas, por motivos opostos:
+       - escuro: o painel (`--bg-elevado`, #171a21) fica sobre um fundo que o
+         véu preto ESCURECE ainda mais — a diferença de luminância existe, mas
+         é pequena, e sem borda nem sombra a folha parecia continuar a tela.
+       - claro: `--bg-elevado` é branco puro e `--cartao` também — um popup por
+         cima de um cartão era branco sobre branco, sem nenhuma linha separando.
+
+     São 3 tokens porque a solução muda de natureza com o tema: no escuro quem
+     separa é a SOMBRA (um halo preto ao redor) e uma borda mais clara que a
+     de cartão; no claro quem separa é a BORDA, com sombra suave. Toda
+     superfície de popup usa os três, nunca valores próprios. */
+  --borda-popup: #39404f;
+  --sombra-popup: 0 18px 44px rgba(0, 0, 0, 0.62), 0 0 0 1px rgba(0, 0, 0, 0.5);
+  --veu-popup: rgba(0, 0, 0, 0.62);
   color-scheme: dark;
 }
 
@@ -39,6 +57,11 @@
   --amarelo: #a16207;
   /* Roxo mais fechado no claro: o #8b7cf6 do tema escuro some sobre branco. */
   --rodape-acento: #6c3fff;
+  /* No claro quem separa o popup é a BORDA (branco sobre branco não tem
+     contraste nenhum); a sombra fica suave, só pra dar profundidade. */
+  --borda-popup: #cfc8bd;
+  --sombra-popup: 0 18px 44px rgba(28, 27, 34, 0.22), 0 2px 8px rgba(28, 27, 34, 0.1);
+  --veu-popup: rgba(28, 27, 34, 0.42);
   color-scheme: light;
 }
 /* "Automático" só vale quando o Rafael ESCOLHE automático (atributo
@@ -58,6 +81,9 @@
     --vermelho: #b91c1c;
     --amarelo: #a16207;
     --rodape-acento: #6c3fff;
+    --borda-popup: #cfc8bd;
+    --sombra-popup: 0 18px 44px rgba(28, 27, 34, 0.22), 0 2px 8px rgba(28, 27, 34, 0.1);
+    --veu-popup: rgba(28, 27, 34, 0.42);
     color-scheme: light;
   }
 }
@@ -125,7 +151,11 @@ main {
   z-index: 5;
   background: var(--bg);
   margin: 0 -16px;
-  padding: 16px 16px 10px;
+  /* 12/09/2026 (pedido do Rafael: "na linha onde tem o nome da tela no topo, o
+     espaçamento acima está maior que o normal, deixe igual o que tem abaixo
+     da linha"): o topo era 16px contra 10px embaixo. Agora os dois são 10px —
+     o mesmo ritmo de linha do Padrão de Interface (`ESPACO_LINHA`). */
+  padding: 10px 16px;
 }
 
 /* 01/09/2026, mesmo dia (pedido do Rafael): a barra de mês (SeletorMes)
@@ -136,7 +166,7 @@ main {
    da barra. Reduzido o `margin-bottom` do h1 pra 8px e zerado o do
    `.seletor-mes` — o padding do próprio `.cabecalho-fixo` já basta. */
 .cabecalho-fixo h1 {
-  margin: 4px 0 8px;
+  margin: 0 0 8px;
 }
 
 /* Composer do chat interno (10/09/2026, Decisão 53, ponto 3) — mesmo truque
@@ -205,6 +235,21 @@ h2 {
   white-space: nowrap;
 }
 
+/* O `nowrap` acima existe pra um VALOR monetário nunca quebrar no meio
+   ("R$ 1.234," numa linha e "56" na outra). Quando a mesma classe veste um
+   PARÁGRAFO de texto (legenda de estouro, mensagem de erro de formulário),
+   o nowrap transforma a frase inteira numa linha só e ela estoura a largura
+   da tela — item 16 da lista de 12/09/2026, reportado com print. Parágrafo
+   volta a quebrar linha; valor solto (span/strong) continua intacto. */
+p.valor-pos,
+p.valor-neg,
+div.valor-pos,
+div.valor-neg,
+.texto-quebra.valor-pos,
+.texto-quebra.valor-neg {
+  white-space: normal;
+}
+
 .texto-fraco {
   color: var(--texto-fraco);
   font-size: 13px;
@@ -243,6 +288,69 @@ button.primario {
 
 button.primario:active {
   opacity: 0.85;
+}
+
+/* Ação de RISCO (12/09/2026, pedido do Rafael: "todos links de ação devem ser
+   botão azul como nas outras telas do app, mantendo texto vermelho nos que já
+   são hoje que são ações de risco; Sair também deixe vermelho, limpar dados
+   também"). Mesmo formato do `.primario` — muda só a cor, pra a diferença ser
+   o significado, não o desenho. */
+button.perigo {
+  background: var(--vermelho);
+  border: none;
+  border-radius: 10px;
+  padding: 12px;
+  width: 100%;
+  margin-top: 16px;
+  font-weight: 600;
+  color: #fff;
+  cursor: pointer;
+}
+
+button.perigo:active {
+  opacity: 0.85;
+}
+
+/* Ação neutra ao lado de uma primária/de risco (Cancelar, Voltar). Mesmo
+   formato dos outros dois — muda só a cor, igual à regra de 12/09/2026 de que
+   a diferença entre botões é o significado, não o desenho. Item 19 da lista
+   de 12/09/2026: "as opções deveriam ser botões pra cancelar ou continuar". */
+button.secundario {
+  background: var(--bg-elevado);
+  border: 1px solid var(--borda);
+  border-radius: 10px;
+  padding: 12px;
+  width: 100%;
+  margin-top: 16px;
+  font-weight: 600;
+  color: var(--texto);
+  cursor: pointer;
+}
+
+button.secundario:active {
+  opacity: 0.85;
+}
+
+/* Item 18 (12/09/2026): cartão de categoria no modo "Todas abertas" — mesmo
+   desenho do cartão de categoria da tela de padrão do N0, só que na paleta do
+   ambiente do cliente. */
+.cartao-categoria-aberta {
+  background: var(--bg-elevado);
+  border: 1px solid var(--borda);
+  border-radius: 12px;
+  padding: 12px;
+  margin-bottom: 10px;
+}
+
+.cartao-categoria-aberta label:first-child {
+  margin-top: 0;
+}
+
+button.primario:disabled,
+button.perigo:disabled,
+button.secundario:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 nav.rodape {
@@ -424,7 +532,7 @@ nav.rodape {
 .modal-fundo {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.6);
+  background: var(--veu-popup);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -434,12 +542,16 @@ nav.rodape {
 
 .modal-conteudo {
   background: var(--bg-elevado);
-  border: 1px solid var(--borda);
+  border: 1px solid var(--borda-popup);
+  box-shadow: var(--sombra-popup);
   border-radius: 16px;
   padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
   width: 100%;
   max-width: 430px; /* coluna do app, Decisão 50 */
-  max-height: 82vh;
+  /* 100% do espaço que sobra DENTRO do véu (que já tem 24px de padding), em vez
+     de 82vh — somado ao padding, 82vh podia passar da altura da janela e o
+     final do modal ficava inalcançável (build 054). */
+  max-height: 100%;
   overflow-y: auto;
 }
 
@@ -488,13 +600,16 @@ nav.rodape {
      `RodapeTotais`. Sem a faixa na tela, a variável não existe e o valor
      volta a ser exatamente o de sempre. */
   bottom: calc(84px + var(--totais-altura, 0px) + 8px);
-  width: 56px;
-  height: 56px;
+  /* 48×48 desde 12/09/2026 (Rafael: "botão flutuante de inclusão deve ser
+     menor, está muito grande") — continua acima do alvo mínimo de toque de
+     44px do Padrão de Interface, então encolher não custou acessibilidade. */
+  width: 48px;
+  height: 48px;
   border-radius: 50%;
   background: var(--azul);
   border: none;
   color: var(--texto);
-  font-size: 26px;
+  font-size: 22px;
   line-height: 1;
   cursor: pointer;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
@@ -1133,6 +1248,83 @@ nav.rodape {
 /* Achado central: link de "ver detalhamento completo" que Resumo e Situação
    usam no lugar de renderizar de novo o bloco "por grupo" — leva direto pra
    Planejamento, que passa a ser o único lugar com esse detalhamento. */
+/* Título agrupador dentro de um cartão de totais (ex.: "Comprometido" no
+   Resumo do mês). Não é `<h2>` — é uma faixa fina que nomeia as linhas
+   logo abaixo dela, sem competir com o título da seção. */
+/* Cabeçalho de uma barra (rótulo à esquerda, "gasto de previsto" à direita).
+   Item 7 da lista de 12/09/2026: os dois lados quebravam linha a 430px — o
+   título virava duas linhas e o par de valores se partia entre o "de" e o
+   segundo número. Agora o valor nunca quebra e o rótulo encolhe primeiro. */
+.linha-barra-topo {
+  gap: 10px;
+  align-items: baseline;
+}
+
+.linha-barra-topo > span:first-child {
+  min-width: 0;
+  flex: 1 1 auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.linha-barra-topo > span:last-child {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+/* Ícone de reprocessar ao lado do nome do mês (item 8, 12/09/2026). Precisa
+   de regra própria porque `.seletor-mes button` fixa 44×34 pras SETAS —
+   qualquer outro botão dentro dessa linha herda esse tamanho e fica
+   desproporcional (mesma armadilha já documentada na build 028). */
+.seletor-mes .seletor-mes-reprocessar {
+  width: 30px;
+  height: 30px;
+  min-width: 0;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--texto-fraco);
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.seletor-mes .seletor-mes-reprocessar:disabled {
+  opacity: 0.6;
+}
+
+@keyframes girandoMorfo {
+  to { transform: rotate(360deg); }
+}
+
+.girando {
+  animation: girandoMorfo 0.9s linear infinite;
+}
+
+/* Linhas que pertencem ao rótulo de agrupamento logo acima (build 055).
+   O filete à esquerda é o que faz o rótulo "englobar" as duas — sem ele, o
+   recuo sozinho parece desalinhamento. */
+.linhas-agrupadas {
+  padding-left: 12px;
+  border-left: 2px solid var(--borda);
+  margin-left: 2px;
+}
+.linhas-agrupadas .linha:last-child {
+  border-bottom: none;
+}
+
+.subtitulo-agrupador {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--texto-fraco);
+  padding: 8px 0 2px;
+}
+
 .botao-link-secao {
   display: block;
   width: 100%;
@@ -1262,9 +1454,9 @@ nav.rodape {
   top: calc(100% + 4px);
   right: 0;
   background: var(--bg-elevado);
-  border: 1px solid var(--borda);
+  border: 1px solid var(--borda-popup);
   border-radius: 10px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  box-shadow: var(--sombra-popup);
   overflow: hidden;
   z-index: 30;
   min-width: 180px;
@@ -1487,31 +1679,36 @@ html[data-mloc-tema="escuro"] body {
   color: var(--texto);
 }
 
+/* Centralizada na vertical, com rolagem própria (12/09/2026, build 054) —
+   mesma regra do `Sheet` do Kit: o véu tem padding, o painel tem teto de
+   altura e rola por dentro, então nunca corta nem esconde o fim. */
 .folha-escolha {
   position: fixed;
   inset: 0;
   z-index: 120;
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: center;
+  padding: 24px 12px;
 }
 
 .folha-escolha-fundo {
   position: absolute;
   inset: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: var(--veu-popup);
 }
 
 .folha-escolha-painel {
   position: relative;
   width: 100%;
   max-width: 430px;
-  max-height: 78vh;
+  max-height: 100%;
   display: flex;
   flex-direction: column;
   background: var(--bg-elevado);
-  border-top-left-radius: 16px;
-  border-top-right-radius: 16px;
+  border: 1px solid var(--borda-popup);
+  box-shadow: var(--sombra-popup);
+  border-radius: 16px;
   padding: 14px 16px 18px;
   box-sizing: border-box;
 }
@@ -1610,9 +1807,9 @@ html[data-mloc-tema="escuro"] body {
   max-height: 232px;
   overflow-y: auto;
   background: var(--bg-elevado);
-  border: 1px solid var(--borda);
+  border: 1px solid var(--borda-popup);
   border-radius: 10px;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+  box-shadow: var(--sombra-popup);
 }
 
 .memoria-descricao-item {
@@ -1868,4 +2065,35 @@ html[data-mloc-tema="escuro"] body {
 
 .cabecalho-fixo > .linha {
   margin-top: 8px;
+}
+
+/* Cadastro de categoria inativa (12/09/2026, build 052) — a tarja de destaque
+   no topo do cartão e o bloqueio dos campos. O `fieldset` precisa perder o
+   estilo nativo (borda, margem e padding do navegador), senão o cartão ganha
+   uma moldura que não existe em nenhuma outra tela. */
+.campos-travaveis {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0; /* sem isso o fieldset ignora o grid e estoura a coluna */
+}
+
+.campos-travaveis[disabled] {
+  opacity: 0.55;
+}
+
+.tarja-inativa {
+  background: #3a2a12;
+  border: 1px solid #7a5a1f;
+  border-radius: 8px;
+  color: var(--texto);
+  font-size: 12.5px;
+  line-height: 1.45;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+}
+
+html[data-mloc-tema='claro'] .tarja-inativa {
+  background: #fdf3dc;
+  border-color: #e0bd6a;
 }

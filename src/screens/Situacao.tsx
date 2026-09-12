@@ -11,8 +11,9 @@ import ListaLancamentosCategoria from '../components/ListaLancamentosCategoria'
 import { Icone } from '../icones'
 import { useConfiguracaoIcones, tamanhoIconePx } from '../configuracaoIcones'
 import TituloTelaN1 from '../kit/CabecalhoN1'
+import { SUBTITULO_SITUACAO, EXPLICACAO_SITUACAO } from '../subtitulosTelas'
 import { ExportSheet, type ExportRow } from '../kit/ExportSheet'
-import { DismissibleTip, ESPACO_LINHA } from '../kit/PadraoUI'
+import { lerDoAmbiente } from '../ambiente'
 
 interface LinhaCategoria {
   cat: Categoria
@@ -26,16 +27,16 @@ interface LinhaCategoria {
 // que é "o que entrou/saiu de verdade + o que ainda vai entrar/sair". As duas
 // telas de propósito não repetem a mesma pergunta.
 export default function Situacao({ mes, aoMudarMes, aoAbrirLancamento, aoAbrirPlanejamento }: TelaProps) {
-  const categorias = useLiveQuery(() => db.categorias.toArray(), [])
-  const grupos = useLiveQuery(() => db.grupos.toArray(), [])
+  const categorias = useLiveQuery(() => lerDoAmbiente(db.categorias.toArray()), [])
+  const grupos = useLiveQuery(() => lerDoAmbiente(db.grupos.toArray()), [])
   const lancamentosDoMes = useLiveQuery(
-    () => db.lancamentos.where('dataCompetencia').startsWith(mes).toArray(),
+    () => lerDoAmbiente(db.lancamentos.where('dataCompetencia').startsWith(mes).toArray()),
     [mes],
   )
   // Só precisamos do histórico completo pra achar a última ocorrência de cada
   // série de lançamento fixo (ver "Sobra real" abaixo) — carrega tudo uma
   // vez, é barato (algumas centenas de linhas).
-  const lancamentosTodos = useLiveQuery(() => db.lancamentos.toArray(), [])
+  const lancamentosTodos = useLiveQuery(() => lerDoAmbiente(db.lancamentos.toArray()), [])
 
   const [expandidas, setExpandidas] = useState<Set<number>>(new Set())
   // F-03 da revisão de UI (04/09/2026): as 3 explicações técnicas (Margem no
@@ -206,13 +207,19 @@ export default function Situacao({ mes, aoMudarMes, aoAbrirLancamento, aoAbrirPl
   return (
     <>
       <div className="cabecalho-fixo">
-        <TituloTelaN1 titulo="Situação do orçamento" onExportar={() => setExportOpen(true)} />
+        {/* 12/09/2026 (build 054): o título era "Situação do orçamento" e, com o
+            subtítulo agora NA MESMA LINHA, os dois juntos passavam de 390px —
+            medido: título 225px e subtítulo 173px num espaço de ~280px, os dois
+            cortados. "do orçamento" não distinguia nada (a aba do rodapé já se
+            chama Situação, e o subtítulo diz o que ela compara), então é ele
+            que sai. As outras três telas couberam sem mexer. */}
+        <TituloTelaN1 titulo="Situação" subtitulo={SUBTITULO_SITUACAO} explicacao={<>{EXPLICACAO_SITUACAO} Toque numa categoria pra ver os lançamentos dela.</>} onExportar={() => setExportOpen(true)} />
         <SeletorMes mes={mes} onMudar={aoMudarMes} />
       </div>
       {exportOpen && <ExportSheet title="Situação do orçamento" filenameBase={`morfofinp-situacao-${mes}`}
         screenColumns={[{ key: 'item', label: 'Item' }, { key: 'valor', label: 'Valor' }]}
         screenRows={[
-          { item: 'Aceitável (total)', valor: fmt(totalGeralGrupos.aceitavel) },
+          { item: 'Meta das categorias (total)', valor: fmt(totalGeralGrupos.aceitavel) },
           { item: 'Gasto (total)', valor: fmt(totalGeralGrupos.gasto) },
           { item: 'Total estourado', valor: fmt(totalEstourado) },
           { item: 'Total com sobra', valor: fmt(totalComSobra) },
@@ -222,7 +229,7 @@ export default function Situacao({ mes, aoMudarMes, aoAbrirLancamento, aoAbrirPl
         detailColumns={[
           { key: 'categoria', label: 'Categoria' },
           { key: 'grupo', label: 'Grupo' },
-          { key: 'aceitavel', label: 'Aceitável' },
+          { key: 'aceitavel', label: 'Meta da categoria' },
           { key: 'gasto', label: 'Gasto' },
           { key: 'diferenca', label: 'Diferença' },
         ]}
@@ -231,14 +238,8 @@ export default function Situacao({ mes, aoMudarMes, aoAbrirLancamento, aoAbrirPl
           aceitavel: fmt(l.cat.aceitavelMensal), gasto: fmt(l.gasto), diferenca: fmt(l.diferenca),
         }))}
         onClose={() => setExportOpen(false)} />}
-      {/* Padrão de Interface Morfo (UI), seção 6: instrução que ocupava uma
-          linha inteira EM TODA VISITA, pra sempre, competindo com o dado.
-          Vira dica dispensável — "X" dispensa de vez, some sozinha depois de
-          3 exibições. Nada de conteúdo se perdeu: é o mesmo texto. */}
-      <DismissibleTip screenKey="situacao" style={{ marginBottom: ESPACO_LINHA }}>
-        Aceitável de cada categoria contra o que já foi gasto neste mês — pra você ver de cara onde
-        estourou e onde ainda sobra espaço. Toque numa categoria pra ver os lançamentos dela.
-      </DismissibleTip>
+      {/* 12/09/2026 (build 053): o texto saiu do corpo da tela e virou o "i"
+          ao lado do subtítulo, no cabeçalho — pedido do Rafael. */}
 
       <GraficoMargem
         teto={totalAceitavel}
@@ -342,7 +343,7 @@ export default function Situacao({ mes, aoMudarMes, aoAbrirLancamento, aoAbrirPl
           Planejamento (as três divergiam em número pro mesmo mês). Passa a
           existir só em Planejamento — aqui fica só o total geral mais um
           link pro detalhamento completo (ver ResumoDoMes.tsx). */}
-      <h2>Por grupo</h2>
+      <h2>Por Grupo</h2>
       <div className="cartao">
         {porGrupo.length === 0 ? (
           <p className="texto-fraco">Nenhum grupo cadastrado ainda.</p>

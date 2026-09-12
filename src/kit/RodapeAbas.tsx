@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, type ComponentType, type ReactNode, type SVGProps } from 'react'
+import { emTituloCaso } from '../tituloCaso'
 
 // Barra de abas do rodapé — UMA peça só pra N0 e N1 (09/09/2026, Decisão 50).
 // Pedido do Rafael: "quero no N1 a mesma configuração padrão de menus
@@ -116,7 +117,7 @@ export default function RodapeAbas<K extends string>({ abas, ativa, onTrocar, cl
             }}
           >
             <Icone width={20} height={20} color={ativo ? cores.acento : cores.inativo} strokeWidth={ativo ? 2.4 : 2} />
-            <span style={{ fontSize: 9.5, fontWeight: 700, color: ativo ? cores.acento : cores.inativo }}>{label}</span>
+            <span style={{ fontSize: 9.5, fontWeight: 700, color: ativo ? cores.acento : cores.inativo }}>{emTituloCaso(label)}</span>
             {extra}
           </button>
         )

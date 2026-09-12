@@ -9,24 +9,28 @@ import Contas from './screens/Contas'
 import Manutencao from './screens/Manutencao'
 import NotificacoesBancarias from './screens/NotificacoesBancarias'
 import MinhaAssinatura from './kit/MinhaAssinatura'
-import GuidedTour, { TOUR_STEPS_N1, type PassoTour } from './kit/GuidedTour'
+import GuidedTour, { TOUR_STEPS_N1, ONDE_REABRIR_TOUR, type PassoTour } from './kit/GuidedTour'
 import SimularData, { BannerDataSimulada } from './kit/SimularData'
 import RodapeAbas from './kit/RodapeAbas'
 import { ArrowPathIcon, ArrowRightOnRectangleIcon, CalendarDaysIcon, ChartPieIcon, ChatBubbleLeftRightIcon, Cog6ToothIcon, EllipsisVerticalIcon, ListBulletIcon, ScaleIcon, WalletIcon } from '@heroicons/react/24/outline'
 import DetalheLancamento from './components/DetalheLancamento'
-import { mesInicial } from './mes'
+import { mesInicial, formatarMes } from './mes'
+import { mesesComPendencia } from './pendencias'
 import { avancarSeriesFixasPendentes } from './recorrencia'
 import { migrarTipoDosGrupos } from './gruposUtil'
-import { migrarPctGrupo, useModoVisao, useOrdemAbas, useOrdemMenuEngrenagem, useTemaEfetivo } from './configuracaoIcones'
+import { aplicarPadraoSeNaoEditado } from './kit/padraoCategorias'
+import { migrarReceitaFixa } from './baseMeta'
+import { usarBotaoVoltar } from './voltarAndroid'
+import { PopupPermissoesNotificacao, usarAvisoPermissoes } from './components/PermissoesNotificacao'
+import { migrarPctGrupo, salvarConfiguracaoIcones, useModoVisao, useOrdemAbas, useOrdemMenuEngrenagem, useTemaEfetivo } from './configuracaoIcones'
 import { TopIconMenu, UserHoverIcon, ThemeToggleIcon } from './kit/TopoIcones'
 import { Settings, MessageCircle, RefreshCw, LogOut } from 'lucide-react'
 import SuporteChat from './kit/SuporteChat'
-import ZonasIdentidade from './kit/IdentidadeTenant'
 import {
-  useTenantN1, hasUnreadTenant, usePlatformN0,
+  useTenantN1, hasUnreadTenant, usePlatformN0, situacaoCobranca, paramsGlobais,
   normalizarMenuPosModo, posicaoMenuDe, ITENS_NAV_N1, ITEM_PROTEGIDO_N1,
-  usePosicaoN1Proprio, useMenuPosN1Proprio,
-  type TenantKit, type MenuPosModo, type PosicaoMenu,
+  usePosicaoN1Proprio, useMenuPosN1Proprio, daysUntil, addDays,
+  type MenuPosModo, type PosicaoMenu,
 } from './kit/kitPlatform'
 import type { ItemMenuTopo } from './kit/TopoIcones'
 import type { ComponentType, SVGProps } from 'react'
@@ -37,6 +41,7 @@ import ConfiguracoesN1, { type ChaveConfigN1 } from './kit/ConfiguracoesN1'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, type NotificacaoPendente } from './db'
 import { sincronizarPendentesNativas, ouvirNotificacoesAoVivo, marcarConfirmada } from './notificacaoBancaria'
+import { contarDoAmbiente } from './ambiente'
 
 // Categorias saiu daqui em 30/08/2026 (rodada seguinte) — deixou de ser aba
 // do rodapé e virou item do menu de configurações (engrenagem, ver
@@ -94,7 +99,7 @@ type Config = 'configuracoes' | 'categorias' | 'contas' | 'notificacoes' | 'noti
 // `src/screens/NotificacoesBancarias.tsx` e `src/notificacaoBancaria.ts`.
 const ROTULO_CONFIG: Record<'meusDados' | 'categorias' | 'contas' | 'notificacoes' | 'meuAmbiente' | 'assinatura' | 'aparencia' | 'ajuda' | 'manutencao' | 'suporte', string> = {
   meusDados: 'Meus Dados',
-  categorias: 'Categorias e Grupos',
+  categorias: 'Categorias, Grupos e Metas',
   contas: 'Contas e carteiras',
   notificacoes: 'Notificações bancárias',
   meuAmbiente: 'Meu Ambiente',
@@ -126,7 +131,11 @@ const ROTULO_CONFIG: Record<'meusDados' | 'categorias' | 'contas' | 'notificacoe
 // UI, seção 16 — a TELA continua existindo no código); 'suporte' saiu porque
 // virou item fixo do "⋮" e já está dentro de "Ajuda"; 'layout' e 'limpar'
 // entraram porque as duas metades de Manutenção viraram destinos separados.
-const ITENS_MENU_ENGRENAGEM_PADRAO = ['meusDados', 'categorias', 'contas', 'notificacoes', 'ajuda', 'meuAmbiente', 'assinatura', 'layout', 'manutencao', 'limpar', 'sair'] as const
+// 12/09/2026: 'limpar' e 'sair' saíram desta lista (pedido do Rafael) — as
+// duas ações continuam existindo DENTRO de "Manutenção e Saída", e "Sair"
+// segue fixo no "⋮" (e agora protegido contra "Ocultar", ver
+// ITEM_PROTEGIDO_N1 em kitPlatform.ts).
+const ITENS_MENU_ENGRENAGEM_PADRAO = ['meusDados', 'categorias', 'contas', 'notificacoes', 'ajuda', 'meuAmbiente', 'assinatura', 'layout', 'manutencao'] as const
 type ItemMenuEngrenagem = (typeof ITENS_MENU_ENGRENAGEM_PADRAO)[number]
 export const ROTULO_MENU_ENGRENAGEM: Record<ItemMenuEngrenagem, string> = {
   meusDados: ROTULO_CONFIG.meusDados,
@@ -137,9 +146,7 @@ export const ROTULO_MENU_ENGRENAGEM: Record<ItemMenuEngrenagem, string> = {
   meuAmbiente: ROTULO_CONFIG.meuAmbiente,
   assinatura: ROTULO_CONFIG.assinatura,
   layout: 'Layout e Menus',
-  manutencao: 'Manutenção e dados',
-  limpar: 'Limpar todos os dados',
-  sair: 'Sair',
+  manutencao: 'Manutenção e Saída',
 }
 
 type Tela = keyof typeof TELAS
@@ -247,13 +254,11 @@ interface AlvoLancamento {
 function BarraMarcaN1({
   chatNaoLida,
   nomeUsuario,
-  tenant,
   itensMais,
   menuPos,
 }: {
   chatNaoLida?: boolean
   nomeUsuario?: string
-  tenant?: TenantKit
   /* Itens do "⋮" e onde ele fica — montados em `App()` porque agora dependem
      do parâmetro "Posição dos menus" do N0 (um menu de rodapé pode ter vindo
      pra cá, e um item daqui pode ter ido pro rodapé). */
@@ -283,7 +288,13 @@ function BarraMarcaN1({
      (`kit/IdentidadeTenant.tsx`), compartilhada com a prévia da própria tela
      de "Meu Ambiente". Sem nada cadastrado, nada aparece — a barra fica
      exatamente como estava. */
-  const temIdentidadeTenant = !!(tenant?.logoQuadradaUri || tenant?.logoUri || tenant?.logoHorizUri || tenant?.companyName)
+  /* 12/09/2026 (pedido do Rafael: "não deve mais ter o campo 'Nome do
+     ambiente', não deve mais mostrar no topo também; e na config retirar
+     todas as configs de logo e aplicar a config contida no adm Morfo").
+     A barra do topo passou a mostrar SÓ a identidade do produto, vinda do
+     N0 (Parâmetros › Marca › "Logo do app logado") — nome e logo do próprio
+     ambiente saíram daqui e da tela "Meu Ambiente". `ZonasIdentidade`
+     continua no projeto porque o N0 usa na prévia da marca. */
 
   /* O "⋮" só aparece nesta barra nas duas posições de topo; nas três de
      rodapé ele é desenhado pelo próprio rodapé (ver `Rodape`/`entradasRodape`
@@ -302,18 +313,7 @@ function BarraMarcaN1({
       {logo
         ? <img src={logo} alt="MorfoFinP" style={{ height: altura, width: 'auto', display: 'block', flexShrink: 0 }} />
         : <span className="barra-marca-n1-nome">MorfoFinP</span>}
-      {temIdentidadeTenant && (
-        <>
-          <span style={{ width: 1, height: Math.max(12, altura - 6), background: 'var(--borda)', flexShrink: 0 }} />
-          {/* MESMA altura da logo do produto (10/09/2026, pedido do Rafael:
-              "a segunda logo está minúscula, ela deve ocupar o mesmo espaço
-              verticalmente da primeira"). Antes era `altura - 4`, o que numa
-              logo QUADRADA ao lado de uma wordmark deitada fazia a do cliente
-              parecer bem menor do que ela é. */}
-          <ZonasIdentidade tenant={tenant} altura={altura} />
-        </>
-      )}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0, marginLeft: pos === 'esquerda' && !temIdentidadeTenant ? 'auto' : undefined }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0, marginLeft: pos === 'esquerda' ? 'auto' : undefined }}>
         <ThemeToggleIcon />
         <UserHoverIcon label={nomeUsuario} />
         {/* `data-tour` do passo "Configurações" do tour guiado mora dentro do
@@ -354,6 +354,18 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: { onVoltar: (
   // em vez de fechar em X. Esconde o rodapé enquanto aberta (é uma
   // excursão de cadastro, não uma aba de navegação normal).
   const [configAberta, setConfigAberta] = useState<Config | null>(null)
+  /* 12/09/2026 (build 052, pedido do Rafael): "independente da tela que eu
+     estiver, se eu clicar num menu do rodapé, deve ir pra tela principal
+     dele". Trocar `tela` não bastava: o passo de dentro (detalhe de conta na
+     Carteira, grupo aberto no Planejamento, categoria expandida) é estado
+     LOCAL da tela, então tocar na aba que já está ativa não fazia nada e
+     tocar em outra e voltar trazia o drill-in de volta.
+     Este contador entra na `key` da tela renderizada: todo toque no rodapé
+     remonta a tela ativa, que volta ao estado inicial dela. É de propósito que
+     seja geral em vez de um "voltar" por tela — qualquer drill-in novo já
+     nasce coberto, sem ninguém precisar lembrar. O mês selecionado não se
+     perde: ele mora aqui no App, não dentro da tela. */
+  const [resetTela, setResetTela] = useState(0)
 
   // Pra onde o "‹ Voltar" de uma tela de configuração leva (10/09/2026): as
   // telas alcançadas de dentro de Configurações voltam PRA Configurações; as
@@ -394,7 +406,20 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: { onVoltar: (
   // Categorias/Contas/Manutenção, que não existem enquanto essas telas
   // estão abertas).
   const [tourAberto, setTourAberto] = useState(false)
+  /* Item 6 da lista de 12/09/2026: o tour passou a ABRIR SOZINHO toda vez que
+     o app abre, até a pessoa escolher "Não exibir novamente". `abertoAuto`
+     distingue os dois caminhos: só no automático o botão de desligar aparece
+     (abrir à mão pela Ajuda e oferecer "não exibir" seria contraditório). */
+  const [tourAbertoAuto, setTourAbertoAuto] = useState(false)
+  const [avisoTour, setAvisoTour] = useState('')
   const onIrParaPassoTour = (passo: PassoTour) => {
+    /* Passo dentro de Configuração (`tela: 'config:...'`) abre a tela de
+       parâmetros em vez de trocar de aba — é lá que moram os dois destinos
+       que o tour explica no fim. */
+    if (passo.tela?.startsWith('config:')) {
+      setConfigAberta(passo.tela.slice('config:'.length) as Config)
+      return
+    }
     setConfigAberta(null)
     if (passo.tela) setTela(passo.tela as Tela)
   }
@@ -427,7 +452,12 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: { onVoltar: (
   // Premium, depois trocou pra Light, ou o perfil perdeu acesso) é ignorada;
   // uma aba nova nunca prevista na ordem salva vai pro final, na ordem
   // padrão.
-  const ordemSalva = useOrdemAbas()
+  /* Ordem das abas: a do PRÓPRIO ambiente manda; sem ela, vale o padrão que
+     a Morfo salvou no N0 (12/09/2026 — ver `LayoutConfig.ordemAbasN1`). É
+     isso que faz "Redefinir padrão" (Layout e Menus) funcionar: apagar a
+     ordem local passa a seguir a da plataforma, sem reordenar quem já mexeu. */
+  const layoutCfg = usePlatformN0().layoutConfig
+  const ordemSalva = useOrdemAbas() ?? layoutCfg?.ordemAbasN1
   const telasOrdenadas = ordemSalva
     ? [
         ...ordemSalva.filter((k): k is Tela => telasBase.includes(k as Tela)),
@@ -453,7 +483,6 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: { onVoltar: (
      item", 2ª vez com o mapa do próprio ambiente por cima disso. Editado
      em `screens/Manutencao.tsx` → "Layout e Menus" → "Posição dos menus",
      atrás do gate de plano (`Plano.restricoes.layoutPersonalizado`). */
-  const layoutCfg = usePlatformN0().layoutConfig
   const posicaoProprio = usePosicaoN1Proprio()
   const menuPosProprio = useMenuPosN1Proprio()
   const posDeMenu = (chave: string): PosicaoMenu => {
@@ -474,14 +503,20 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: { onVoltar: (
   // correção) sempre aparece, no final, nunca desaparece por estar
   // "faltando" numa ordem salva antiga — é isso que garante que "Sair"
   // nunca pode ser removido do menu, só reposicionado.
-  const ordemMenuSalva = useOrdemMenuEngrenagem()
+  /* 12/09/2026 (pedido do Rafael): "Ordem da tela de Configurações" deixou
+     de ser editável no N1 e passou a ser SÓ padrão da plataforma, definido
+     em N0 › Parâmetros › Layout do Sistema (`LayoutConfig.ordemConfigN1`).
+     Uma ordem antiga gravada no ambiente ainda é respeitada como fallback —
+     ninguém perde o que já tinha ajustado. */
+  const ordemMenuLocalAntiga = useOrdemMenuEngrenagem()
+  const ordemMenuSalva = layoutCfg?.ordemConfigN1 ?? ordemMenuLocalAntiga
   const ordemMenuEngrenagem: ItemMenuEngrenagem[] = (ordemMenuSalva
     ? [
         ...ordemMenuSalva.filter((k): k is ItemMenuEngrenagem => ITENS_MENU_ENGRENAGEM_PADRAO.includes(k as ItemMenuEngrenagem)),
         ...ITENS_MENU_ENGRENAGEM_PADRAO.filter((k) => !ordemMenuSalva.includes(k)),
       ]
     : [...ITENS_MENU_ENGRENAGEM_PADRAO]
-  ).filter((item) => item === 'sair' || podeVerFuncN1(`config.${item}`))
+  ).filter((item) => podeVerFuncN1(`config.${item}`))
 
   // Se a visão virar Light enquanto a pessoa está numa aba que só existe na
   // Premium (Situação/Planejamento), volta pro Resumo sozinho — nunca deixa
@@ -508,6 +543,20 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: { onVoltar: (
     // estiver dentro de grupo de saída (11/09/2026) — roda uma vez só, ver
     // `migrarTipoDosGrupos()` em `src/gruposUtil.ts`.
     migrarTipoDosGrupos()
+    // Padrão de Categorias/Grupos/ícones definido pela Morfo no N0 (12/09/2026,
+    // item 7): só é aplicado enquanto ESTE ambiente não tiver sido editado pelo
+    // próprio dono, e nunca apaga nada — ver `src/kit/padraoCategorias.ts`.
+    void aplicarPadraoSeNaoEditado()
+    /* Base das metas: marca a receita fixa numa base que veio de antes da
+       build 051 e nunca recebeu a flag (bug real de 12/09/2026 — ver
+       `migrarReceitaFixa` em `src/baseMeta.ts`). Roda uma vez só. */
+    void migrarReceitaFixa()
+    /* Item 6: o passo a passo abre sozinho a cada abertura do app, até a
+       pessoa desligar. A leitura é direta do banco (não do hook) porque isto
+       roda uma vez no mount, antes de qualquer interação. */
+    void db.configuracoes.get(1).then((cfg) => {
+      if (!cfg?.tourNaoExibir) { setTourAberto(true); setTourAbertoAuto(true) }
+    })
   }, [])
 
   // Notificação bancária (09/09/2026): ao abrir o app, puxa o que o serviço
@@ -526,7 +575,40 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: { onVoltar: (
       document.removeEventListener('visibilitychange', aoVoltar)
     }
   }, [])
-  const qtdNotificacoesPendentes = useLiveQuery(() => db.notificacoesPendentes.where('status').equals('pendente').count(), []) ?? 0
+  /* Popup de permissões da notificação bancária (12/09/2026, pedido do
+     Rafael) — só no app instalado e só enquanto falta alguma das duas; tem
+     "Lembrar mais tarde" (volta no dia seguinte) e "Não mostrar novamente".
+     Ver `src/components/PermissoesNotificacao.tsx`. */
+  const avisoPermissoes = usarAvisoPermissoes(configN1)
+  const qtdNotificacoesPendentes = useLiveQuery(() => contarDoAmbiente(db.notificacoesPendentes.where('status').equals('pendente').toArray()), []) ?? 0
+  /* Meses já virados com pagamento/recebimento ainda em aberto (item 11,
+     12/09/2026). `useLiveQuery` sobre a tabela inteira: assim que a pessoa
+     marca a tarja de um lançamento como paga, a tarja se recalcula sozinha —
+     e some quando o último pendente do mês é quitado. */
+  const mesesPendentes = useLiveQuery(() => mesesComPendencia(), []) ?? []
+  const [pendenciasDispensadas, setPendenciasDispensadas] = useState(false)
+  /* Situação da assinatura deste ambiente (item 3) — a MESMA função que o
+     gate de bloqueio usa em `AppRoot`, pra tarja e bloqueio nunca discordarem. */
+  const tenantAtual = useTenantN1()
+  const plataformaAtual = usePlatformN0()
+  const situacaoCobrancaN1 = tenantAtual ? situacaoCobranca(tenantAtual, paramsGlobais(plataformaAtual)) : null
+  const [avisoCobrancaDispensado, setAvisoCobrancaDispensado] = useState(false)
+  /* Fim do PERÍODO DE TESTE se aproximando (12/09/2026, build 054). O Rafael:
+     "deve seguir parâmetros de dias de aviso antes de vencer e mostrar tarja...
+     o mesmo deve ocorrer com ambiente de teste vencido".
+
+     `trialWarning` (N0 › Parâmetros › Assinatura e Bloqueio) existia desde a
+     Decisão 55 mas era um parâmetro sem consumidor NENHUM neste produto — no
+     Kit ele dispara mensagem automática no chat; aqui nada lia. Agora a tarja
+     lê `diasAntes` e o `texto` configurados, e o bloqueio no dia seguinte ao
+     fim já era tratado por `tenantBlocked` (que manda pro mesmo passo a passo
+     de contratação da mensalidade vencida). */
+  const trialCfg = paramsGlobais(plataformaAtual).trialWarning
+  const diasAteFimDoTeste = tenantAtual?.plan === 'trial' && tenantAtual.trial
+    ? daysUntil(addDays(tenantAtual.trial.startDate, tenantAtual.trial.days))
+    : null
+  const avisarFimDoTeste = diasAteFimDoTeste != null
+    && diasAteFimDoTeste >= 0 && diasAteFimDoTeste <= (trialCfg?.diasAntes ?? 3)
 
   // Chat interno N1↔N0 não lido (10/09/2026, Decisão 53/54 — Parte A):
   // mesma expressão do Kit (`hasUnreadTenant`, ver kitPlatform.ts) aplicada
@@ -536,6 +618,17 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: { onVoltar: (
 
   const { Componente } = TELAS[tela]
   const aoAbrirLancamento = (opcoes?: AlvoLancamento) => setLancamentoAberto(opcoes ?? {})
+
+  /* Botão voltar do Android (12/09/2026, pedido do Rafael) — desempilha o
+     que estiver aberto, na ordem em que a pessoa abriu; só quando já está na
+     primeira aba é que o app é minimizado (ver `src/voltarAndroid.ts`). */
+  usarBotaoVoltar(() => {
+    if (lancamentoAberto) { setLancamentoAberto(null); return true }
+    if (tourAberto) { setTourAberto(false); return true }
+    if (configAberta) { fecharConfig(); return true }
+    if (telasVisiveis.length > 0 && tela !== telasVisiveis[0]) { setTela(telasVisiveis[0]); return true }
+    return false
+  })
 
   /* ---- Montagem dos menus a partir do parâmetro do N0 (Decisão 58) -------
      Uma lista só, com as 5 abas e as 4 ações, cada uma indo pro lugar que o
@@ -601,7 +694,6 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: { onVoltar: (
       <BarraMarcaN1
         chatNaoLida={chatNaoLida}
         nomeUsuario={usuarioTenantLogado?.name || usuarioTenantLogado?.login}
-        tenant={tenantN1}
         itensMais={itensMais}
         menuPos={menuPosN1}
       />
@@ -626,7 +718,7 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: { onVoltar: (
             color: '#fff',
           }}
         >
-          <span style={{ fontSize: 12, fontWeight: 700 }}>Modo consulta — administrador Morfo, vendo como este tenant</span>
+          <span style={{ fontSize: 12, fontWeight: 700 }}>Modo consulta — administrador Morfo, vendo como este cliente</span>
           <button
             type="button"
             onClick={modoConsultaN0.onVoltar}
@@ -636,7 +728,68 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: { onVoltar: (
           </button>
         </div>
       )}
+      {/* Item 6: ao escolher "Não exibir novamente", a mesma mensagem de
+          onde reabrir aparece aqui — some no toque. */}
+      {avisoTour && (
+        <button
+          type="button"
+          data-testid="aviso-tour"
+          onClick={() => setAvisoTour('')}
+          style={{ flexShrink: 0, width: '100%', textAlign: 'left', border: 'none', background: '#1e3a5f', color: '#fff', padding: '10px 14px', fontSize: 12, fontWeight: 700, cursor: 'pointer', font: 'inherit' }}
+        >
+          {avisoTour}
+        </button>
+      )}
       <BannerDataSimulada />
+      {avisarFimDoTeste && !avisoCobrancaDispensado && (
+        <div
+          data-testid="banner-fim-teste"
+          style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10, padding: '9px 10px 9px 14px', background: '#4a3a12', color: '#ffe6a8', borderBottom: '1px solid rgba(255,255,255,0.12)' }}
+        >
+          <span style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 700, lineHeight: 1.4 }}>
+            {diasAteFimDoTeste === 0
+              ? 'Seu período de teste termina hoje.'
+              : `Seu período de teste termina em ${diasAteFimDoTeste} dia(s).`}
+            {trialCfg?.texto ? ` ${trialCfg.texto}` : ''}
+          </span>
+          <button
+            type="button"
+            aria-label="Dispensar aviso de fim de teste"
+            onClick={() => setAvisoCobrancaDispensado(true)}
+            style={{ background: 'none', border: 'none', color: 'inherit', fontSize: 18, lineHeight: 1, padding: 6, cursor: 'pointer', flexShrink: 0 }}
+          >
+            ×
+          </button>
+        </div>
+      )}
+      {situacaoCobrancaN1 && (situacaoCobrancaN1.estado === 'avisando' || situacaoCobrancaN1.estado === 'vencido_na_tolerancia') && !avisoCobrancaDispensado && (
+        /* Item 3 (12/09/2026): aviso ANTES de bloquear. Quantos dias antes vem
+           do parâmetro "Dias de aviso antes do vencimento" (N0 › Parâmetros ›
+           Assinatura e Bloqueio). Depois do dia do vencimento, enquanto durar a
+           tolerância, a tarja fica vermelha e diz quando o acesso será
+           cortado — quem já venceu a tolerância nem vê o app (cai em
+           `RegularizarAcesso`). Bloco normal do fluxo, nunca `position:
+           fixed`, mesma regra dos outros banners. */
+        <div
+          data-testid="banner-cobranca"
+          style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10, padding: '9px 10px 9px 14px', background: situacaoCobrancaN1.estado === 'avisando' ? '#4a3a12' : '#4a1d1d', color: situacaoCobrancaN1.estado === 'avisando' ? '#ffe6a8' : '#ffc9c9', borderBottom: '1px solid rgba(255,255,255,0.12)' }}
+        >
+          <span style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 700, lineHeight: 1.4 }}>
+            {situacaoCobrancaN1.estado === 'avisando'
+              ? `Sua mensalidade vence em ${situacaoCobrancaN1.diasParaVencer} dia(s).`
+              : `Mensalidade vencida há ${Math.abs(situacaoCobrancaN1.diasParaVencer ?? 0)} dia(s). Regularize para não perder o acesso.`}
+          </span>
+          <button
+            type="button"
+            aria-label="Dispensar aviso de cobrança"
+            data-testid="cobranca-dispensar"
+            onClick={() => setAvisoCobrancaDispensado(true)}
+            style={{ background: 'none', border: 'none', color: 'inherit', fontSize: 18, lineHeight: 1, padding: 6, cursor: 'pointer', flexShrink: 0 }}
+          >
+            ×
+          </button>
+        </div>
+      )}
       {qtdNotificacoesPendentes > 0 && configAberta !== 'notificacoes' && configAberta !== 'notificacoesPendentes' && (
         // Aviso de notificação bancária pendente — mesmo padrão de layout dos
         // outros banners (bloco normal antes de <main>, nunca position:fixed).
@@ -661,6 +814,47 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: { onVoltar: (
           <span style={{ background: 'rgba(255,255,255,0.18)', borderRadius: 8, padding: '6px 10px', fontSize: 12, fontWeight: 700, flexShrink: 0 }}>Ver ›</span>
         </button>
       )}
+      {mesesPendentes.length > 0 && !pendenciasDispensadas && !configAberta && (
+        /* Item 11 (12/09/2026): a contrapartida de "recorrente nunca nasce
+           pago". Como nada mais é quitado sozinho, é esta tarja que avisa que
+           ficou coisa em aberto em mês que já virou — cada mês é um link que
+           leva a tela pra ele. Bloco normal do fluxo, irmão ANTES de <main>,
+           nunca `position: fixed` (mesmo cuidado dos outros banners: fixo no
+           topo cobriria o cabeçalho `sticky` de cada tela). */
+        <div
+          data-testid="banner-pendencias"
+          style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, padding: '9px 10px 9px 14px', background: '#4a2d12', color: '#ffd9a8', borderBottom: '1px solid #6b4520' }}
+        >
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 12, fontWeight: 700 }}>
+              Há pagamentos/recebimentos em aberto em mês que já fechou
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 5 }}>
+              {mesesPendentes.map((p) => (
+                <button
+                  key={p.mes}
+                  type="button"
+                  data-testid={`pendencia-${p.mes}`}
+                  onClick={() => setMes(p.mes)}
+                  title={`${p.quantidade} em aberto em ${formatarMes(p.mes)}`}
+                  style={{ background: 'rgba(255,255,255,0.14)', color: '#ffd9a8', border: '1px solid rgba(255,217,168,0.35)', borderRadius: 999, padding: '3px 10px', fontSize: 11.5, fontWeight: 700, cursor: 'pointer', font: 'inherit', lineHeight: 1.4 }}
+                >
+                  {formatarMes(p.mes)} ({p.quantidade})
+                </button>
+              ))}
+            </div>
+          </div>
+          <button
+            type="button"
+            aria-label="Dispensar aviso de pendências"
+            data-testid="pendencias-dispensar"
+            onClick={() => setPendenciasDispensadas(true)}
+            style={{ background: 'none', border: 'none', color: '#ffd9a8', fontSize: 18, lineHeight: 1, padding: 6, cursor: 'pointer', flexShrink: 0 }}
+          >
+            ×
+          </button>
+        </div>
+      )}
       <main>
         {configAberta ? (
           configAberta === 'configuracoes' ? (
@@ -676,7 +870,6 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: { onVoltar: (
                 chatNaoLida={chatNaoLida}
                 podeVer={(k) => podeVerFuncN1(`config.${k}`)}
                 onAbrir={(k: ChaveConfigN1) => {
-                  if (k === 'sair') { void sair(); return }
                   setVoltaPara('configuracoes')
                   setConfigAberta(k as Config)
                 }}
@@ -693,7 +886,16 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: { onVoltar: (
           ) : configAberta === 'contas' ? (
             <Contas aoVoltar={fecharConfig} />
           ) : configAberta === 'assinatura' ? (
-            <MinhaAssinatura aoVoltar={fecharConfig} />
+            /* "Falar com a Morfo" desta tela usa a MESMA navegação pro chat
+               que o resto do app já usa (nada de mecanismo novo): abre
+               'suporte' e marca a volta pra cá, igual à tela de Ajuda logo
+               abaixo — ao fechar o chat, a pessoa cai de volta na assinatura,
+               não no topo das Configurações. */
+            <MinhaAssinatura
+              aoVoltar={fecharConfig}
+              onAbrirSuporte={() => { setVoltaPara('assinatura'); setConfigAberta('suporte') }}
+              temNaoLida={chatNaoLida}
+            />
           ) : configAberta === 'notificacoes' || configAberta === 'notificacoesPendentes' ? (
             /* Duas portas, uma tela: por Configurações vem a tela completa
                (permissões do Android, histórico, ferramenta de teste); pelo
@@ -726,7 +928,6 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: { onVoltar: (
             <Manutencao
               secao="layout"
               aoVoltar={fecharConfig}
-              onAbrirTour={() => setTourAberto(true)}
               onAbrirFerramentasTeste={() => setConfigAberta('ferramentasTeste')}
               onIrParaAssinatura={() => { setVoltaPara('layout'); setConfigAberta('assinatura') }}
             />
@@ -735,13 +936,13 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: { onVoltar: (
               secao="dados"
               focarLimparDados={configAberta === 'limpar'}
               aoVoltar={fecharConfig}
-              onAbrirTour={() => setTourAberto(true)}
               onAbrirFerramentasTeste={() => setConfigAberta('ferramentasTeste')}
               onIrParaAssinatura={() => { setVoltaPara(configAberta); setConfigAberta('assinatura') }}
             />
           )
         ) : (
           <Componente
+            key={`${tela}:${resetTela}`}
             mes={mes}
             aoMudarMes={setMes}
             aoAbrirLancamento={aoAbrirLancamento}
@@ -749,7 +950,13 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: { onVoltar: (
           />
         )}
       </main>
-      {!configAberta && <Rodape tela={tela} entradas={entradasRodape} onTrocarTela={setTela} />}
+      {!configAberta && (
+        <Rodape
+          tela={tela}
+          entradas={entradasRodape}
+          onTrocarTela={(t) => { setTela(t); setResetTela((n) => n + 1) }}
+        />
+      )}
       {lancamentoAberto && (
         <DetalheLancamento
           alvoId={lancamentoAberto.id}
@@ -775,6 +982,14 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: { onVoltar: (
           onFechar={() => setLancamentoAberto(null)}
         />
       )}
+      {avisoPermissoes.aberto && (
+        <PopupPermissoesNotificacao
+          estado={avisoPermissoes.estado}
+          aoMudar={avisoPermissoes.setEstado}
+          aoAdiar={avisoPermissoes.adiar}
+          aoNuncaMais={avisoPermissoes.nuncaMais}
+        />
+      )}
       {/* Tour guiado (Etapa 6) — renderizado como IRMÃO de tudo acima, no
           nível mais alto, de propósito (ver comentário no topo de
           `GuidedTour.tsx`: um `transform` CSS em ancestral desalinharia o
@@ -789,9 +1004,14 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: { onVoltar: (
            correspondente sai do roteiro em vez de descrever algo que não
            existe na tela. */
         <GuidedTour
-          passos={TOUR_STEPS_N1.filter((p) => !p.tela || (telasVisiveis as string[]).includes(p.tela))}
+          passos={TOUR_STEPS_N1.filter((p) => !p.tela || p.tela.startsWith('config:') || (telasVisiveis as string[]).includes(p.tela))}
           onIrPara={onIrParaPassoTour}
-          onFinalizar={() => setTourAberto(false)}
+          onFinalizar={() => { setTourAberto(false); setTourAbertoAuto(false) }}
+          onNaoExibirNovamente={tourAbertoAuto ? () => {
+            void salvarConfiguracaoIcones({ tourNaoExibir: true })
+            setTourAberto(false); setTourAbertoAuto(false)
+            setAvisoTour(ONDE_REABRIR_TOUR)
+          } : undefined}
         />
       )}
     </>

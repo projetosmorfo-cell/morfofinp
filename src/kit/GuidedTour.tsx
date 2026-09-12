@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { SUBTITULO_RESUMO, SUBTITULO_SITUACAO, SUBTITULO_PLANEJAMENTO } from '../subtitulosTelas'
 
 // Tour guiado (spotlight) — Roteiro de Parametrização Morfo, Etapa 6
 // (05/09/2026), adaptado quase literal de `GuidedTour` no Kit de Estrutura
@@ -55,8 +56,15 @@ export default function GuidedTour({
   passos,
   onIrPara,
   onFinalizar,
+  onNaoExibirNovamente,
 }: {
   passos: PassoTour[]
+  /* Item 6 da lista de 12/09/2026: "deve abrir toda vez que abrir o app, com
+     opção Não exibir novamente (com mensagem ao escolher), e a mesma mensagem
+     no fim do passo a passo explicando onde clicar pra ver de novo". Quando
+     esta função é passada, o botão aparece; sem ela (tour aberto à mão pela
+     Ajuda), não faz sentido oferecer. */
+  onNaoExibirNovamente?: () => void
   onIrPara: (passo: PassoTour) => void
   onFinalizar: () => void
 }) {
@@ -200,6 +208,24 @@ export default function GuidedTour({
             {ultimo ? 'Concluir' : 'Próximo'}
           </button>
         </div>
+        {/* A MESMA mensagem em dois momentos (item 6): ao escolher não exibir
+            mais, e no fim do passo a passo — nos dois casos dizendo onde
+            reabrir. */}
+        {ultimo && (
+          <p className="texto-fraco" style={{ fontSize: 11.5, lineHeight: 1.5, margin: '12px 0 0' }}>
+            {ONDE_REABRIR_TOUR}
+          </p>
+        )}
+        {onNaoExibirNovamente && (
+          <button
+            type="button"
+            data-testid="tour-nao-exibir"
+            onClick={onNaoExibirNovamente}
+            style={{ display: 'block', width: '100%', marginTop: 10, padding: 0, background: 'none', border: 'none', color: 'var(--texto-fraco)', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
+          >
+            Não exibir novamente
+          </button>
+        )}
       </div>
     </div>
   )
@@ -210,12 +236,28 @@ export default function GuidedTour({
 
 // em visão Light — o tour não trava nesse caso (ver comentário no topo do
 // arquivo), só mostra um cartão centralizado sem recorte pra esse passo.
+/** Mensagem única de "onde reabrir" (item 6) — usada no fim do tour e ao
+    escolher "não exibir novamente". */
+export const ONDE_REABRIR_TOUR =
+  'Pra ver este passo a passo de novo: toque no ⋮ no topo → Configuração → Ajuda → Ver tour guiado.'
+
 export const TOUR_STEPS_N1: PassoTour[] = [
-  { dataTour: 'nav-tab-resumo', tela: 'resumo', titulo: 'Resumo', texto: 'Visão geral do mês selecionado: quanto entrou, quanto saiu e o resultado até agora.' },
-  { dataTour: 'nav-tab-situacao', tela: 'situacao', titulo: 'Situação', texto: 'Margem comprometida e sobra real do mês — a visão mais técnica do app.' },
+  /* Item 7 (12/09/2026): os textos das telas principais são os MESMOS
+     subtítulos que aparecem nelas — `src/subtitulosTelas.ts`, fonte única. */
+  { dataTour: 'nav-tab-resumo', tela: 'resumo', titulo: 'Resumo', texto: `${SUBTITULO_RESUMO}. Quanto entrou, quanto saiu e o que sobra no bolso, já descontado o que está comprometido.` },
+  { dataTour: 'nav-tab-situacao', tela: 'situacao', titulo: 'Situação', texto: `${SUBTITULO_SITUACAO}. É a tela pra responder "posso gastar hoje?".` },
   { dataTour: 'nav-tab-lancamentos', tela: 'lancamentos', titulo: 'Lançamentos', texto: 'A tela principal do app — todos os seus lançamentos do mês, com busca e filtros.' },
   { dataTour: 'lancamentos-incluir', tela: 'lancamentos', titulo: 'Novo lançamento', texto: 'Toque no + pra cadastrar um novo lançamento.' },
   { dataTour: 'nav-tab-carteira', tela: 'carteira', titulo: 'Carteira', texto: 'Seus cofrinhos e contas — saldo e histórico de cada um.' },
-  { dataTour: 'nav-tab-planejamento', tela: 'planejamento', titulo: 'Planejamento', texto: 'Planejado × Realizado × Previsto — pra isso que este app existe.' },
-  { dataTour: 'n1-mais-opcoes', titulo: 'Mais opções', texto: 'Aqui ficam quatro coisas: Configuração (a tela única com todos os parâmetros — Meus Dados, Categorias e Grupos, Contas e carteiras, Layout e Menus e o resto), Suporte / Chat, Atualizar e Sair.' },
+  { dataTour: 'nav-tab-planejamento', tela: 'planejamento', titulo: 'Planejamento', texto: `${SUBTITULO_PLANEJAMENTO}. Grupo a grupo e categoria a categoria, com o previsto somado — é o acompanhamento detalhado.` },
+  { dataTour: 'n1-mais-opcoes', titulo: 'Mais opções', texto: 'Aqui ficam quatro coisas: Configuração (a tela única com todos os parâmetros — Meus Dados, Categorias, Grupos e Metas, Contas e carteiras, Layout e Menus e o resto), Suporte / Chat, Atualizar e Sair.' },
+  /* Item 6 (12/09/2026): "depois do menu principal, encerrar explicando passo
+     a passo em Configurações: Contas e Carteiras e depois Categorias e
+     Grupos, mostrando cadastro de Metas de categoria e de grupo". Estes quatro passos
+     abrem a própria tela de Configuração e apontam pro destino de verdade —
+     `dataTour` está nos itens da lista (ver ConfiguracoesN1.tsx). */
+  { dataTour: 'cfg-contas', tela: 'config:configuracoes', titulo: '1º passo — Contas e Carteiras', texto: 'Comece por aqui: cadastre onde o seu dinheiro fica (conta corrente, cartão, cofrinho). Todo lançamento é pago por uma dessas.' },
+  { dataTour: 'cfg-categorias', tela: 'config:configuracoes', titulo: '2º passo — Categorias, Grupos e Metas', texto: 'Depois venha aqui: é onde o gasto ganha nome e entra num grupo.' },
+  { dataTour: 'cfg-categorias', tela: 'config:configuracoes', titulo: 'Meta da categoria', texto: 'Na aba "Categorias e Metas", cada categoria tem a sua META — quanto você quer gastar nela por mês. É esse número que pinta a barra de vermelho quando estoura.' },
+  { dataTour: 'cfg-categorias', tela: 'config:configuracoes', titulo: 'Meta do grupo', texto: 'Na aba "Grupos e Metas", cada grupo recebe um percentual da sua receita fixa do mês — é a meta do grupo. A soma das metas das categorias dele deveria caber dentro dessa meta.' },
 ]

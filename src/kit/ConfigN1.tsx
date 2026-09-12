@@ -7,10 +7,9 @@ import {
 } from '../configuracaoIcones'
 import {
   useTenantN1, atualizarTenantN0, TENANT_N1_ID, loginJaEmUsoGlobalmente,
-  lerPlatformN0Persistida, type UsuarioTenant, type TenantKit,
+  lerPlatformN0Persistida, type UsuarioTenant,
 } from './kitPlatform'
-import { readImageAsDataUrl, LOGO_MAX_KB, alpha } from './kitBase'
-import ZonasIdentidade, { identidadeTemLogoENome } from './IdentidadeTenant'
+import { alpha } from './kitBase'
 import { MessageCircle, Navigation, type LucideIcon } from 'lucide-react'
 
 // N1 → engrenagem: as 4 telas de Configurações do Projeto Modelo que ainda
@@ -61,17 +60,6 @@ function Campo({ label, children }: { label: string; children: React.ReactNode }
   </label>
 }
 
-/* Igual ao `Campo`, mas com <div> no lugar de <label>. Um <label> que envolve
-   um GRUPO de botões empresta o próprio texto ao primeiro deles como nome
-   acessível — na prática, o botão "Logo + nome" passava a se chamar "O que
-   mostrar (logo quadrada" pra leitor de tela e pra teste automatizado.
-   Achado por teste em 10/09/2026. */
-function CampoGrupo({ label, children }: { label: string; children: React.ReactNode }) {
-  return <div style={{ marginBottom: 14 }}>
-    <span style={{ display: 'block', fontSize: 12.5, fontWeight: 700, color: 'var(--texto-fraco)', marginBottom: 6 }}>{label}</span>
-    {children}
-  </div>
-}
 
 function Cabecalho({ titulo, aoVoltar }: { titulo: string; aoVoltar: () => void }) {
   return <div className="cabecalho-fixo">
@@ -80,24 +68,6 @@ function Cabecalho({ titulo, aoVoltar }: { titulo: string; aoVoltar: () => void 
   </div>
 }
 
-/* Segmentado no estilo NATIVO do app (as abas `.abas-tela` que Categorias e
-   Manutenção já usam) — não o `Segmented` do `kitBase`, que é sempre claro.
-   Mesma função, mesmo comportamento, respeitando o tema. */
-function SegmentadoN1({ valor, onEscolher, opcoes }: {
-  valor: string
-  onEscolher: (v: string) => void
-  opcoes: { v: string; l: string }[]
-}) {
-  return <div className="abas-tela" role="tablist">
-    {opcoes.map((o) => (
-      <button key={o.v} type="button" role="tab" aria-selected={valor === o.v}
-        className={`aba-tela-item ${valor === o.v ? 'ativa' : ''}`}
-        onClick={() => onEscolher(o.v)}>
-        {o.l}
-      </button>
-    ))}
-  </div>
-}
 
 function Aviso({ msg }: { msg: string }) {
   if (!msg) return null
@@ -168,216 +138,28 @@ export function MeusDadosN1({ aoVoltar }: { aoVoltar: () => void }) {
 
 /* ================= Meu Ambiente (Projeto Modelo, adaptado) ================= */
 export function MeuAmbienteN1({ aoVoltar }: { aoVoltar: () => void }) {
-  const tenant = useTenantN1()
   const [msg, setMsg] = useState('')
-  const [nome, setNome] = useState<string | null>(null)
   function notify(m: string) { setMsg(m); window.setTimeout(() => setMsg(''), 2500) }
-
-  /* Conjunto COMPLETO do Projeto Modelo (`ParametrosAmbienteView`), no
-     lugar do upload único de antes — 10/09/2026, pedido do Rafael: "o logo
-     não é só carregar ele, tem alinhamento, tamanho, espaçamento etc., tudo
-     isso tem no kit ... e que eles efetivamente funcionem, sejam aplicados
-     quando preenchidos". Cada campo aqui muda a barra do topo do N1 na hora
-     (ver `BarraMarcaN1` em `App.tsx`). */
-  const logoQuadrada = tenant?.logoQuadradaUri ?? tenant?.logoUri
-  const logoHoriz = tenant?.logoHorizUri
-  const temLogo = !!(logoQuadrada || logoHoriz)
-  const logoTopo = tenant?.logoTopo ?? (logoHoriz && !logoQuadrada ? 'horizontal' : 'quadrada')
-  const logoModo = tenant?.logoModo ?? 'logo_nome'
-  const logoPos = tenant?.logoPos ?? 'esquerda'
-  /* Composição logo × nome (10/09/2026, pedido do Rafael) — ver os campos em
-     `TenantKit` (`kitPlatform.ts`). Só faz sentido quando os DOIS aparecem
-     (modo "Logo + nome" com a logo quadrada); nos outros modos há um
-     elemento só e a composição não muda nada, por isso os controles ficam
-     escondidos ali embaixo. */
-  const logoComposicao = tenant?.logoComposicao ?? 'juntos'
-  const logoOrdem = tenant?.logoOrdem ?? 'logo_nome'
-  const nomePos = tenant?.nomePos ?? 'direita'
-  const logoDocs = tenant?.logoDocs ?? logoTopo
-  const mostraLogoENome = identidadeTemLogoENome(tenant)
-
-  async function escolherLogo(slot: 'logoQuadradaUri' | 'logoHorizUri') {
-    const input = document.createElement('input')
-    input.type = 'file'; input.accept = 'image/*,.svg'
-    input.onchange = async () => {
-      const f = input.files?.[0]; if (!f) return
-      if (f.size / 1024 > LOGO_MAX_KB) { notify('Imagem acima de 3MB.'); return }
-      const uri = await readImageAsDataUrl(f)
-      /* `logoUri: undefined` junto: o campo único antigo migra pro slot
-         quadrado na 1ª troca, como o Kit faz — pra não sobrar dois valores
-         disputando a mesma tela. */
-      await atualizarTenantN0(TENANT_N1_ID, (t) => ({ ...t, [slot]: uri, ...(slot === 'logoQuadradaUri' ? { logoUri: undefined } : {}) }))
-      notify('Logotipo atualizado.')
-    }
-    input.click()
-  }
-
-  const patch = (p: Partial<TenantKit>) => void atualizarTenantN0(TENANT_N1_ID, (t) => ({ ...t, ...p }))
 
   return <>
     <Cabecalho titulo="Meu Ambiente" aoVoltar={aoVoltar} />
     <Aviso msg={msg} />
+    {/* 12/09/2026 (pedido do Rafael): "não deve mais ter o campo 'Nome do
+        ambiente', não deve mais mostrar no topo também; e na config retirar
+        todas as configs de logo e aplicar a config contida no adm Morfo
+        (N0)". Saíram desta tela: o nome do ambiente e TODO o conjunto de
+        logotipo (2 arquivos, o que mostrar, composição, posição, prévia e a
+        escolha pros documentos). A identidade que aparece no topo do app
+        passou a ser só a do produto, definida em N0 › Parâmetros › Marca ›
+        "Logo do app logado" — uma fonte só, igual pra todo ambiente. O que
+        continua aqui é o que é REALMENTE do ambiente: a memória do campo
+        "O que foi". */}
     <div className="cartao">
-      {/* ADAPTAÇÃO (comentário adicionado na reconciliação N1 de 11/09/2026):
-          no Projeto Modelo o nome não se edita aqui — mora em "Dados de
-          cadastro fiscal" (`MeusDadosView`, campo "Nome fantasia"), tela que
-          este produto não tem (ver ADAPTAÇÃO no topo deste arquivo: "Meus
-          Dados" virou o cadastro do usuário logado, sem CNPJ). Como
-          `companyName` (o nome do ambiente, usado na barra do topo) ainda
-          precisa de um lugar pra ser editado, ficou aqui — o outro card desta
-          mesma tela ("Meu Logotipo") que também é sobre a identidade do
-          ambiente no topo. */}
-      <Campo label="Nome do ambiente">
-        <input style={estiloInput} value={nome ?? tenant?.companyName ?? ''} onChange={(e) => setNome(e.target.value)} />
-      </Campo>
-      <button type="button" className="primario" style={{ width: '100%', marginBottom: 6 }}
-        onClick={async () => { const v = (nome ?? '').trim(); if (!v) { notify('Informe um nome.'); return } await atualizarTenantN0(TENANT_N1_ID, (t) => ({ ...t, companyName: v })); setNome(null); notify('Nome do ambiente atualizado.') }}>
-        Salvar nome
-      </button>
-    </div>
-
-    <div className="cartao">
-      <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 4 }}>Meu logotipo</div>
-      <p style={{ fontSize: 12, color: 'var(--texto-fraco)', margin: '0 0 12px', lineHeight: 1.5 }}>
-        Dois arquivos, como no Kit: a <strong>quadrada</strong> (o símbolo da marca) e a <strong>horizontal</strong>
-        (a versão deitada, que já traz o nome escrito). Imagem ou SVG, até 3MB cada.
+      <p style={{ fontSize: 12.5, color: 'var(--texto-fraco)', margin: 0, lineHeight: 1.5 }}>
+        A identidade visual do app (logo do topo, tamanho e posição) é definida pela Morfo e vale
+        igual em todos os ambientes — não há nada pra configurar aqui.
       </p>
-      {([
-        ['logoQuadradaUri', 'Logo quadrada', 'Símbolo/ícone da sua marca, formato quadrado.', logoQuadrada],
-        ['logoHorizUri', 'Logo horizontal', 'Versão deitada, geralmente com o nome escrito na própria logo.', logoHoriz],
-      ] as const).map(([slot, titulo, hint, valorAtual]) => (
-        <div key={slot} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderTop: '1px solid var(--borda)' }}>
-          <div style={{ width: 46, height: 46, borderRadius: 10, background: 'var(--bg)', border: '1px solid var(--borda)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden' }}>
-            {valorAtual
-              ? <img src={valorAtual} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-              : <span style={{ fontSize: 10, color: 'var(--texto-fraco)' }}>vazio</span>}
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 13, fontWeight: 700 }}>{titulo}</div>
-            <div style={{ fontSize: 11.5, color: 'var(--texto-fraco)', lineHeight: 1.4 }}>{hint}</div>
-          </div>
-          <button type="button" style={{ marginTop: 0, padding: '8px 12px', fontSize: 12, flexShrink: 0 }} onClick={() => void escolherLogo(slot)}>
-            {valorAtual ? 'Trocar' : 'Enviar'}
-          </button>
-          {valorAtual && (
-            <button type="button" aria-label={`Remover ${titulo}`} style={{ marginTop: 0, background: 'none', border: 'none', color: 'var(--vermelho)', cursor: 'pointer', padding: 4, flexShrink: 0 }}
-              onClick={() => { patch(slot === 'logoQuadradaUri' ? { logoQuadradaUri: undefined, logoUri: undefined } : { logoHorizUri: undefined }); notify('Logotipo removido.') }}>
-              ✕
-            </button>
-          )}
-        </div>
-      ))}
     </div>
-
-    {temLogo && (
-      <div className="cartao">
-        <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 10 }}>Como a logo aparece</div>
-
-        <CampoGrupo label="Qual usar no topo das telas">
-          <SegmentadoN1
-            valor={logoTopo}
-            onEscolher={(v) => patch({ logoTopo: v as 'quadrada' | 'horizontal' })}
-            opcoes={[
-              ...(logoQuadrada ? [{ v: 'quadrada', l: 'Quadrada' }] : []),
-              ...(logoHoriz ? [{ v: 'horizontal', l: 'Horizontal' }] : []),
-            ]}
-          />
-        </CampoGrupo>
-
-        {logoTopo === 'quadrada' && logoQuadrada && (
-          <CampoGrupo label="O que mostrar (logo quadrada)">
-            <SegmentadoN1
-              valor={logoModo}
-              onEscolher={(v) => patch({ logoModo: v as 'logo_nome' | 'so_logo' | 'so_nome' })}
-              opcoes={[{ v: 'logo_nome', l: 'Logo + nome' }, { v: 'so_logo', l: 'Só logo' }, { v: 'so_nome', l: 'Só nome' }]}
-            />
-          </CampoGrupo>
-        )}
-        {logoTopo === 'horizontal' && (
-          <p style={{ fontSize: 11.5, color: 'var(--texto-fraco)', margin: '0 0 12px', lineHeight: 1.5 }}>
-            Com a logo horizontal, o nome escrito não aparece — ele já faz parte da própria logo.
-          </p>
-        )}
-
-        {/* Composição (pedido do Rafael, 10/09/2026): só aparece quando a
-            logo E o nome estão os dois na tela — é o único caso em que
-            "juntos ou separados" e "qual de cada lado" querem dizer algo. */}
-        {mostraLogoENome && (
-          <>
-            <CampoGrupo label="Logo e nome">
-              <SegmentadoN1
-                valor={logoComposicao}
-                onEscolher={(v) => patch({ logoComposicao: v as 'juntos' | 'separados' })}
-                opcoes={[{ v: 'juntos', l: 'Juntos' }, { v: 'separados', l: 'Separados' }]}
-              />
-            </CampoGrupo>
-            {logoComposicao === 'juntos' ? (
-              <CampoGrupo label="Qual vem primeiro">
-                <SegmentadoN1
-                  valor={logoOrdem}
-                  onEscolher={(v) => patch({ logoOrdem: v as 'logo_nome' | 'nome_logo' })}
-                  opcoes={[{ v: 'logo_nome', l: 'Logo, depois nome' }, { v: 'nome_logo', l: 'Nome, depois logo' }]}
-                />
-              </CampoGrupo>
-            ) : (
-              <p style={{ fontSize: 11.5, color: 'var(--texto-fraco)', margin: '0 0 12px', lineHeight: 1.5 }}>
-                Separados: escolha embaixo o lado da logo e o lado do nome — um em cada ponta do topo.
-              </p>
-            )}
-          </>
-        )}
-
-        <CampoGrupo label={logoComposicao === 'separados' && mostraLogoENome ? 'Posição da logo' : 'Posição no topo'}>
-          <SegmentadoN1
-            valor={logoPos}
-            onEscolher={(v) => patch({ logoPos: v as 'esquerda' | 'centro' | 'direita' })}
-            opcoes={[{ v: 'esquerda', l: 'Esquerda' }, { v: 'centro', l: 'Centro' }, { v: 'direita', l: 'Direita' }]}
-          />
-        </CampoGrupo>
-
-        {mostraLogoENome && logoComposicao === 'separados' && (
-          <CampoGrupo label="Posição do nome">
-            <SegmentadoN1
-              valor={nomePos}
-              onEscolher={(v) => patch({ nomePos: v as 'esquerda' | 'centro' | 'direita' })}
-              opcoes={[{ v: 'esquerda', l: 'Esquerda' }, { v: 'centro', l: 'Centro' }, { v: 'direita', l: 'Direita' }]}
-            />
-          </CampoGrupo>
-        )}
-
-        <div style={{ fontSize: 12.5, fontWeight: 700, margin: '4px 0 6px' }}>Como vai ficar no topo</div>
-        <div style={{ background: 'var(--bg)', border: '1px solid var(--borda)', borderRadius: 12, padding: '10px 12px', marginBottom: 12 }}>
-          {/* A prévia usa a MESMA função que a barra do topo usa de verdade
-              (`zonasIdentidadeTenant`), pra não existir um segundo desenho que
-              possa discordar do real. */}
-          <ZonasIdentidade tenant={tenant} altura={16} />
-          {/* Legenda restaurada 11/09/2026 (reconciliação N1) — existia no
-              Projeto Modelo (`ParametrosAmbienteView`) e tinha ficado de fora
-              desta transcrição. */}
-          <div style={{ fontSize: 10.5, color: 'var(--texto-fraco)', textAlign: 'center', marginTop: 8 }}>Prévia da linha de marca (aparece acima do título das telas)</div>
-        </div>
-
-        {/* Divisor + subtítulo restaurados 11/09/2026 (reconciliação N1): o
-            Projeto Modelo (item 129) separa visualmente "Nos documentos
-            oficiais" de "Como vai ficar no topo" com uma linha e um título
-            próprios — esta transcrição tinha pulado direto pro campo. */}
-        <div style={{ height: 1, background: 'var(--borda)', margin: '4px 0 16px' }} />
-        <div style={{ fontSize: 12.5, fontWeight: 700, margin: '0 0 6px' }}>Nos documentos oficiais</div>
-        <CampoGrupo label="Qual usar nos documentos oficiais">
-          <SegmentadoN1
-            valor={logoDocs}
-            onEscolher={(v) => patch({ logoDocs: v as 'quadrada' | 'horizontal' })}
-            opcoes={[
-              ...(logoQuadrada ? [{ v: 'quadrada', l: 'Quadrada' }] : []),
-              ...(logoHoriz ? [{ v: 'horizontal', l: 'Horizontal' }] : []),
-            ]}
-          />
-        </CampoGrupo>
-        <p style={{ fontSize: 11.5, color: 'var(--texto-fraco)', margin: 0, lineHeight: 1.5 }}>
-          Vale pros arquivos que o app gera (a exportação em PDF de cada tela).
-        </p>
-      </div>
-    )}
 
     <MemoriaDescricaoParametro onAviso={notify} />
   </>

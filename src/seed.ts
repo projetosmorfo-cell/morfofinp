@@ -1,6 +1,7 @@
 import { db, type Categoria, type Lancamento } from './db'
 import { comIconePadraoCategoria, comIconePadraoGrupo } from './iconesPadrao'
 import { GRUPO_RECEITA } from './gruposUtil'
+import { doAmbiente, AMBIENTE_DESTE_APARELHO } from './ambiente'
 
 // Categorias e metas REAIS do Rafael — extraídas da planilha
 // "Metas vs Real" (Cálculos - Gastos v5, ajustes 30-08-2026), aba de trabalho
@@ -34,7 +35,7 @@ const CATEGORIAS_PADRAO: Omit<Categoria, 'id'>[] = [
   { nome: 'Outros', grupo: 'Variável', natureza: 'Consumo', aceitavelMensal: 0, ativa: true },
   { nome: 'Reembolsável', grupo: 'Variável', natureza: 'Consumo', aceitavelMensal: 0, ativa: true },
   { nome: 'Diferença', grupo: 'Variável', natureza: 'Consumo', aceitavelMensal: 0, ativa: true },
-  { nome: 'Salário', grupo: GRUPO_RECEITA, natureza: 'Receita', aceitavelMensal: 16712, ativa: true },
+  { nome: 'Salário', grupo: GRUPO_RECEITA, natureza: 'Receita', aceitavelMensal: 16712, receitaFixa: true, ativa: true },
   { nome: 'Reembolso', grupo: GRUPO_RECEITA, natureza: 'Receita', aceitavelMensal: 0, ativa: true },
   { nome: 'Outras receitas', grupo: GRUPO_RECEITA, natureza: 'Receita', aceitavelMensal: 0, ativa: true },
   { nome: 'Investimentos', grupo: GRUPO_RECEITA, natureza: 'Receita', aceitavelMensal: 0, ativa: true },
@@ -840,7 +841,10 @@ const LANCAMENTOS_SEMENTE: LancamentoSemente[] = [
 ]
 
 export async function seedIfEmpty() {
-  const jaTemCategoria = await db.categorias.count()
+  /* 12/09/2026: conta só o ambiente deste aparelho — com o escopo por
+     ambiente, um cliente de teste populado não pode fazer a semente achar que
+     este aparelho já está semeado (nem o contrário). */
+  const jaTemCategoria = doAmbiente(await db.categorias.toArray(), AMBIENTE_DESTE_APARELHO).length
   if (jaTemCategoria === 0) {
     await seedCategoriasContasELancamentos()
   }
