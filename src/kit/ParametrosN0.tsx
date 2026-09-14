@@ -151,6 +151,11 @@ export function SubParametrosAmbiente() {
     <TituloTela>Regras que valem pro ambiente de qualquer cliente.</TituloTela>
     <LinhaParam label="Prazo do pré-cadastro" hint="0 = sem prazo" sufixo=" dia(s)" valor={dp.precadastroMaxDias} min={0} onSalvar={(v) => void atualizarDefaultParams({ precadastroMaxDias: v })} />
     <LinhaParam label="Exibir/Ocultar — manter últimos (painel adm.)" hint="Quantos registros de cobrança ficam visíveis nas telas agregadas do N0." sufixo=" registro(s)" valor={dp.paymentCardsVisibleCount} min={1} onSalvar={(v) => void atualizarDefaultParams({ paymentCardsVisibleCount: v })} />
+    {/* 13/09/2026 (versão Ideal): a janela do "nesse ritmo" da frase do
+        veredito. Mora aqui, e não no ambiente do cliente, porque é decisão de
+        metodologia da plataforma — e é parâmetro, e não constante, por pedido
+        explícito do Rafael ("não gosto de nada desse tipo chumbado"). */}
+    <LinhaParam label="Janela da média do ritmo" hint="De quantos dias corridos sai a média que projeta o fim do mês. Testado: 30 erra bem menos que o ritmo do mês corrente nos primeiros dias." sufixo=" dia(s)" valor={dp.janelaMediaDias} min={7} max={90} onSalvar={(v) => void atualizarDefaultParams({ janelaMediaDias: v })} />
 
     <SectionLabel dark>Acesso de suporte</SectionLabel>
     <CartaoDev>

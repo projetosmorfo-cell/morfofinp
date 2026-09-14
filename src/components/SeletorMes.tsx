@@ -71,6 +71,23 @@ export default function SeletorMes({ mes, onMudar }: { mes: string; onMudar: (me
         <strong title={foraDoMesAtual ? 'Você não está no mês atual' : undefined}>
           {formatarMes(mes)}
         </strong>
+        {/* Volta pro mês corrente em um toque (build 063). Só existe quando há
+            pra onde voltar — no mês atual ele não teria função e só ocuparia
+            espaço na linha. Pequeno e sem destaque de propósito: o destaque
+            desta linha é a tarja amarela do nome do mês, que já avisa que a
+            tela está fora do mês atual; um segundo elemento gritando ao lado
+            competiria com ela. */}
+        {foraDoMesAtual && (
+          <button
+            type="button"
+            className="seletor-mes-hoje"
+            onClick={() => onMudar(mesAtual)}
+            data-testid="seletor-mes-hoje"
+            title="Voltar para o mês atual"
+          >
+            Hoje
+          </button>
+        )}
         <button
           type="button"
           className="seletor-mes-reprocessar"

@@ -20,6 +20,16 @@ export function fmtBRL(v: number): string {
   return `R$ ${formatarMoeda(v)}`
 }
 
+// Com o sinal na frente quando é negativo (13/09/2026). `fmtBRL` nunca
+// mostrou sinal — a maioria dos lugares já escreve o "+"/"−" por fora, e
+// mudar o comportamento dela duplicaria o sinal nesses lugares. Mas nos
+// NÚMEROS GRANDES da tela Hoje a cor era a única pista de que o valor era
+// negativo ("saldo livre em vermelho, sem o menos" — Rafael), e cor sozinha
+// não informa. Use esta onde o número aparece isolado, sem rótulo de sinal.
+export function fmtComSinal(v: number): string {
+  return `${v < -0.005 ? '−' : ''}${fmtBRL(v)}`
+}
+
 // Converte texto no formato mascarado ("1.234,56") de volta pro número —
 // usado ao salvar/filtrar. Aceita também texto sem máscara (ex.: "1234.56"
 // digitado por colar/preencher automático), já que remove só pontos e troca

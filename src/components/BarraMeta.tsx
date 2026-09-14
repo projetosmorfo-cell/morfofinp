@@ -20,11 +20,19 @@ export default function BarraMeta({
   previsto,
   rotulo,
   icone,
+  acao,
   mostrarDestaque = true,
 }: {
   gasto: number
   previsto: number
   rotulo?: string
+  // Ação opcional (hoje: o lápis de editar) DENTRO da linha de título da
+  // barra, depois do valor — 13/09/2026. Antes o botão vivia numa coluna
+  // própria ao lado da barra inteira, e era essa coluna que espremia o nome
+  // e o valor ("você esmagou a barra e todos os dados do lado, e abriu um
+  // espaço do lado direito pra colocar um único ícone de edição"). Aqui ele
+  // ocupa só a altura do texto e a barra volta à largura inteira.
+  acao?: ReactNode
   // Ícone opcional antes do rótulo (01/09/2026, rodada seguinte) — usado nos
   // cabeçalhos de GRUPO (Situação "Por grupo", Resumo "Metas por grupo",
   // Planejamento) que até aqui não mostravam o ícone cadastrado do grupo em
@@ -58,9 +66,10 @@ export default function BarraMeta({
           </span>
           {/* Padrão: nunca dar destaque de cor aqui — o destaque em valor (faltam/
               estourou) fica só na linha abaixo, pra não competir com ela. */}
-          <span className="texto-fraco">
-            {fmtBRL(gasto)} de {temPrevisto ? fmtBRL(previsto) : 'sem orçamento'}
+          <span className="texto-fraco barra-topo-valor">
+            {fmtBRL(gasto)} de {temPrevisto ? fmtBRL(previsto) : 'sem meta'}
           </span>
+          {acao}
         </div>
       )}
       <div className={`barra-meta ${estourou ? 'estourou' : ''}`}>

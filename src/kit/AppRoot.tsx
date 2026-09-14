@@ -136,7 +136,21 @@ export default function AppRoot() {
       setImpersonando(null)
       void definirAmbienteAtivo(undefined)
     }
-    conteudo = <App modoConsultaN0={{ onVoltar: sairDoAmbiente }} />
+    /* O cabeçalho mostrado dentro do ambiente é o DO CLIENTE (build 063), então
+       o nome do cliente e o do usuário dele vêm daqui — o `<App/>` não tem como
+       saber em quem a Morfo entrou (não existe sessão N1 nenhuma durante a
+       impersonação). */
+    const clienteAberto = plataformaN0?.tenants?.find((t) => t.id === impersonando)
+    const usuarioDoCliente = clienteAberto?.users?.find((u) => u.status !== 'inativo') ?? clienteAberto?.users?.[0]
+    conteudo = (
+      <App
+        modoConsultaN0={{
+          onVoltar: sairDoAmbiente,
+          nomeCliente: clienteAberto?.companyName,
+          nomeUsuario: usuarioDoCliente?.name || usuarioDoCliente?.login,
+        }}
+      />
+    )
   } else if (n0Ativa) {
     definirAcessoSuporte(null)
     // Sessão N0 ativa manda: painel N0 do Kit, inteiro, nada do aplicativo

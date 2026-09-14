@@ -249,6 +249,82 @@ async function gerarSeriesFixasInterno(limiteISO: string, _hojeISO: string): Pro
   return totalGerado
 }
 
+/* GERAR A PRÓXIMA OCORRÊNCIA DE SÉRIES ESPECÍFICAS (14/09/2026, edição em
+   massa).
+ *
+ * Por que isto existe separado do horizonte normal. `gerarRecorrentesAteFimDoMes`
+ * só gera o que cabe ATÉ O FIM DO MÊS que está na tela — é a regra da build
+ * 050 e ela está certa para a geração automática (entrar no mês e ver o
+ * comprometido inteiro). Mas quando a pessoa acabou de MARCAR "isto agora é
+ * fixo mensal", a próxima ocorrência quase sempre cai no mês seguinte, e o
+ * horizonte do mês devolveria ZERO — a recorrência pareceria só um rótulo.
+ * O pedido do Rafael foi explícito: "a partir do momento que eu salvar, tem
+ * que gerar os próximos lançamentos já".
+ *
+ * Então: UMA ocorrência por série indicada, e só para as séries indicadas —
+ * nunca avança séries antigas nem fura o horizonte do resto do app. O resto
+ * continua nascendo quando ele entra no mês, como sempre.
+ *
+ * Passa pela MESMA fila de `gerarSeriesFixas` — duas gerações em paralelo
+ * lendo o banco antes de qualquer gravação foi bug real na build 051. */
+export function gerarProximaDasSeries(serieIds: string[]): Promise<number> {
+  const proxima = filaGeracao.catch(() => 0).then(() => gerarProximaDasSeriesInterno(serieIds))
+  filaGeracao = proxima
+  return proxima
+}
+
+async function gerarProximaDasSeriesInterno(serieIds: string[]): Promise<number> {
+  const alvo = new Set(serieIds.filter(Boolean))
+  if (alvo.size === 0) return 0
+  const fixos = (await lerDoAmbiente(db.lancamentos.toArray())).filter(
+    (l) => l.recorrencia === 'fixo' && l.serieId && alvo.has(l.serieId),
+  )
+  const porSerie = new Map<string, Lancamento[]>()
+  for (const l of fixos) {
+    const lista = porSerie.get(l.serieId!) ?? []
+    lista.push(l)
+    porSerie.set(l.serieId!, lista)
+  }
+  const jaExiste = new Set(fixos.map((l) => `${l.serieId}|${l.dataCompetencia}`))
+
+  let total = 0
+  for (const [serieId, ocorrencias] of porSerie) {
+    ocorrencias.sort((a, b) => a.dataCompetencia.localeCompare(b.dataCompetencia))
+    const ultima = ocorrencias[ocorrencias.length - 1]
+    if (!ultima.periodicidade) continue
+    const data = proximaDataRecorrencia(ultima.dataCompetencia, ultima.periodicidade, ultima.regraRecorrencia)
+    if (jaExiste.has(`${serieId}|${data}`)) continue
+    await db.lancamentos.add(ocorrenciaFixaNova(serieId, ultima, data))
+    total++
+  }
+  return total
+}
+
+/* A forma do registro de uma ocorrência gerada, num lugar só — os dois
+   geradores (horizonte do mês e próxima de uma série) precisam gravar
+   exatamente o mesmo tipo de lançamento. */
+function ocorrenciaFixaNova(serieId: string, ultima: Lancamento, data: string) {
+  return {
+    ...marcaDoAmbiente(),
+    dataCompetencia: data,
+    dataCaixa: data,
+    descricao: ultima.descricao,
+    descricaoOriginal: ultima.descricaoOriginal ?? ultima.descricao,
+    valor: ultima.valor,
+    contaId: ultima.contaId,
+    pagoPor: ultima.pagoPor,
+    categoriaId: ultima.categoriaId,
+    status: 'manual' as const,
+    recorrencia: 'fixo' as const,
+    serieId,
+    periodicidade: ultima.periodicidade,
+    ...(ultima.regraRecorrencia ? { regraRecorrencia: ultima.regraRecorrencia } : {}),
+    /* Ocorrência gerada NUNCA nasce paga — ver o comentário longo no gerador
+       por horizonte, logo acima. */
+    pago: false,
+  }
+}
+
 // Gera a lista de N parcelas (datas + valor de cada uma) a partir da data e
 // valor total do lançamento original — usada tanto na prévia do formulário
 // quanto na gravação de verdade. Parcela sempre mensal (é o padrão de compra

@@ -1,15 +1,18 @@
 import { useEffect, useState } from 'react'
 import ResumoDoMes from './screens/ResumoDoMes'
 import Situacao from './screens/Situacao'
+import Hoje from './screens/Hoje'
 import Lancamentos from './screens/Lancamentos'
 import Carteira from './screens/Carteira'
 import Planejamento from './screens/Planejamento'
 import Categorias from './screens/Categorias'
 import Contas from './screens/Contas'
+import Calibragem from './screens/Calibragem'
 import Manutencao from './screens/Manutencao'
 import NotificacoesBancarias from './screens/NotificacoesBancarias'
 import MinhaAssinatura from './kit/MinhaAssinatura'
-import GuidedTour, { TOUR_STEPS_N1, ONDE_REABRIR_TOUR, type PassoTour } from './kit/GuidedTour'
+import GuidedTour, { passosTourN1, ONDE_REABRIR_TOUR, type PassoTour } from './kit/GuidedTour'
+import BoasVindas, { ConviteTour, useEstadoOnboarding, usePlanoPronto } from './components/BoasVindas'
 import SimularData, { BannerDataSimulada } from './kit/SimularData'
 import RodapeAbas from './kit/RodapeAbas'
 import { ArrowPathIcon, ArrowRightOnRectangleIcon, CalendarDaysIcon, ChartPieIcon, ChatBubbleLeftRightIcon, Cog6ToothIcon, EllipsisVerticalIcon, ListBulletIcon, ScaleIcon, WalletIcon } from '@heroicons/react/24/outline'
@@ -17,12 +20,12 @@ import DetalheLancamento from './components/DetalheLancamento'
 import { mesInicial, formatarMes } from './mes'
 import { mesesComPendencia } from './pendencias'
 import { avancarSeriesFixasPendentes } from './recorrencia'
-import { migrarTipoDosGrupos } from './gruposUtil'
+import { migrarComportamentoDosGrupos, migrarGruposAntigosParaInvestimento, migrarTipoDosGrupos } from './gruposUtil'
 import { aplicarPadraoSeNaoEditado } from './kit/padraoCategorias'
 import { migrarReceitaFixa } from './baseMeta'
 import { usarBotaoVoltar } from './voltarAndroid'
 import { PopupPermissoesNotificacao, usarAvisoPermissoes } from './components/PermissoesNotificacao'
-import { migrarPctGrupo, salvarConfiguracaoIcones, useModoVisao, useOrdemAbas, useOrdemMenuEngrenagem, useTemaEfetivo } from './configuracaoIcones'
+import { migrarPctGrupo, salvarConfiguracaoIcones, useModoVisaoComEstado, useOrdemAbas, useOrdemMenuEngrenagem, useTemaEfetivo } from './configuracaoIcones'
 import { TopIconMenu, UserHoverIcon, ThemeToggleIcon } from './kit/TopoIcones'
 import { Settings, MessageCircle, RefreshCw, LogOut } from 'lucide-react'
 import SuporteChat from './kit/SuporteChat'
@@ -41,7 +44,8 @@ import ConfiguracoesN1, { type ChaveConfigN1 } from './kit/ConfiguracoesN1'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, type NotificacaoPendente } from './db'
 import { sincronizarPendentesNativas, ouvirNotificacoesAoVivo, marcarConfirmada } from './notificacaoBancaria'
-import { contarDoAmbiente } from './ambiente'
+import { contarDoAmbiente, lerDoAmbiente } from './ambiente'
+import { MODO_VISAO_PADRAO } from './configuracaoIcones'
 
 // Categorias saiu daqui em 30/08/2026 (rodada seguinte) — deixou de ser aba
 // do rodapé e virou item do menu de configurações (engrenagem, ver
@@ -69,6 +73,15 @@ const TELAS = {
 // `tela`/mês selecionado por baixo.
 const TELAS_LIGHT: Tela[] = ['resumo', 'lancamentos', 'carteira', 'planejamento']
 
+/* Versão IDEAL (13/09/2026) — a versão nova, entre a Light e a Premium.
+   "Hoje" vem primeiro e é a que abre: ela responde as duas perguntas que o
+   app existe pra responder (quanto dá pra gastar sem se preocupar, e quanto
+   dá pra tentar economizar). O Resumo SAI — todo número dele ou já está na
+   Hoje ou está no Planejamento, e manter as duas leituras do mesmo mês em
+   telas diferentes era o que fazia o app parecer maior do que é.
+   Nada foi removido do código: em Premium o Resumo continua inteiro. */
+const TELAS_IDEAL: Tela[] = ['situacao', 'lancamentos', 'carteira', 'planejamento']
+
 // 'assinatura' (05/09/2026, Etapa 5) ficou de propósito FORA de
 // `ROTULO_CONFIG` até a Etapa 8 existir — só era alcançável por dentro de
 // Manutenção → "Minha Assinatura", mesmo padrão de acesso provisório do
@@ -93,7 +106,7 @@ const TELAS_LIGHT: Tela[] = ['resumo', 'lancamentos', 'carteira', 'planejamento'
 // `src/kit/ConfiguracoesN1.tsx`. 'layout' e 'limpar' são as duas metades
 // de `Manutencao` reaproveitadas como destinos separados (prop `secao`),
 // pra cada parâmetro cair na sessão do Kit que lhe cabe.
-type Config = 'configuracoes' | 'categorias' | 'contas' | 'notificacoes' | 'notificacoesPendentes' | 'manutencao' | 'layout' | 'limpar' | 'assinatura' | 'ferramentasTeste' | 'suporte' | 'meusDados' | 'meuAmbiente' | 'aparencia' | 'ajuda'
+type Config = 'calibragem' | 'configuracoes' | 'categorias' | 'contas' | 'notificacoes' | 'notificacoesPendentes' | 'manutencao' | 'layout' | 'limpar' | 'assinatura' | 'ferramentasTeste' | 'suporte' | 'meusDados' | 'meuAmbiente' | 'aparencia' | 'ajuda'
 
 // 'notificacoes' (09/09/2026): tela "Notificações bancárias" — ver
 // `src/screens/NotificacoesBancarias.tsx` e `src/notificacaoBancaria.ts`.
@@ -330,10 +343,22 @@ function BarraMarcaN1({
 // caminho de volta N1→N0 além deste — G59 proíbe explicitamente qualquer
 // item de menu/botão dentro do N1 que leve pro painel N0 (o antigo "Abrir
 // painel N0" de `Manutencao.tsx` foi removido nesta mesma rodada).
-export default function App({ modoConsultaN0 }: { modoConsultaN0?: { onVoltar: () => void } }) {
+export interface ModoConsultaN0 {
+  onVoltar: () => void
+  /** Nome do cliente em que a Morfo entrou — some na tarja fina do topo. */
+  nomeCliente?: string
+  /** Usuário DELE — é o nome que o ícone de usuário do cabeçalho mostra. */
+  nomeUsuario?: string
+}
+
+export default function App({ modoConsultaN0 }: { modoConsultaN0?: ModoConsultaN0 }) {
   // Navegação por estado do React, sem router e sem depender da URL —
   // funciona igual em qualquer lugar, inclusive abrindo o arquivo direto
   // (file://), onde bibliotecas baseadas em window.location/URL quebram.
+  /* Nasce em 'resumo' SEMPRE. Na versão Ideal o Resumo não está no rodapé,
+     então o efeito que corrige a aba ativa (mais abaixo) reposiciona sozinho
+     para a 1ª aba visível — que é a tela Hoje. Cravar 'situacao' aqui pelo
+     padrão fazia o Premium também abrir fora do Resumo. */
   const [tela, setTela] = useState<Tela>('resumo')
 
   // Mês selecionado — vive aqui (não em cada tela) pra ficar fixo ao trocar
@@ -440,8 +465,10 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: { onVoltar: (
 
   // Visão Light × Premium (04/09/2026) — configuração persistida em
   // `db.configuracoes` (ver `useModoVisao`), trocada pela tela Manutenção.
-  const modoVisao = useModoVisao()
-  const telasBase = (modoVisao === 'light' ? TELAS_LIGHT : (Object.keys(TELAS) as Tela[])).filter((t) => podeVerFuncN1(t))
+  const { modo: modoVisao, pronto: modoPronto } = useModoVisaoComEstado()
+  const telasBase = (
+    modoVisao === 'light' ? TELAS_LIGHT : modoVisao === 'ideal' ? TELAS_IDEAL : (Object.keys(TELAS) as Tela[])
+  ).filter((t) => podeVerFuncN1(t))
 
   // Ordem do rodapé personalizável (04/09/2026, Roteiro de Parametrização
   // Morfo, Etapa 4 — Kit de Estrutura Mínima, "Layout": adaptação da seção
@@ -494,6 +521,15 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: { onVoltar: (
   const menuPosN1 = normalizarMenuPosModo(menuPosProprio?.modo ?? layoutCfg?.menuPosN1?.modo)
   // Telas que ainda EXISTEM pra navegação (barra ou "⋮"); só 'oculto' some.
   const telasVisiveis = telasOrdenadas.filter((t) => posDeMenu(t) !== 'oculto')
+  /* O rename "Situação → Hoje" vale onde a tela Hoje existe, que é a versão
+     Ideal. Em Light e Premium a aba continua "Situação" — é outra tela por
+     baixo (margem comprometida, sobra real), e chamar as duas de "Hoje"
+     confundiria justamente quem trocasse de versão. */
+  const rotuloDaTela = (t: Tela) =>
+    t === 'situacao' && modoVisao === 'ideal' ? 'Hoje' : TELAS[t].rotulo
+
+  /* ver a nota logo abaixo: a aba MOSTRADA é derivada, não corrigida por efeito */
+  const telaAtiva: Tela = telasVisiveis.includes(tela) ? tela : (telasVisiveis[0] ?? 'resumo')
 
   // Ordem do menu de engrenagem personalizável (08/09/2026, correção
   // pós-G59, "Layout do menu de configurações" em Manutencao.tsx) — mesma
@@ -525,10 +561,15 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: { onVoltar: (
   // Vale também pra "Ocultar" do parâmetro de posição dos menus: se a tela
   // aberta foi ocultada, cai na 1ª que sobrou (e não num 'resumo' fixo, que
   // também pode estar oculto).
-  useEffect(() => {
-    if (!telasVisiveis.includes(tela)) setTela(telasVisiveis[0] ?? 'resumo')
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [modoVisao, telasVisiveis.join(',')])
+  /* A aba mostrada é DERIVADA, nunca corrigida por efeito.
+     Antes isso era um `useEffect` + `setTela`, e ele trocava a aba com base
+     na lista de abas do primeiro render — que é um palpite enquanto a
+     configuração não chegou do banco. O palpite (o modo padrão, 'ideal') não
+     tem Resumo, então o Premium abria fora do Resumo e não voltava mais:
+     `setTela` é irreversível, a escolha original se perde.
+     Derivando, `tela` continua guardando a escolha da pessoa; se ela não
+     estiver visível agora, mostramos a 1ª que está — e ao voltar pra Premium
+     a escolha original reaparece sozinha. */
 
   // No carregamento, avança toda série de lançamento "fixo" que já deveria
   // ter gerado uma nova ocorrência até hoje — é a "geração dinâmica por
@@ -542,19 +583,49 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: { onVoltar: (
     // a cada grupo e move pro grupo "Receita" toda categoria de receita que
     // estiver dentro de grupo de saída (11/09/2026) — roda uma vez só, ver
     // `migrarTipoDosGrupos()` em `src/gruposUtil.ts`.
-    migrarTipoDosGrupos()
-    // Padrão de Categorias/Grupos/ícones definido pela Morfo no N0 (12/09/2026,
-    // item 7): só é aplicado enquanto ESTE ambiente não tiver sido editado pelo
-    // próprio dono, e nunca apaga nada — ver `src/kit/padraoCategorias.ts`.
-    void aplicarPadraoSeNaoEditado()
+    /* As migrações de CADASTRO rodam EM SEQUÊNCIA, não em paralelo (build
+       062). Elas leem e gravam as mesmas tabelas e a ordem importa: o tipo do
+       grupo precisa existir antes da fusão, a fusão precisa acontecer antes
+       de o padrão do N0 ser aplicado (senão o padrão recria o grupo que a
+       fusão acabou de inativar), e o comportamento se apoia no tipo. Disparar
+       as quatro soltas era uma corrida esperando para acontecer. */
+    void (async () => {
+      // Tipo de grupo (entrada × saída) numa base que já existe: atribui o
+      // tipo a cada grupo e move pro grupo "Receita" toda categoria de receita
+      // que estiver dentro de grupo de saída (11/09/2026) — roda uma vez só,
+      // ver `migrarTipoDosGrupos()` em `src/gruposUtil.ts`.
+      await migrarTipoDosGrupos()
+      /* Fusão dos grupos antigos ("Objetivos" e "Segurança") no
+         "Investimento" (build 062). A base virou 50/30/20 só na planilha e no
+         arquivo de backup — dentro do app nunca houve migração, e quem já
+         usava continuou com os quatro grupos na tela. Move as categorias,
+         soma os percentuais e INATIVA os antigos; não apaga nada. */
+      await migrarGruposAntigosParaInvestimento()
+      /* Comportamento do grupo (fixo × variável × guardar) numa base que já
+         existe (build 061): preenche pelo nome UMA vez, e daí em diante quem
+         manda é o cadastro — a regra deixou de viver no código-fonte. Ver
+         `migrarComportamentoDosGrupos()` em `src/gruposUtil.ts`. */
+      await migrarComportamentoDosGrupos()
+      // Padrão de Categorias/Grupos/ícones definido pela Morfo no N0
+      // (12/09/2026, item 7): só é aplicado enquanto ESTE ambiente não tiver
+      // sido editado pelo próprio dono, e nunca apaga nada — ver
+      // `src/kit/padraoCategorias.ts`.
+      await aplicarPadraoSeNaoEditado()
+    })()
     /* Base das metas: marca a receita fixa numa base que veio de antes da
        build 051 e nunca recebeu a flag (bug real de 12/09/2026 — ver
        `migrarReceitaFixa` em `src/baseMeta.ts`). Roda uma vez só. */
     void migrarReceitaFixa()
     /* Item 6: o passo a passo abre sozinho a cada abertura do app, até a
        pessoa desligar. A leitura é direta do banco (não do hook) porque isto
-       roda uma vez no mount, antes de qualquer interação. */
+       roda uma vez no mount, antes de qualquer interação.
+       ONBOARDING INVERTIDO (13/09/2026): na versão Ideal o tour NÃO abre
+       sozinho — explicar telas vazias não ensina nada. Lá ele é oferecido uma
+       única vez, quando o plano fica pronto (ver `mostrarConviteTour` abaixo e
+       o cabeçalho de `src/components/BoasVindas.tsx`). Light e Premium
+       continuam como antes. */
     void db.configuracoes.get(1).then((cfg) => {
+      if ((cfg?.modoVisao ?? MODO_VISAO_PADRAO) === 'ideal') return
       if (!cfg?.tourNaoExibir) { setTourAberto(true); setTourAbertoAuto(true) }
     })
   }, [])
@@ -616,7 +687,10 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: { onVoltar: (
   // engrenagem (ver `MenuEngrenagem` acima).
   const chatNaoLida = tenantN1 ? hasUnreadTenant(tenantN1) : false
 
-  const { Componente } = TELAS[tela]
+  /* Na versão Ideal a aba "situacao" mostra a tela HOJE — a tela nova, com os
+     dois números. Light e Premium continuam com a Situação de sempre, intacta:
+     é o mesmo slot do rodapé, com um componente diferente por dentro. */
+  const Componente = telaAtiva === 'situacao' && modoVisao === 'ideal' ? Hoje : TELAS[telaAtiva].Componente
   const aoAbrirLancamento = (opcoes?: AlvoLancamento) => setLancamentoAberto(opcoes ?? {})
 
   /* Botão voltar do Android (12/09/2026, pedido do Rafael) — desempilha o
@@ -626,7 +700,7 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: { onVoltar: (
     if (lancamentoAberto) { setLancamentoAberto(null); return true }
     if (tourAberto) { setTourAberto(false); return true }
     if (configAberta) { fecharConfig(); return true }
-    if (telasVisiveis.length > 0 && tela !== telasVisiveis[0]) { setTela(telasVisiveis[0]); return true }
+    if (telasVisiveis.length > 0 && telaAtiva !== telasVisiveis[0]) { setTela(telasVisiveis[0]); return true }
     return false
   })
 
@@ -639,14 +713,22 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: { onVoltar: (
     config: { label: 'Configuração', labelBarra: 'Config.', Icone: Cog6ToothIcon, icon: Settings, onClick: () => setConfigAberta('configuracoes') },
     suporte: { label: 'Suporte / Chat', labelBarra: 'Suporte', Icone: ChatBubbleLeftRightIcon, icon: MessageCircle, onClick: () => setConfigAberta('suporte'), hasUnread: chatNaoLida },
     atualizar: { label: atualizando ? 'Atualizando…' : 'Atualizar', Icone: ArrowPathIcon, icon: RefreshCw, onClick: () => { void atualizarAgora() } },
-    sair: { label: 'Sair', Icone: ArrowRightOnRectangleIcon, icon: LogOut, onClick: () => { void sair() }, danger: true },
+    /* Em modo consulta "Sair" sai do CLIENTE, não da conta (build 063, pedido
+       do Rafael: "se eu clicar nos três pontinhos do cliente e clicar em sair,
+       é a mesma coisa que eu sair do impersonate"). Chamar `sair()` aqui seria
+       pior que inútil: apagaria a sessão N1 do dono do ambiente — que nem é
+       quem está mexendo — e deixaria o administrador Morfo dentro de um app
+       sem dono. */
+    sair: modoConsultaN0
+      ? { label: 'Sair do cliente', labelBarra: 'Sair', Icone: ArrowRightOnRectangleIcon, icon: LogOut, onClick: modoConsultaN0.onVoltar, danger: true }
+      : { label: 'Sair', Icone: ArrowRightOnRectangleIcon, icon: LogOut, onClick: () => { void sair() }, danger: true },
   }
 
   const itensMais: ItemMenuTopo[] = [
     // Abas que o parâmetro mandou pro "⋮" — mesma ordem da barra.
     ...telasVisiveis
       .filter((t) => posDeMenu(t) === 'menu')
-      .map((t) => ({ icon: iconeDeAbaNoMenu(TELAS[t].Icone), label: TELAS[t].rotulo, onClick: () => setTela(t) })),
+      .map((t) => ({ icon: iconeDeAbaNoMenu(TELAS[t].Icone), label: rotuloDaTela(t), onClick: () => setTela(t) })),
     // Ações que continuam (ou passaram a ficar) no "⋮".
     ...Object.entries(ACOES_N1)
       .filter(([k]) => posDeMenu(k) === 'menu')
@@ -658,7 +740,7 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: { onVoltar: (
     .filter((t) => posDeMenu(t) === 'rodape')
     .map((chave) => ({
       key: chave,
-      label: TELAS[chave].rotulo,
+      label: rotuloDaTela(chave),
       Icone: TELAS[chave].Icone,
       // data-tour (05/09/2026, Etapa 6 — Tour guiado): ver
       // `src/kit/GuidedTour.tsx`/`TOUR_STEPS_N1`.
@@ -686,6 +768,74 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: { onVoltar: (
     return [...base.slice(0, meio), entradaMais, ...base.slice(meio)]
   })()
 
+  /* ONBOARDING INVERTIDO (13/09/2026, versão Ideal) — boas-vindas → 3 passos →
+     tour, nessa ordem. Ver o cabeçalho de `src/components/BoasVindas.tsx`.
+     As três consultas são pequenas (categorias, grupos e metas do ambiente) e
+     existem aqui só pra saber QUANDO o plano ficou pronto: é o fim do passo 2
+     que dispara o convite do tour, e o passo 2 é concluído em outra tela. */
+  const onboarding = useEstadoOnboarding()
+  const catsOnboarding = useLiveQuery(() => lerDoAmbiente(db.categorias.toArray()), [])
+  const gruposOnboarding = useLiveQuery(() => lerDoAmbiente(db.grupos.toArray()), [])
+  const metasOnboarding = useLiveQuery(() => lerDoAmbiente(db.metas.toArray()), [])
+  /* "Plano pronto" = o momento em que a tela Hoje troca o cartão de 3 passos
+     pelos dois números. Ver `usePlanoPronto` — o passo 3 é opcional de
+     propósito, esperar por ele adiaria o convite pra sempre em quem nunca
+     preenche meta por categoria. */
+  const planoPronto = usePlanoPronto(catsOnboarding, gruposOnboarding, metasOnboarding)
+  /* NUNCA em modo consulta: quem está ali é o administrador Morfo dentro do
+     ambiente de um cliente, não o dono do ambiente. Dar as boas-vindas a ele
+     (a) rouba do cliente a primeira tela, marcando-a como lida por ele, e
+     (b) cobriria o "‹ Voltar ao painel N0", que é o único caminho de saída —
+     bug real pego pelo t050b, não relatado. */
+  const mostrarBoasVindas =
+    modoVisao === 'ideal' && !modoConsultaN0 && onboarding.pronto && !onboarding.boasVindasVistas
+  const mostrarConviteTour =
+    modoVisao === 'ideal' &&
+    !modoConsultaN0 &&
+    onboarding.pronto &&
+    onboarding.boasVindasVistas &&
+    !onboarding.tourConviteFeito &&
+    !configN1?.tourNaoExibir &&
+    planoPronto &&
+    !tourAberto
+  const aceitarConviteTour = () => {
+    void salvarConfiguracaoIcones({ tourConviteFeito: true })
+    setTourAberto(true)
+    setTourAbertoAuto(false)
+  }
+  /* Recusou: some e não volta a perguntar. `tourNaoExibir` junto porque a
+     resposta é sobre o tour, não sobre esta tela — quem disse "agora não" aqui
+     não deveria receber o tour automático ao trocar pra Premium depois. Fica
+     em Configuração → Ajuda, e a mensagem diz exatamente isso. */
+  const recusarConviteTour = () => {
+    void salvarConfiguracaoIcones({ tourConviteFeito: true, tourNaoExibir: true })
+    setAvisoTour(ONDE_REABRIR_TOUR)
+  }
+
+  /* Nada é montado antes de a configuração chegar do banco.
+     Por que isso importa: até chegar, o modo de visão é um PALPITE (o padrão),
+     e várias coisas se decidem por ele — quais abas existem, qual é a
+     primeira, e quais passos o tour guiado tem. O tour, ao montar, troca de
+     aba; um palpite errado aqui trocava a aba de forma irreversível e o
+     Premium abria fora do Resumo. Um frame de espera resolve a classe inteira
+     do problema, em vez de remendar caso a caso.
+     O guard fica DEPOIS de todos os hooks — retornar antes deles quebraria a
+     ordem de hooks entre renders (já foi bug real neste projeto). */
+  if (!modoPronto) return null
+
+  /* A tela de abertura ocupa o app inteiro: nada por trás dela tem conteúdo
+     ainda, e mostrar rodapé/telas vazias por baixo só dilui a única coisa que
+     a pessoa precisa ler agora. */
+  if (mostrarBoasVindas) {
+    return (
+      <BoasVindas
+        aoComecar={() => {
+          void salvarConfiguracaoIcones({ boasVindasVistas: true })
+        }}
+      />
+    )
+  }
+
   return (
     <>
       {/* Kit `TenantBrandBar` (L910): a linha de marca é a PRIMEIRA linha fixa
@@ -693,38 +843,36 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: { onVoltar: (
           nenhuma. Substitui o botão de engrenagem flutuante. */}
       <BarraMarcaN1
         chatNaoLida={chatNaoLida}
-        nomeUsuario={usuarioTenantLogado?.name || usuarioTenantLogado?.login}
+        nomeUsuario={
+          /* Em modo consulta o cabeçalho é o DO CLIENTE: o ícone de usuário
+             mostra o usuário dele, não o do dono do aparelho (que nem está
+             logado aqui). Era o pedaço que faltava pro "cabeçalho completo do
+             cliente". */
+          modoConsultaN0
+            ? modoConsultaN0.nomeUsuario
+            : usuarioTenantLogado?.name || usuarioTenantLogado?.login
+        }
         itensMais={itensMais}
         menuPos={menuPosN1}
       />
       {modoConsultaN0 && (
-        // Banner de impersonação (G59) — mesmo padrão de layout de
-        // `BannerDataSimulada` (bloco normal do fluxo, irmão ANTES de
-        // `<main>`, nunca `position: fixed` — evita o bug real já
-        // documentado de cobrir o cabeçalho sticky de cada tela). Sempre
-        // visível enquanto o administrador Morfo está "vendo como" o
-        // tenant real — nunca escondível, e o único jeito de sair é
-        // "Voltar ao painel N0" (nunca "sair da conta", que apagaria a
-        // sessão N1 do próprio Rafael sem necessidade).
-        <div
-          style={{
-            flexShrink: 0,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 10,
-            padding: '8px 14px',
-            background: '#3B1E63',
-            color: '#fff',
-          }}
-        >
-          <span style={{ fontSize: 12, fontWeight: 700 }}>Modo consulta — administrador Morfo, vendo como este cliente</span>
-          <button
-            type="button"
-            onClick={modoConsultaN0.onVoltar}
-            style={{ background: 'rgba(255,255,255,0.18)', border: 'none', borderRadius: 8, color: '#fff', padding: '6px 10px', fontSize: 12, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}
-          >
-            ‹ Voltar ao painel N0
+        /* Tarja de impersonação (G59) — bloco normal do fluxo, irmão ANTES de
+           `<main>`, nunca `position: fixed` (evita o bug já documentado de
+           cobrir o cabeçalho sticky de cada tela).
+
+           Build 063: era um bloco de duas linhas com um botão grande, e o
+           Rafael pediu o contrário — "eu quero enxergar a tela inteira do
+           cliente". Virou UMA linha fina: o que o administrador precisa é
+           lembrar onde está, não um painel. A saída não some junto — ela
+           passou a ser "Sair" no "⋮" do próprio cabeçalho do cliente (ver
+           `ACOES_N1.sair`), que é onde ele foi procurar, e continua aqui como
+           um "sair" pequeno ao lado do aviso. */
+        <div className="tarja-consulta-n0" data-testid="tarja-consulta-n0">
+          <span>
+            Modo consulta{modoConsultaN0.nomeCliente ? ` · ${modoConsultaN0.nomeCliente}` : ''}
+          </span>
+          <button type="button" onClick={modoConsultaN0.onVoltar} data-testid="sair-consulta-n0">
+            Sair ›
           </button>
         </div>
       )}
@@ -881,8 +1029,14 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: { onVoltar: (
               aoMudarMes={setMes}
               aoAbrirLancamento={aoAbrirLancamento}
               aoAbrirPlanejamento={() => setTela('planejamento')}
+              aoAbrirCalibragem={() => setConfigAberta('calibragem')}
               aoVoltar={fecharConfig}
             />
+          ) : configAberta === 'calibragem' ? (
+            /* Calibragem (build 059) — chamada pelo aviso da tela Hoje, pela
+               faixa do Planejamento e pelo ⚖ do cabeçalho dele. Não entra no
+               menu "⋮": não é um destino de configuração, é uma ação do plano. */
+            <Calibragem mes={mes} aoVoltar={fecharConfig} />
           ) : configAberta === 'contas' ? (
             <Contas aoVoltar={fecharConfig} />
           ) : configAberta === 'assinatura' ? (
@@ -942,17 +1096,18 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: { onVoltar: (
           )
         ) : (
           <Componente
-            key={`${tela}:${resetTela}`}
+            key={`${telaAtiva}:${resetTela}`}
             mes={mes}
             aoMudarMes={setMes}
             aoAbrirLancamento={aoAbrirLancamento}
             aoAbrirPlanejamento={() => setTela('planejamento')}
+              aoAbrirCalibragem={() => setConfigAberta('calibragem')}
           />
         )}
       </main>
       {!configAberta && (
         <Rodape
-          tela={tela}
+          tela={telaAtiva}
           entradas={entradasRodape}
           onTrocarTela={(t) => { setTela(t); setResetTela((n) => n + 1) }}
         />
@@ -1004,15 +1159,34 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: { onVoltar: (
            correspondente sai do roteiro em vez de descrever algo que não
            existe na tela. */
         <GuidedTour
-          passos={TOUR_STEPS_N1.filter((p) => !p.tela || p.tela.startsWith('config:') || (telasVisiveis as string[]).includes(p.tela))}
+          passos={passosTourN1(modoVisao).filter((p) => !p.tela || p.tela.startsWith('config:') || (telasVisiveis as string[]).includes(p.tela))}
           onIrPara={onIrParaPassoTour}
-          onFinalizar={() => { setTourAberto(false); setTourAbertoAuto(false) }}
+          /* Terminar o tour VOLTA PRA TELA INICIAL. Os últimos passos abrem a
+             tela de Configuração pra apontar Contas e Categorias — sem isso o
+             app fica parado lá quando o passo a passo acaba, que foi
+             exatamente o que aconteceu na build 058. */
+          onFinalizar={() => {
+            setTourAberto(false)
+            setTourAbertoAuto(false)
+            setConfigAberta(null)
+            const inicial = telasVisiveis[0]
+            if (inicial) setTela(inicial)
+          }}
           onNaoExibirNovamente={tourAbertoAuto ? () => {
             void salvarConfiguracaoIcones({ tourNaoExibir: true })
             setTourAberto(false); setTourAbertoAuto(false)
+            setConfigAberta(null)
+            const inicial = telasVisiveis[0]
+            if (inicial) setTela(inicial)
             setAvisoTour(ONDE_REABRIR_TOUR)
           } : undefined}
         />
+      )}
+      {/* Convite do tour — uma vez só, no fim do passo 2 (ver o cabeçalho de
+          `BoasVindas.tsx`). Fica por último de propósito: é o elemento mais
+          alto da pilha, acima de qualquer tela. */}
+      {mostrarConviteTour && (
+        <ConviteTour aoAceitar={aceitarConviteTour} aoRecusar={recusarConviteTour} />
       )}
     </>
   )

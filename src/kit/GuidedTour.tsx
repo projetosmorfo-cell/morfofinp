@@ -261,3 +261,22 @@ export const TOUR_STEPS_N1: PassoTour[] = [
   { dataTour: 'cfg-categorias', tela: 'config:configuracoes', titulo: 'Meta da categoria', texto: 'Na aba "Categorias e Metas", cada categoria tem a sua META — quanto você quer gastar nela por mês. É esse número que pinta a barra de vermelho quando estoura.' },
   { dataTour: 'cfg-categorias', tela: 'config:configuracoes', titulo: 'Meta do grupo', texto: 'Na aba "Grupos e Metas", cada grupo recebe um percentual da sua receita fixa do mês — é a meta do grupo. A soma das metas das categorias dele deveria caber dentro dessa meta.' },
 ]
+
+/* Na versão Ideal a MESMA aba `situacao` renderiza a tela Hoje (ver
+   `App.tsx`), e o rótulo dela muda junto. Um passo de tour que diz "Situação"
+   apontando pra uma aba escrita "Hoje" descreve outra coisa — por isso o
+   roteiro troca esse passo por inteiro em vez de reaproveitar o texto.
+   Passo que não existe na visão atual já é filtrado por `telasVisiveis` em
+   `App.tsx`; aqui só muda o CONTEÚDO do que sobra. */
+export const PASSO_HOJE_IDEAL: PassoTour = {
+  dataTour: 'nav-tab-situacao',
+  tela: 'situacao',
+  titulo: 'Hoje',
+  texto:
+    'A tela do dia: quanto está livre de verdade, quanto ainda dá pra economizar até o fim do mês e, no ritmo atual, se o Variável estoura ou sobra.',
+}
+
+export function passosTourN1(modo: 'light' | 'ideal' | 'premium'): PassoTour[] {
+  if (modo !== 'ideal') return TOUR_STEPS_N1
+  return TOUR_STEPS_N1.map((p) => (p.dataTour === 'nav-tab-situacao' ? PASSO_HOJE_IDEAL : p))
+}

@@ -16,7 +16,7 @@
    Aqui moram só as funções puras da regra + a migração única. A UI que impede
    a escolha errada está em `Categorias.tsx` (o campo de natureza e o de grupo
    se filtram um pelo outro). */
-import { db, tipoDoGrupoPelaNatureza, type Categoria, type GrupoRegistro, type Natureza, type TipoGrupo } from './db'
+import { db, tipoDoGrupoPelaNatureza, type Categoria, type ComportamentoGrupo, type GrupoRegistro, type Natureza, type TipoGrupo } from './db'
 import { ICONES_PADRAO_GRUPO } from './iconesPadrao'
 import { salvarConfiguracaoIcones } from './configuracaoIcones'
 import { doAmbiente, marcaDoAmbiente, ambienteDoBanco } from './ambiente'
@@ -35,6 +35,186 @@ export const ROTULO_TIPO_GRUPO: Record<TipoGrupo, string> = {
    de longe mais comum e é o que preserva o comportamento anterior. */
 export function tipoDoGrupo(g?: Pick<GrupoRegistro, 'tipo'> | null): TipoGrupo {
   return g?.tipo === 'entrada' ? 'entrada' : 'saida'
+}
+
+/* ================= COMPORTAMENTO DO GRUPO (build 061) =================
+   Quem decide o que projeta por ritmo e o que fica fora da economia é ESTE
+   campo, nunca o nome do grupo. Ver `ComportamentoGrupo` em `db.ts`. */
+
+export const ROTULO_COMPORTAMENTO: Record<ComportamentoGrupo, string> = {
+  fixo: 'Fixo — já é conhecido',
+  variavel: 'Variável — dá pra economizar',
+  guardar: 'Guardar — aporte/investimento',
+}
+
+export const EXPLICACAO_COMPORTAMENTO: Record<ComportamentoGrupo, string> = {
+  fixo: 'Compromisso que se repete e você já sabe o valor. Entra na conta do mês inteiro, sem projeção.',
+  variavel: 'Gasto do dia a dia. É onde dá pra economizar — é este grupo que o app projeta pelo seu ritmo. Pode ter mais de um.',
+  guardar: 'Dinheiro que sai pra guardar ou investir. Fica fora da conta de economia (deixar de guardar não é economizar) e vira o aviso de "falta aportar".',
+}
+
+/* Palavras que denunciam o comportamento quando o campo ainda não existe.
+   Usadas SÓ pela migração e pelo padrão de fábrica — nunca em tempo de uso. */
+const PISTA_VARIAVEL = /vari[áa]vel|dia a dia|livre|lazer/i
+const PISTA_GUARDAR = /investi|objetivo|seguran|reserva|guardar|aporte|poupan|cofr/i
+
+export function comportamentoPeloNome(nome: string): ComportamentoGrupo {
+  if (PISTA_VARIAVEL.test(nome)) return 'variavel'
+  if (PISTA_GUARDAR.test(nome)) return 'guardar'
+  return 'fixo'
+}
+
+/** Comportamento efetivo de um grupo já cadastrado (entrada nunca tem). */
+export function comportamentoDoGrupo(g: Pick<GrupoRegistro, 'tipo' | 'comportamento' | 'nome'>): ComportamentoGrupo | null {
+  if (tipoDoGrupo(g) !== 'saida') return null
+  return g.comportamento ?? comportamentoPeloNome(g.nome)
+}
+
+export const gruposComComportamento = (grupos: readonly GrupoRegistro[], c: ComportamentoGrupo) =>
+  grupos.filter((g) => g.ativo !== false && comportamentoDoGrupo(g) === c)
+
+/* Migração única: preenche o campo pelo nome uma vez só. Depois disso quem
+   manda é a escolha da pessoa — mesmo padrão de `migrarTipoDosGrupos()`. */
+export async function migrarComportamentoDosGrupos(): Promise<number> {
+  const config = await db.configuracoes.get(1)
+  if (config?.gruposComportamentoRevisado) return 0
+  const amb = await ambienteDoBanco()
+  let n = 0
+  await db.transaction('rw', db.grupos, async () => {
+    for (const g of doAmbiente(await db.grupos.toArray(), amb)) {
+      if (g.comportamento) continue
+      if (tipoDoGrupo(g) !== 'saida') continue
+      await db.grupos.update(g.id!, { comportamento: comportamentoPeloNome(g.nome) })
+      n++
+    }
+  })
+  await salvarConfiguracaoIcones({ gruposComportamentoRevisado: true })
+  return n
+}
+
+/* ========= FUSÃO DOS GRUPOS ANTIGOS NO "INVESTIMENTO" (build 062) =========
+ *
+ * A base do produto passou de quatro grupos de saída (Fixo, Variável,
+ * Objetivos, Segurança) para três (Fixo 50 / Variável 30 / Investimento 20)
+ * em 13/09/2026 — mas essa mudança só existiu na PLANILHA e no arquivo de
+ * backup que foi gerado a partir dela. Dentro do app nunca houve migração
+ * nenhuma: `VERSAO_SEMENTE_DEMO` está congelada (e tem que continuar), então
+ * quem já usava o app seguiu com "Objetivos" e "Segurança" na tela de
+ * Planejamento, exatamente como o Rafael reportou. Trocar a semente não
+ * resolveria — semente só vale para banco novo.
+ *
+ * O que esta migração faz, uma vez só:
+ *   • garante o grupo "Investimento" (cria se não existir, com o ícone do
+ *     padrão e comportamento "guardar");
+ *   • MOVE as categorias dos grupos antigos para ele — as categorias e todo
+ *     o histórico continuam iguais, só mudam de grupo;
+ *   • SOMA os percentuais de meta dos grupos antigos no percentual do
+ *     Investimento, para o total continuar fechando em 100%;
+ *   • INATIVA os grupos antigos (`ativo: false`) — some da tela, o histórico
+ *     continua íntegro e dá para reativar pela tela de Categorias e Grupos.
+ *
+ * Nada é apagado: nenhum lançamento, nenhuma categoria, nenhum grupo.
+ */
+const NOMES_GRUPOS_FUNDIDOS = ['objetivos', 'seguranca', 'segurança']
+export const GRUPO_INVESTIMENTO = 'Investimento'
+
+const semAcento = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+
+export async function migrarGruposAntigosParaInvestimento(): Promise<{
+  moveu: number
+  inativou: number
+  percentualSomado: number
+}> {
+  const resultado = { moveu: 0, inativou: 0, percentualSomado: 0 }
+  const config = await db.configuracoes.get(1)
+  if (config?.gruposFundidosRevisado) return resultado
+
+  const amb = await ambienteDoBanco()
+  await db.transaction('rw', db.grupos, db.categorias, db.metas, async () => {
+    const grupos = doAmbiente(await db.grupos.toArray(), amb)
+
+    /* Correção do ÍCONE DUPLICADO, na mesma passada e com a mesma disciplina
+       estreita de `migrarPctGrupo()`: só troca quando o valor salvo é
+       EXATAMENTE o que eu tinha posto errado (o desenho do "Fixo" no grupo
+       "Investimento", e o mesmo desenho nas duas categorias dele). Um ícone
+       escolhido de propósito — qualquer outro valor — fica intocado. Sem
+       isto, o padrão novo só valeria para instalação nova, e quem já usa o
+       app continuaria com dois grupos desenhados igual. */
+    const corrigirIconeErrado = async () => {
+      const inv = grupos.find((g) => g.ativo !== false && semAcento(g.nome) === semAcento(GRUPO_INVESTIMENTO))
+      const padraoInv = ICONES_PADRAO_GRUPO[GRUPO_INVESTIMENTO]
+      if (inv?.id != null && inv.icone === 'cofreDigital' && padraoInv) {
+        await db.grupos.update(inv.id, {
+          icone: padraoInv.icone, iconeEstilo: padraoInv.iconeEstilo, iconeCor: padraoInv.iconeCor,
+        })
+      }
+      const cats = doAmbiente(await db.categorias.toArray(), amb)
+      const usar = cats.find((c) => c.nome === 'Investimento — Usar')
+      if (usar?.id != null && usar.icone === 'cofreDigital') {
+        await db.categorias.update(usar.id, { icone: 'quedaInvestimento' })
+      }
+    }
+    await corrigirIconeErrado()
+
+    const antigos = grupos.filter(
+      (g) => g.ativo !== false && tipoDoGrupo(g) === 'saida' && NOMES_GRUPOS_FUNDIDOS.includes(semAcento(g.nome)),
+    )
+    if (antigos.length === 0) return
+
+    let destino = grupos.find((g) => g.ativo !== false && semAcento(g.nome) === semAcento(GRUPO_INVESTIMENTO))
+    if (!destino) {
+      const padrao = ICONES_PADRAO_GRUPO[GRUPO_INVESTIMENTO]
+      const id = await db.grupos.add({
+        ...marcaDoAmbiente(amb),
+        nome: GRUPO_INVESTIMENTO,
+        ativo: true,
+        tipo: 'saida',
+        comportamento: 'guardar',
+        icone: padrao?.icone,
+        iconeEstilo: padrao?.iconeEstilo,
+        iconeCor: padrao?.iconeCor,
+      })
+      destino = { id: id as number, nome: GRUPO_INVESTIMENTO, ativo: true, tipo: 'saida', comportamento: 'guardar' }
+    }
+
+    const categorias = doAmbiente(await db.categorias.toArray(), amb)
+    const metas = doAmbiente(await db.metas.toArray(), amb)
+    const maisRecente = (grupo: string) =>
+      metas.filter((m) => m.grupo === grupo).sort((a, b) => (a.mesVigencia < b.mesVigencia ? 1 : -1))[0]
+
+    for (const g of antigos) {
+      for (const c of categorias.filter((c) => c.grupo === g.nome)) {
+        await db.categorias.update(c.id!, { grupo: destino.nome })
+        resultado.moveu++
+      }
+      const meta = maisRecente(g.nome)
+      if (meta?.id != null && meta.percentual > 0) {
+        resultado.percentualSomado += meta.percentual
+        await db.metas.update(meta.id, { percentual: 0 })
+      }
+      await db.grupos.update(g.id!, { ativo: false })
+      resultado.inativou++
+    }
+
+    if (resultado.percentualSomado > 0) {
+      const metaDestino = maisRecente(destino.nome)
+      if (metaDestino?.id != null) {
+        await db.metas.update(metaDestino.id, { percentual: metaDestino.percentual + resultado.percentualSomado })
+      } else {
+        const d = new Date()
+        await db.metas.add({
+          ...marcaDoAmbiente(amb),
+          grupo: destino.nome,
+          percentual: resultado.percentualSomado,
+          base: 'receita_real',
+          mesVigencia: `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}`,
+        })
+      }
+    }
+  })
+
+  await salvarConfiguracaoIcones({ gruposFundidosRevisado: true })
+  return resultado
 }
 
 export function grupoAceitaNatureza(g: Pick<GrupoRegistro, 'tipo'> | null | undefined, natureza: Natureza): boolean {

@@ -114,12 +114,16 @@ export function useConfiguracaoIcones(): Required<
     | 'pctGrupoRevisado'
     | 'receitaFixaRevisada'
     | 'gruposTipoRevisado'
+    | 'gruposComportamentoRevisado'
+    | 'gruposFundidosRevisado'
     | 'posicaoN1Proprio'
     | 'menuPosN1Proprio'
     | 'padraoCatVersaoAplicada'
     | 'catsEditadasPeloUsuario'
     | 'ambienteAtivoId'
     | 'tourNaoExibir'
+    | 'boasVindasVistas'
+    | 'tourConviteFeito'
     | 'padraoCatVersaoPorAmbiente'
   >
 > {
@@ -129,7 +133,7 @@ export function useConfiguracaoIcones(): Required<
     pctCategoria: config?.pctCategoria ?? legado?.pctSimples ?? CONFIG_ICONES_PADRAO.pctCategoria,
     pctCompleta: config?.pctCompleta ?? CONFIG_ICONES_PADRAO.pctCompleta,
     pctGrupo: config?.pctGrupo ?? CONFIG_ICONES_PADRAO.pctGrupo,
-    modoVisao: config?.modoVisao ?? 'premium',
+    modoVisao: config?.modoVisao ?? MODO_VISAO_PADRAO,
   }
 }
 
@@ -162,7 +166,7 @@ export async function salvarConfiguracaoIcones(patch: Partial<Omit<ConfiguracaoI
     pctCategoria: atual?.pctCategoria ?? legado?.pctSimples ?? CONFIG_ICONES_PADRAO.pctCategoria,
     pctCompleta: atual?.pctCompleta ?? CONFIG_ICONES_PADRAO.pctCompleta,
     pctGrupo: atual?.pctGrupo ?? CONFIG_ICONES_PADRAO.pctGrupo,
-    modoVisao: atual?.modoVisao ?? 'premium',
+    modoVisao: atual?.modoVisao ?? MODO_VISAO_PADRAO,
     ...patch,
   })
 }
@@ -192,12 +196,42 @@ export async function migrarPctGrupo() {
 // Modo de visão (04/09/2026) — hook fino separado do de ícones por
 // semântica (nada a ver com tamanho de ícone), mas mesmo singleton por
 // baixo: evita reinventar leitura/escrita do registro `configuracoes`.
-export function useModoVisao(): 'light' | 'premium' {
-  const config = useLiveQuery(() => db.configuracoes.get(1), [])
-  return config?.modoVisao ?? 'premium'
+//
+// 13/09/2026: passaram a ser TRÊS. A 'ideal' é a versão nova e é o PADRÃO —
+// um banco que não tem o campo gravado abre nela. Light e Premium continuam
+// exatamente como estavam; nenhuma tela foi removida do código, a troca é só
+// em Configurações → Aparência e volta na hora.
+export type ModoVisao = 'light' | 'ideal' | 'premium'
+
+/** O que um banco sem o campo gravado usa. Mudou de 'premium' para 'ideal'. */
+export const MODO_VISAO_PADRAO: ModoVisao = 'ideal'
+
+export const ROTULO_MODO_VISAO: Record<ModoVisao, string> = {
+  light: 'Light',
+  ideal: 'Ideal',
+  premium: 'Premium',
 }
 
-export async function salvarModoVisao(modo: 'light' | 'premium') {
+export function useModoVisao(): ModoVisao {
+  return useModoVisaoComEstado().modo
+}
+
+/* `useLiveQuery` devolve `undefined` tanto para "ainda carregando" quanto para
+   "não existe registro" — e os dois casos precisam de tratamento diferente
+   aqui: enquanto carrega, o app assume o PADRÃO ('ideal'), e quem usa isso
+   para trocar de aba acabaria trocando com base num palpite, de forma
+   irreversível (foi exatamente o que fez o Premium abrir fora do Resumo).
+   O sentinela distingue os dois, mesmo mecanismo já usado em `LoginView`. */
+const CARREGANDO = Symbol('carregando')
+
+export function useModoVisaoComEstado(): { modo: ModoVisao; pronto: boolean } {
+  const config = useLiveQuery(() => db.configuracoes.get(1), [], CARREGANDO as never)
+  const pronto = (config as unknown) !== CARREGANDO
+  const modo = pronto ? ((config as { modoVisao?: ModoVisao } | undefined)?.modoVisao ?? MODO_VISAO_PADRAO) : MODO_VISAO_PADRAO
+  return { modo, pronto }
+}
+
+export async function salvarModoVisao(modo: ModoVisao) {
   await salvarConfiguracaoIcones({ modoVisao: modo })
 }
 

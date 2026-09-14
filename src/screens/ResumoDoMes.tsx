@@ -18,6 +18,7 @@ import { baseMetaDoMes } from '../baseMeta'
 import { EXPLICACAO_RESUMO, SUBTITULO_RESUMO } from '../subtitulosTelas'
 import ExplicacaoDaTela from '../components/ExplicacaoDaTela'
 import AvisoBaseMetaZerada from '../components/AvisoBaseMetaZerada'
+import { jaAconteceu } from '../statusPagamento'
 
 // Resumo do Mês = "o que já aconteceu de verdade este mês + o que ainda vai
 // acontecer antes dele fechar" (visão de caixa) — diferente da Situação, que
@@ -83,7 +84,10 @@ export default function ResumoDoMes({ mes, aoMudarMes, aoAbrirLancamento, aoAbri
     // QUALQUER categoria, não só a de sistema; o que identifica a perna de
     // verdade é o campo `transferenciaId`, nunca a natureza da categoria.
     if (cat?.natureza === 'Pagamento de fatura' || l.transferenciaId != null) continue
-    const realizado = l.pago !== false
+    /* `jaAconteceu` (14/09/2026): compra de cartão já feita entra em
+       "Saiu", não em "Vai sair" — ela aconteceu, o que falta é a fatura
+       vencer. Ver `contasCartao.ts`. */
+    const realizado = jaAconteceu(l)
     if (l.valor > 0) {
       if (realizado) entrou += l.valor
     } else {
@@ -110,7 +114,7 @@ export default function ResumoDoMes({ mes, aoMudarMes, aoAbrirLancamento, aoAbri
   for (const l of lancamentosDoMes) {
     const cat = categoriaPorId.get(l.categoriaId)
     if (cat?.natureza === 'Pagamento de fatura' || l.transferenciaId != null) continue
-    if (l.pago === false) {
+    if (!jaAconteceu(l)) {
       if (l.valor > 0) vaiEntrarLancado += l.valor
       else vaiSairLancado += -l.valor
     }

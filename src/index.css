@@ -8,9 +8,56 @@
   --verde: #22c55e;
   --vermelho: #ef4444;
   --amarelo: #eab308;
+  /* Fundo da linha de lançamento por situação (13/09/2026). O que JÁ
+     aconteceu fica um degrau ACIMA do fundo do cartão; o que ainda não
+     aconteceu puxa pro âmbar (a pagar/receber) ou pro vermelho (atrasado).
+     Sólido sempre — translúcido deixa o painel de excluir vazar por baixo. */
+  --fundo-feito: #1c2029;
+  --fundo-pendente: #352f1e;
+  --fundo-atrasado: #352026;
   /* Barra de menus do rodapé do N1 (11/09/2026) — ver `src/kit/RodapeAbas.tsx`.
      O painel N0 continua com a paleta escura fixa dele; estes tokens existem
      só pro ambiente do cliente acompanhar o tema escolhido. */
+  /* ============================================================
+     VERSÃO IDEAL (13/09/2026) — as 4 cores e os 4 níveis de texto.
+
+     A REGRA SEMÂNTICA (é decisão, não preferência de tom):
+
+       • O realizado é AZUL porque gastar não é positivo. Se a barra de gasto
+         fosse verde, gastar 90% da meta pareceria ótimo — é o contrário.
+         Gasto é FATO, não julgamento. O julgamento aparece quando cruza a
+         meta, e aí vira vermelho.
+       • O VERDE tem dono: a Economia Possível. É a única parte da barra que
+         é boa notícia. Se o realizado também fosse verde, o verde perderia o
+         sentido.
+       • ÂMBAR, não amarelo puro — amarelo puro some no fundo claro e é o pior
+         tom para baixa visão.
+
+     Cada papel tem DOIS tokens: o de preenchimento (barra, bloco) e o de
+     TEXTO. No escuro são o mesmo; no claro o texto é mais escuro, senão não
+     alcança contraste de leitura. Medido (WCAG, sobre a superfície de cada
+     tema): preenchimento ≥ 3,0 e texto ≥ 4,5 nos dois temas. */
+  --ideal-azul: #60a5fa;          /* realizado — contraste 6,85 */
+  --ideal-azul-txt: #60a5fa;
+  --ideal-ambar: #fbbf24;         /* comprometido — 10,43 */
+  --ideal-ambar-txt: #fbbf24;
+  --ideal-verde: #4ade80;         /* economia possível — 9,99 */
+  --ideal-verde-txt: #4ade80;
+  --ideal-vermelho: #f87171;      /* estouro — 6,29 */
+  --ideal-vermelho-txt: #f87171;
+  /* A MARGEM AINDA NÃO USADA. Era #232833, contraste 1,18 sobre o cartão —
+     na prática, invisível; o Rafael pediu "mais de 1 tom de diferença".
+     Agora 1,65 sobre o cartão e 1,79 sobre o fundo da tela: aparece sem
+     virar mais uma cor com significado. */
+  --ideal-trilho: #383f4d;
+
+  /* Os 4 níveis de texto. Nível 4 é o único com opacidade — é a lista sem
+     foco, que precisa recuar sem sumir. */
+  --ideal-t1-tam: 28px;   --ideal-t1-peso: 700;   /* os dois números e o título de tela */
+  --ideal-t2-tam: 15px;   --ideal-t2-peso: 600;   /* título de card: grupo, categoria, bloco */
+  --ideal-t3-tam: 13.5px; --ideal-t3-peso: 500;   /* lista completa, com detalhe */
+  --ideal-t4-tam: 12.5px; --ideal-t4-peso: 400;   /* lista simples / sem foco */
+  --ideal-t4-opac: 0.8;
   --rodape-fundo: var(--bg-elevado);
   --rodape-borda: var(--borda);
   --rodape-acento: #8b7cf6;
@@ -55,6 +102,9 @@
   --verde: #15803d;
   --vermelho: #b91c1c;
   --amarelo: #a16207;
+  --fundo-feito: #f1eee8;
+  --fundo-pendente: #fdf6e3;
+  --fundo-atrasado: #fdecec;
   /* Roxo mais fechado no claro: o #8b7cf6 do tema escuro some sobre branco. */
   --rodape-acento: #6c3fff;
   /* No claro quem separa o popup é a BORDA (branco sobre branco não tem
@@ -63,6 +113,16 @@
   --sombra-popup: 0 18px 44px rgba(28, 27, 34, 0.22), 0 2px 8px rgba(28, 27, 34, 0.1);
   --veu-popup: rgba(28, 27, 34, 0.42);
   color-scheme: light;
+  /* Versão Ideal — par claro. Só os tokens mudam; nenhuma regra de layout. */
+  --ideal-azul: #2f7bd6;          /* preenchimento 4,26 */
+  --ideal-azul-txt: #1b5ea8;      /* texto 6,54 */
+  --ideal-ambar: #c97a00;         /* 3,35 */
+  --ideal-ambar-txt: #7c4a00;     /* 7,40 */
+  --ideal-verde: #2e9e4f;         /* 3,43 */
+  --ideal-verde-txt: #166534;     /* 7,13 */
+  --ideal-vermelho: #d64545;      /* 4,38 */
+  --ideal-vermelho-txt: #a81f1f;  /* 7,29 */
+  --ideal-trilho: #d6d0c6;   /* 1,53 sobre o cartão branco (era 1,27) */
 }
 /* "Automático" só vale quando o Rafael ESCOLHE automático (atributo
    `auto` no <html>) — sem escolha nenhuma, o app continua escuro, como
@@ -80,6 +140,9 @@
     --verde: #15803d;
     --vermelho: #b91c1c;
     --amarelo: #a16207;
+    --fundo-feito: #f1eee8;
+    --fundo-pendente: #fdf6e3;
+    --fundo-atrasado: #fdecec;
     --rodape-acento: #6c3fff;
     --borda-popup: #cfc8bd;
     --sombra-popup: 0 18px 44px rgba(28, 27, 34, 0.22), 0 2px 8px rgba(28, 27, 34, 0.1);
@@ -477,20 +540,23 @@ nav.rodape {
 
 /* Seletor mais específico que `.seletor-mes button` (0,2,0 × 0,1,1) de
    propósito: sem isso o botão "Hoje" herdava os 44×44 fixos das setas e o
-   texto não cabia dentro dele. Largura pelo conteúdo, nunca fixa. */
+   texto não cabia dentro dele. Largura pelo conteúdo, nunca fixa.
+   Build 063: pedido explícito de "pequeno, sem destaque" — a versão anterior
+   era pílula amarela em negrito, que disputava atenção com a tarja do nome do
+   mês (o alerta de verdade desta linha). */
 .seletor-mes .seletor-mes-hoje {
   margin-top: 0;
   width: auto;
-  height: 30px;
-  padding: 0 12px;
-  font-size: 12px;
-  font-weight: 700;
+  height: 26px;
+  padding: 0 9px;
+  font-size: 11px;
+  font-weight: 600;
   line-height: 1;
   white-space: nowrap;
   border-radius: 999px;
-  border: 1px solid var(--amarelo);
+  border: 1px solid var(--borda);
   background: none;
-  color: var(--amarelo);
+  color: var(--texto-fraco);
   cursor: pointer;
 }
 
@@ -537,7 +603,11 @@ nav.rodape {
   align-items: center;
   justify-content: center;
   padding: 24px 16px;
-  z-index: 50;
+  /* Acima dos botões flutuantes de teste (`zIndex: 90` em
+     `SimulacaoResolucao.tsx`): num modal alto — o de lançamento e o de edição
+     em massa — eles caíam exatamente em cima do "Cancelar", no canto inferior
+     esquerdo (14/09/2026). Enquanto um modal está aberto, ele é a tela. */
+  z-index: 100;
 }
 
 .modal-conteudo {
@@ -716,6 +786,13 @@ nav.rodape {
   overflow-wrap: break-word;
   color: var(--texto);
   font-weight: 600;
+  /* 13/09/2026: o título herdava o tamanho do corpo (14px) e era o elemento
+     mais alto da linha — ele é quem definia a altura de cada lançamento.
+     13px com `line-height: 1.25` (a fonte sozinha ficaria na altura padrão,
+     que é mais alta que o texto) devolve espaço em TODA lista completa, sem
+     encolher o valor nem a tarja, que continuam nos tamanhos de sempre. */
+  font-size: 13px;
+  line-height: 1.25;
 }
 
 .llc-texto .llc-origem {
@@ -901,12 +978,20 @@ nav.rodape {
    esquerda em Lançamentos) manchar por baixo mesmo sem arrastar nada,
    porque zIndex só garante ORDEM de pintura, não opacidade — uma cor sólida
    resolve de vez, em qualquer lista que use essa classe. */
+/* Fundo por situação do lançamento (13/09/2026). Cor SÓLIDA, nunca `rgba`:
+   translúcido deixa o painel vermelho de "excluir" (sempre no DOM, atrás da
+   linha) vazar por baixo — bug real já documentado. E agora em token, porque
+   o hex escuro cravado virava tarja preta no tema claro. */
+.status-fundo-feito {
+  background: var(--fundo-feito);
+}
+
 .status-fundo-atrasado {
-  background: #352026;
+  background: var(--fundo-atrasado);
 }
 
 .status-fundo-pendente {
-  background: #352f1e;
+  background: var(--fundo-pendente);
 }
 
 /* Pill de status — clicável, alterna pago/não-pago na hora. Largura do
@@ -941,6 +1026,15 @@ nav.rodape {
 .status-pill-pendente {
   background: rgba(234, 179, 8, 0.22);
   color: var(--amarelo);
+}
+
+/* "No cartão" (14/09/2026) — compra que JÁ aconteceu e está na fatura em
+   aberto. Azul, não verde nem âmbar: verde é dinheiro que já saiu da conta,
+   âmbar é compromisso que ainda pode não acontecer. Esta é uma terceira
+   coisa — aconteceu, e sai do banco quando a fatura vencer. */
+.status-pill-cartao {
+  background: rgba(59, 130, 246, 0.18);
+  color: var(--azul);
 }
 
 /* Cabeçalho de sessão por data, na tela Lançamentos. 0px de sobra vertical
@@ -1268,11 +1362,25 @@ nav.rodape {
   text-overflow: ellipsis;
 }
 
-.linha-barra-topo > span:last-child {
+.linha-barra-topo > span:last-child,
+.linha-barra-topo > .barra-topo-valor {
   flex: 0 0 auto;
   white-space: nowrap;
   font-size: 12px;
 }
+
+/* Lápis DENTRO da linha de título da barra (13/09/2026). Ocupa só a altura do
+   texto, então a barra abaixo continua com a largura inteira — era a coluna
+   própria ao lado da barra que espremia nome e valor. Alvo de toque ampliado
+   por `padding`, não por altura de caixa. */
+.acao-topo-barra {
+  flex: 0 0 auto;
+  display: flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; margin: -6px -4px -6px 0; padding: 0;
+  background: none; border: none; border-radius: 8px;
+  color: var(--texto-fraco); cursor: pointer;
+}
+.acao-topo-barra:active { background: var(--borda); color: var(--texto); }
 
 /* Ícone de reprocessar ao lado do nome do mês (item 8, 12/09/2026). Precisa
    de regra própria porque `.seletor-mes button` fixa 44×34 pras SETAS —
@@ -1872,6 +1980,19 @@ html[data-mloc-tema="escuro"] body {
   flex-wrap: wrap;
 }
 
+/* "Alterar" é a ação da barra de seleção — as outras três são navegação da
+   própria seleção (marcar, desmarcar, sair). Cor de ação para separar as duas
+   coisas; desabilitado enquanto nada está marcado. */
+.botao-alterar-selecao {
+  border-color: var(--azul);
+  color: var(--azul);
+  font-weight: 700;
+}
+.botao-alterar-selecao:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
 /* Faixa de totais — enxugada em 10/09/2026 a pedido do Rafael ("estreite mais
    o rodapé com os números totais"): rótulo e chave menores, respiro vertical
    de 8px→5px, `gap` de 10px→8px. */
@@ -2096,4 +2217,583 @@ html[data-mloc-tema="escuro"] body {
 html[data-mloc-tema='claro'] .tarja-inativa {
   background: #fdf3dc;
   border-color: #e0bd6a;
+}
+
+/* ============================================================
+   VERSÃO IDEAL — a barra (13/09/2026). Ver src/components/BarraIdeal.tsx
+   para a regra: a barra inteira é a meta, o excedente fica vermelho, e o
+   Saldo Livre aparece FORA dela (bloco depois de um vão, ou antes e vermelho
+   quando negativo). Sem risquinho de limite e sem legenda — a borda é o
+   limite e a cor conta a história.
+   ============================================================ */
+.barra-ideal { margin: 10px 0; }
+.barra-ideal-topo { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; }
+.barra-ideal-rotulo {
+  font-size: var(--ideal-t2-tam);
+  font-weight: var(--ideal-t2-peso);
+  color: var(--texto);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* o valor vai NA FRENTE da barra, na mesma linha — vale para toda barra */
+.barra-ideal-linha { display: flex; align-items: center; gap: 8px; }
+.barra-ideal-trilho {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 9px;
+  border-radius: 5px;
+  background: var(--ideal-trilho);
+  /* `overflow: hidden` recortaria a linha da meta, que estoura de propósito
+     acima e abaixo do trilho. Os segmentos continuam contidos porque a soma
+     deles nunca passa de 100% da largura. */
+  overflow: visible;
+  display: flex;
+  position: relative;
+}
+.barra-ideal.compacta .barra-ideal-trilho { height: 6px; }
+/* A BARRA PRINCIPAL de uma tela é grossa — ela é o gráfico, não um detalhe de
+   linha de lista (pedido do Rafael na build 058: "está muito fininho"). */
+.barra-ideal.destaque .barra-ideal-trilho { height: 18px; border-radius: 9px; }
+.barra-ideal.destaque .barra-ideal-livre { height: 18px; border-radius: 9px; }
+.barra-ideal.destaque { margin: 22px 0 10px; }
+/* O primeiro e o último segmento herdam o arredondamento do trilho — sem isso
+   o canto fica quadrado agora que o trilho não recorta mais. */
+.barra-ideal-seg:first-child { border-top-left-radius: inherit; border-bottom-left-radius: inherit; }
+.barra-ideal-seg:last-child { border-top-right-radius: inherit; border-bottom-right-radius: inherit; }
+/* A linha da meta: o teto, sempre visível mesmo quando a barra passou dele. */
+.barra-ideal-meta {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--texto);
+  border-radius: 1px;
+  pointer-events: none;
+}
+.barra-ideal.destaque .barra-ideal-meta { top: -5px; bottom: -5px; }
+.barra-ideal-meta-valor {
+  position: absolute;
+  bottom: calc(100% + 3px);
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--texto);
+  white-space: nowrap;
+}
+.barra-ideal-seg { height: 100%; }
+.barra-ideal-seg.realizado { background: var(--ideal-azul); }
+.barra-ideal-seg.comprometido { background: var(--ideal-ambar); }
+.barra-ideal-seg.economia { background: var(--ideal-verde); }
+.barra-ideal-seg.estouro { background: var(--ideal-vermelho); }
+/* o vão que separa a meta do que está fora dela */
+.barra-ideal-vao { width: 6px; flex: 0 0 6px; }
+.barra-ideal-livre { height: 9px; border-radius: 5px; flex: 0 0 auto; }
+.barra-ideal.compacta .barra-ideal-livre { height: 6px; }
+.barra-ideal-livre.positivo { background: var(--ideal-verde); opacity: 0.55; }
+.barra-ideal-livre.negativo { background: var(--ideal-vermelho); margin-right: 6px; }
+/* Categoria de receita que entra na base das metas (13/09/2026): fundo próprio
+   e o selo abaixo do nome. É só identificação — não é um controle. */
+.linha-cat-base-meta {
+  background: var(--fundo-feito);
+  border-radius: 8px;
+  padding-left: 8px !important;
+  padding-right: 8px !important;
+  margin: 0 -8px;
+}
+.selo-base-meta {
+  margin: 3px 0 0; font-size: 11px; line-height: 1.25; color: var(--texto-fraco);
+}
+.linha-cat-base-meta .selo-base-meta { color: var(--verde); font-weight: 600; }
+
+/* A linha que amarra as três caixas da tela Hoje (13/09/2026) — é ela que
+   responde "de onde vem esse número". */
+.linha-identidade {
+  display: flex; align-items: center; gap: 6px;
+  margin-top: 12px; padding-top: 8px;
+  border-top: 1px solid var(--borda);
+  font-size: 11.5px; line-height: 1.3; color: var(--texto-fraco);
+}
+
+/* Faixa de mês encerrado, no topo do card da tela Hoje (13/09/2026). */
+.faixa-mes-fechado {
+  display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px;
+  padding: 7px 10px; margin-bottom: 10px;
+  border-radius: 10px; border: 1px solid var(--borda);
+  background: var(--bg-elevado);
+  font-size: 11.5px; line-height: 1.3; color: var(--texto-fraco);
+}
+.faixa-mes-fechado > span:first-child {
+  font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--texto);
+}
+
+/* A legenda escrita do bloco do Saldo Livre — só na barra de destaque
+   (13/09/2026). Uma linha, com a amostra da cor na frente. */
+.barra-ideal-legenda {
+  display: flex; align-items: center; gap: 7px;
+  margin-top: 6px;
+  font-size: 11.5px; line-height: 1.25; color: var(--texto-fraco);
+}
+.barra-ideal-amostra {
+  flex: 0 0 auto; width: 14px; height: 8px; border-radius: 4px;
+}
+.barra-ideal-amostra.positivo { background: var(--ideal-verde); opacity: 0.55; }
+.barra-ideal-amostra.negativo { background: var(--ideal-vermelho); }
+.barra-ideal-valor {
+  flex: 0 0 auto;
+  font-size: var(--ideal-t3-tam);
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--texto);
+}
+.barra-ideal-valor.positivo { color: var(--ideal-verde-txt); }
+.barra-ideal-valor.negativo { color: var(--ideal-vermelho-txt); }
+
+/* Os 4 níveis de texto, como classes utilitárias da Ideal. */
+.ideal-t1 { font-size: var(--ideal-t1-tam); font-weight: var(--ideal-t1-peso); letter-spacing: -0.5px; }
+.ideal-t2 { font-size: var(--ideal-t2-tam); font-weight: var(--ideal-t2-peso); }
+.ideal-t3 { font-size: var(--ideal-t3-tam); font-weight: var(--ideal-t3-peso); }
+.ideal-t4 { font-size: var(--ideal-t4-tam); font-weight: var(--ideal-t4-peso); opacity: var(--ideal-t4-opac); }
+
+/* Versão Ideal — blocos da tela Hoje e o cartão de primeiros passos. */
+.bloco-numero { margin-top: 14px; }
+.bloco-numero-rotulo {
+  display: flex; align-items: center; gap: 2px;
+  font-size: 10.5px; letter-spacing: 0.7px; text-transform: uppercase;
+  color: var(--texto-fraco); margin-bottom: 1px;
+}
+.linha-veredito {
+  display: flex; align-items: center; gap: 2px;
+  margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--borda);
+}
+.linha-veredito .veredito-mal { color: var(--ideal-vermelho-txt); }
+.linha-veredito .veredito-bem { color: var(--ideal-verde-txt); }
+.linha-aporte { margin: 4px 0 0; color: var(--ideal-ambar-txt); }
+
+.aviso-calibragem {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  width: 100%; margin-top: 12px; padding: 10px 12px;
+  background: var(--bg-elevado); border: 1px solid var(--ideal-ambar);
+  border-radius: 10px; color: var(--texto);
+  font-size: var(--ideal-t3-tam); font-weight: var(--ideal-t3-peso);
+  text-align: left; cursor: pointer;
+}
+.aviso-calibragem-acao { color: var(--ideal-ambar-txt); font-weight: 600; flex-shrink: 0; }
+
+.titulo-bloco-ideal {
+  font-size: 10.5px; letter-spacing: 0.7px; text-transform: uppercase;
+  color: var(--texto-fraco); margin: 18px 0 6px;
+}
+.linha-cat-ideal {
+  display: block; width: 100%; background: none; border: none; padding: 0;
+  text-align: left; cursor: pointer; color: inherit;
+}
+
+.cartao-primeiros-passos { border-left: 3px solid var(--ideal-azul); }
+.passo-linha {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 0; border-top: 1px solid var(--borda);
+}
+.passo-linha.bloqueado { opacity: 0.5; }
+.passo-numero {
+  width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--ideal-azul); color: #fff; font-size: 11.5px; font-weight: 700;
+}
+.passo-texto { flex: 1 1 auto; min-width: 0; }
+.passo-acao {
+  flex-shrink: 0; background: var(--bg-elevado); border: 1px solid var(--borda);
+  border-radius: 8px; padding: 5px 10px; color: var(--ideal-azul-txt);
+  font-size: 12px; font-weight: 600; cursor: pointer;
+}
+.passo-bloqueado { flex-shrink: 0; font-size: 11.5px; color: var(--texto-fraco); }
+
+/* Detalhe da categoria aberta (build 059): a conta que justifica o número que
+   a linha recolhida mostra — meta, gasto e a diferença. */
+.detalhe-cat-ideal { padding: 2px 0 6px; }
+/* Fechamento do cartão: separado das linhas de categoria por uma borda, pra
+   não ser lido como "mais uma categoria" da lista (build 059). */
+.detalhe-cat-ideal.fechamento-cartao {
+  margin-top: 6px; padding-top: 8px; border-top: 1px solid var(--borda);
+}
+.linha-detalhe-cat {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+  padding: 3px 0;
+}
+/* A linha de total dos percentuais, acima dos cards de grupo (build 059). */
+.faixa-percentuais {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  padding: 9px 12px; margin-bottom: 10px;
+  border-radius: 10px; border: 1px solid var(--borda);
+  background: var(--bg-elevado); color: var(--texto-fraco);
+  font-size: 12.5px; text-align: left; font-family: inherit;
+}
+.faixa-percentuais strong { color: var(--texto); }
+.faixa-percentuais.alerta {
+  background: #4a3a12; color: #ffe6a8; border-color: transparent;
+  font-weight: 600; cursor: pointer;
+}
+.faixa-percentuais.alerta strong { color: inherit; }
+
+/* Cabeçalho A1 do card de grupo (build 059): o percentual é o número grande,
+   o R$ é a consequência dele, e a contagem de categorias desce pra segunda
+   linha do nome — antes ela dividia a linha principal com o nome do grupo. */
+.cabecalho-grupo-a1 {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+}
+.ident-grupo-a1 { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.pct-grupo-a1 {
+  display: flex; flex-direction: column; align-items: flex-end; flex: 0 0 auto;
+  line-height: 1.1;
+}
+.pct-grupo-a1 .numero { font-size: 21px; font-weight: 800; color: var(--texto); }
+.pct-grupo-a1 .texto-fraco { font-size: 11.5px; }
+
+/* Atalho de edição do GRUPO, dentro do cabeçalho do card (13/09/2026 — antes
+   era `.botao-editar-linha`, uma coluna de 38px à direita da linha inteira,
+   que espremia a barra e os números). Aqui ele divide a linha só com o nome e
+   o percentual, então a barra abaixo fica com a largura toda. */
+.acao-editar-grupo {
+  width: 36px; height: 36px; margin: 0;
+  background: var(--bg-elevado); border: 1px solid var(--borda); border-radius: 10px;
+  color: var(--texto);
+}
+/* Lápis pequeno DENTRO de uma linha que já é clicável inteira (Calibragem):
+   o que faltava ali era o sinal visual, não um segundo alvo de toque. */
+.icone-editar-inline { flex: 0 0 auto; opacity: .55; margin-left: 6px; }
+
+/* Tela de Calibragem (build 059) — os percentuais lado a lado. */
+.campo-pct-calibragem {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 0; border-top: 1px solid var(--borda);
+}
+.campo-pct-calibragem:first-child { border-top: none; }
+.campo-pct-calibragem input {
+  width: 74px; text-align: right; margin: 0; flex: 0 0 auto;
+}
+.nome-grupo-calibragem {
+  flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 7px;
+  background: none; border: none; padding: 0; margin: 0; cursor: pointer;
+  color: var(--texto); font: inherit; font-size: var(--ideal-t3-tam); text-align: left;
+}
+.nome-grupo-calibragem span {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px;
+}
+.valor-pct-calibragem {
+  flex: 0 0 auto; width: 96px; text-align: right;
+  font-size: var(--ideal-t4-tam); color: var(--texto-fraco); white-space: nowrap;
+}
+.total-calibragem {
+  display: flex; align-items: center; gap: 8px;
+  margin-top: 6px; padding-top: 9px; border-top: 2px solid var(--borda);
+  font-size: var(--ideal-t3-tam); font-weight: 700;
+}
+.total-calibragem strong { width: 74px; text-align: right; }
+.total-calibragem.erro strong { color: var(--ideal-vermelho-txt); }
+.total-calibragem.ok strong { color: var(--ideal-verde-txt); }
+.linha-cat-calibragem {
+  display: flex; align-items: center; gap: 6px; width: 100%;
+  padding: 6px 0; border-top: 1px solid var(--borda);
+  background: none; border-left: none; border-right: none; border-bottom: none;
+  color: var(--texto); font: inherit; cursor: pointer; margin: 0;
+}
+
+/* Cabeçalho do card × lista de categorias (build 063) — o Rafael, olhando a
+   tela: "até aí, esse momento, eu entendo que é um cabeçalho. Dali para baixo,
+   o que vem são as categorias. Tem que estar indentado isso... visualmente
+   está uma coisa só, uma listona". O recuo com filete é o mesmo padrão de
+   `.linhas-agrupadas` (build 055) — indentação sozinha lê como desalinhamento;
+   é o filete que mostra até onde o cabeçalho manda. */
+/* Tarja fina de modo consulta (build 063) — ver App.tsx. Uma linha só: o
+   cabeçalho do cliente logo abaixo é que precisa aparecer inteiro. */
+.tarja-consulta-n0 {
+  flex-shrink: 0;
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 3px 14px;
+  background: #3b1e63; color: #fff;
+  font-size: 10.5px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase;
+}
+.tarja-consulta-n0 button {
+  margin: 0; padding: 2px 8px; flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.18); border: none; border-radius: 6px;
+  color: #fff; font: inherit; cursor: pointer;
+}
+
+.cabecalho-card-calibragem { padding-bottom: 2px; }
+.bloco-cats-calibragem {
+  margin: 10px 0 0 2px;
+  padding-left: 12px;
+  border-left: 2px solid var(--borda);
+}
+.cab-col-calibragem {
+  display: flex; align-items: center; gap: 6px;
+  padding-bottom: 4px;
+  font-size: 10px; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--texto-fraco);
+}
+/* A coluna de referência histórica — "o pulo do gato" da Calibragem. */
+.col-ref-calibragem {
+  flex: 0 0 auto; width: 90px; text-align: right; white-space: nowrap;
+  font-size: var(--ideal-t4-tam); color: var(--texto-fraco);
+}
+.col-meta-calibragem {
+  flex: 0 0 auto; width: 76px; text-align: right; white-space: nowrap;
+}
+.col-lapis-calibragem { flex: 0 0 auto; width: 20px; }
+/* O cabeçalho da coluna É o botão de alternar a base. Contorno e cor de ação
+   porque o pedido foi explícito: "o usuário tem que saber claramente que
+   aquele botão é clicável". */
+.botao-base-referencia {
+  flex: 0 0 auto; width: 90px; height: 26px; margin: 0; padding: 0 6px;
+  display: flex; align-items: center; justify-content: flex-end; gap: 4px;
+  background: var(--bg-elevado); border: 1px solid var(--azul); border-radius: 8px;
+  color: var(--azul); font: inherit; font-size: 10.5px; font-weight: 700;
+  white-space: nowrap; cursor: pointer;
+}
+.botao-base-referencia svg { flex: 0 0 auto; }
+.botao-base-referencia span { overflow: hidden; text-overflow: ellipsis; }
+.linha-detalhe-cat.total {
+  border-top: 1px solid var(--borda);
+  margin-top: 3px; padding-top: 6px;
+  font-weight: 600;
+}
+
+/* Boas-vindas (13/09/2026) — a tela de abertura do onboarding invertido.
+   Ocupa o app inteiro: é a primeira coisa que existe, não há nada por trás a
+   ver. Centralização SEGURA (o corpo rola, o botão fica sempre alcançável) —
+   `justify-content: center` no contêiner empurraria o topo pra Y negativo numa
+   janela curta, bug real já documentado na tela de Login. */
+.boas-vindas {
+  flex: 1 1 auto; min-height: 0;
+  display: flex; flex-direction: column; gap: 16px;
+  padding: 24px 16px 20px;
+  background: var(--bg); color: var(--texto);
+}
+.boas-vindas-corpo { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+.boas-vindas .passo-linha:first-of-type { border-top: none; }
+
+/* Saldo informado do cofrinho (13/09/2026) — ver SaldoDoCofrinho.tsx. */
+.informe-velho { color: var(--ideal-ambar-txt); }
+/* Informar o saldo do cofrinho é a AÇÃO da tela, não uma nota de rodapé
+   (build 059). Era um link azul no meio de uma frase — imperceptível, do jeito
+   que o Rafael reportou. Virou botão de largura inteira, com contorno. */
+.botao-informar-saldo {
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  width: 100%; margin-top: 10px; padding: 9px 12px;
+  background: var(--bg-elevado); border: 1px solid var(--ideal-azul);
+  border-radius: 10px; color: var(--ideal-azul-txt);
+  font-size: 13px; font-weight: 700; cursor: pointer; font-family: inherit;
+  box-sizing: border-box;
+}
+
+/* Aba 2 do Planejamento — Gráficos (13/09/2026). */
+/* ===== Aba de gráficos do Planejamento (build 060) =====
+   Modelo LINHAS: a linha do GRUPO precisa de cara própria, senão lê como
+   "mais uma categoria" — filete lateral, fundo próprio e barra mais alta
+   (pedido do Rafael ao escolher o modelo). As categorias entram recuadas. */
+.bloco-grafico-grupo { margin-bottom: 10px; padding: 8px 10px; }
+.linha-grafico-grupo {
+  display: block; width: 100%; text-align: left; cursor: pointer;
+  background: color-mix(in srgb, var(--ideal-azul) 9%, var(--bg));
+  border: 1px solid var(--borda); border-left: 4px solid var(--ideal-azul);
+  border-radius: 10px; padding: 8px 10px; margin: 0 0 6px; font: inherit; color: inherit;
+}
+.linha-grafico-grupo.selecionado { border-color: var(--ideal-azul); }
+.linha-grafico-grupo .barra-ideal-rotulo { letter-spacing: .04em; }
+.linhas-grafico-categorias { padding-left: 12px; border-left: 2px solid var(--borda); }
+.painel-lanc-grafico { margin: 2px 0 8px; padding-left: 4px; }
+.botao-voltar-grafico {
+  display: block; width: 100%; margin: 0 0 10px; padding: 9px;
+  border: 1px solid var(--borda); border-radius: 10px;
+  background: var(--bg-elevado); color: var(--texto); font: inherit; cursor: pointer;
+}
+
+/* A barra da RÉGUA (modelo Linhas): faixa apagada de largura cheia, trilho =
+   meta, preenchido = gasto — todas na mesma escala de dinheiro. O texto é
+   desenhado duas vezes; a cópia escura é recortada na largura do preenchido
+   (`--fill`), então cada pedaço do nome fica na cor que contrasta com o que
+   está por baixo dele. */
+.regua-linha { padding: 3px 0; }
+.regua-barra {
+  position: relative; height: 22px; border-radius: 6px; overflow: hidden;
+  background: var(--bg);
+}
+.regua-linha.forte .regua-barra { height: 30px; border-radius: 8px; }
+.regua-linha.selecionada .regua-barra { outline: 1.5px solid var(--texto); outline-offset: 1px; }
+.regua-trilho { position: absolute; top: 0; bottom: 0; left: 0; background: var(--ideal-trilho); }
+.regua-fill { position: absolute; top: 0; bottom: 0; left: 0; background: var(--ideal-azul); }
+.regua-fill.estouro { background: var(--ideal-vermelho); }
+.regua-comprometido { position: absolute; top: 0; bottom: 0; background: var(--ideal-ambar); }
+.regua-meta { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: #fff; }
+/* UMA cor de texto só, nos dois fundos (13/09/2026). O texto era desenhado
+   duas vezes e recortado no limite do preenchido, então a palavra trocava de
+   cor no meio conforme a barra crescia. Agora é branco com uma sombra escura
+   atrás: legível sobre o azul/âmbar/verde do preenchido E sobre o trilho, sem
+   depender de onde a barra está. */
+.regua-texto {
+  position: absolute; inset: 0; display: flex; align-items: center; gap: 6px;
+  padding: 0 8px; color: #ffffff; pointer-events: none;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85), 0 0 1px rgba(0, 0, 0, 0.9);
+}
+.regua-nome {
+  font-size: 11.5px; font-weight: 700; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; min-width: 0;
+}
+.regua-linha.forte .regua-nome { font-size: 12.5px; letter-spacing: .04em; }
+.regua-valor { margin-left: auto; flex: 0 0 auto; font-size: 11px; font-weight: 700; white-space: nowrap; }
+
+/* Com algo em foco, as colunas encolhem pra uma faixa e o zoom abre AO LADO. */
+/* 13/09/2026: o zoom deixou de abrir AO LADO (gráfico espremido a 108px, nome
+   de fatia escondido, grupo em 3 letras). Agora empilha — o gráfico fica
+   inteiro e o detalhe vem abaixo dele, antes dos lançamentos. */
+
+/* Dentro do painel de zoom sobra metade da largura: texto menor e um respiro
+   fixo entre nome e valor, senão os dois se encostam. */
+.zoom-grafico .regua-nome { font-size: 9.5px; }
+.zoom-grafico .regua-valor { font-size: 9.5px; }
+.zoom-grafico .regua-barra { height: 20px; }
+.zoom-grafico .regua-texto { padding: 0 6px; gap: 8px; }
+
+/* Modelo COLUNAS: uma coluna por grupo, fatia = categoria, nome DENTRO.
+   Altura mínima por fatia garante que nada some nem fique sem nome. */
+.colunas-grafico { display: flex; gap: 8px; align-items: flex-end; }
+.coluna-grafico { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.coluna-titulo {
+  order: -1; background: none; border: none; padding: 2px 0; cursor: pointer;
+  font: inherit; font-size: 11.5px; font-weight: 700; color: var(--texto);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.coluna-titulo.selecionado { color: var(--ideal-azul-txt); text-decoration: underline; }
+.coluna-pilha { display: flex; align-items: flex-end; }
+.coluna-fatias { width: 100%; display: flex; flex-direction: column; gap: 2px; }
+.fatia-coluna {
+  flex: 0 0 auto; width: 100%; min-height: 0; overflow: hidden;
+  border: none; border-radius: 4px; padding: 0 4px; cursor: pointer;
+  background: var(--ideal-azul); color: #0a0b0e;
+  display: flex; align-items: center; text-align: left;
+}
+.fatia-coluna.estouro { background: var(--ideal-vermelho); }
+.fatia-coluna.selecionada { outline: 2px solid var(--texto); outline-offset: 1px; }
+.fatia-nome {
+  font-weight: 700; line-height: 1.05; width: 100%; overflow: hidden;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow-wrap: anywhere;
+}
+.coluna-rodape { text-align: center; }
+.zoom-grafico { margin-top: 10px; }
+.migalha-grafico {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  font-size: 12px; color: var(--texto-fraco); margin-bottom: 8px;
+}
+.migalha-grafico button {
+  background: none; border: none; color: var(--ideal-azul-txt); font: inherit;
+  cursor: pointer; padding: 0; text-decoration: underline; text-underline-offset: 3px;
+}
+.migalha-grafico .atual { color: var(--texto); font-weight: 700; }
+/* Título do zoom: a categoria, sozinha na linha — antes ela dividia espaço
+   com o valor da meta e os dois se sobrepunham. */
+.titulo-zoom {
+  display: flex; align-items: center; gap: 6px; margin: 0 0 8px;
+  font-size: var(--ideal-t2-tam); font-weight: var(--ideal-t2-peso); color: var(--texto);
+}
+.linha-meta-zoom { color: var(--texto-fraco); }
+.dica-grafico { margin: 10px 2px; }
+.total-grafico-colunas { display: flex; justify-content: space-between; gap: 10px; margin-top: 10px; }
+.linha-cat-ideal.selecionado {
+  background: color-mix(in srgb, var(--ideal-azul) 10%, transparent);
+  border-radius: 8px;
+}
+/* Abas da tela Planejamento (Árvore × Gráficos). */
+.abas-planejamento { display: flex; gap: 6px; margin: 0 0 10px; }
+.abas-planejamento button {
+  flex: 1 1 0; padding: 8px 10px; border-radius: 9px;
+  border: 1px solid var(--borda); background: var(--bg-elevado);
+  color: var(--texto-fraco); font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.abas-planejamento button.ativa {
+  border-color: var(--ideal-azul); color: var(--ideal-azul-txt);
+  background: color-mix(in srgb, var(--ideal-azul) 14%, transparent);
+}
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+/* ===== Ações de um modal: Salvar e Cancelar lado a lado (build 066) =====
+   O `.acoes-modal` da edição em massa NUNCA teve regra — os dois botões saíam
+   colados, e "Cancelar" ficava indistinguível de "Aplicar". Cancelar é botão
+   de verdade (`.secundario`), como em todo o resto do app; o respiro entre os
+   dois é o que protege de um toque errado numa ação sem volta. */
+.acoes-modal {
+  display: flex;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.acoes-modal button {
+  margin-top: 0;
+  flex: 1 1 0;
+}
+
+/* ===== Detalhe recolhível dentro de um cartão (build 066) ===== */
+.bloco-recolhivel {
+  margin-top: 10px;
+  border-top: 1px solid var(--borda);
+  padding-top: 6px;
+}
+
+.bloco-recolhivel-botao {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 6px 0;
+  color: var(--azul);
+  font-size: 12.5px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.bloco-recolhivel-seta {
+  font-size: 16px;
+  line-height: 1;
+  transition: transform 0.15s ease;
+}
+
+.bloco-recolhivel-seta.aberta {
+  transform: rotate(90deg);
+}
+
+.bloco-recolhivel-corpo {
+  padding-top: 4px;
+}
+
+/* ===== Uma linha de grupo no 2º total da tela Hoje (build 066) ===== */
+.grupo-hoje {
+  padding: 4px 0;
+  border-bottom: 1px solid var(--borda);
+}
+
+.grupo-hoje:last-of-type {
+  border-bottom: none;
+}
+
+.linha-legenda-grupo {
+  margin: 0 0 2px;
+  padding-left: 2px;
+}
+
+.detalhe-grupo-hoje {
+  padding: 4px 0 8px 10px;
+  border-left: 2px solid var(--borda);
+  margin: 4px 0 6px 2px;
 }

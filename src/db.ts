@@ -60,6 +60,10 @@ export type Natureza =
 // sem hardcode de nome de grupo. Consumo e Aporte são as únicas naturezas com
 // um teto/meta mensal que faz sentido somar; Receita/Neutro/Gasto de
 // cofrinho/Pagamento de fatura não têm essa noção (ou já são tratadas à parte).
+/** @deprecated 13/09/2026 — use `categoriaConsomeMeta` / `lancamentoConsomeMeta`
+ *  de `src/orcamento.ts`. Esta lista deixava `Gasto de cofrinho` SEMPRE de fora
+ *  da meta, o que escondia um erro de R$ 2.224 com o sinal invertido em
+ *  agosto/2026. Mantida só para leitura de código antigo; não usar em tela nova. */
 export const NATUREZAS_ORCAMENTAVEIS: Natureza[] = ['Consumo', 'Aporte']
 
 /* Tipo do grupo (11/09/2026, pedido do Rafael) — cada grupo passou a ser de
@@ -79,6 +83,27 @@ export const NATUREZAS_ORCAMENTAVEIS: Natureza[] = ['Consumo', 'Aporte']
    aditivo e sem índice: nunca é buscado por `.where()`, só lido da tabela
    inteira (que é pequena) — mesma regra de sempre, sem bump de schema. */
 export type TipoGrupo = 'entrada' | 'saida'
+
+/* COMO O GRUPO SE COMPORTA NO MÊS (build 061).
+ *
+ * Até aqui o app decidia isso pelo NOME do grupo, chumbado no código
+ * (`GRUPO_QUE_PROJETA = 'Variável'`, `GRUPO_INVESTIMENTO = 'Investimento'`).
+ * Rafael cobrou, com razão: "não pode estar no código-fonte essa regra fixa"
+ * — quem cria, renomeia ou divide grupos é o usuário, e pode ter DOIS ou TRÊS
+ * grupos variáveis.
+ *
+ *   fixo      compromisso que se repete e já é conhecido (aluguel, escola).
+ *             Entra na economia com o mês cheio, sem projeção.
+ *   variavel  gasto do dia a dia, onde dá pra economizar. É o único que
+ *             projeta pelo ritmo — e pode haver mais de um.
+ *   guardar   dinheiro que sai pra guardar/investir. Fica FORA da conta de
+ *             economia (deixar de aportar não é economizar) e vira a linha
+ *             "falta aportar".
+ *
+ * Só faz sentido em grupo de SAÍDA. `undefined` = grupo de antes do campo;
+ * `migrarComportamentoDosGrupos()` (gruposUtil.ts) preenche uma vez, pelo
+ * nome, e a partir daí quem manda é a escolha da pessoa. */
+export type ComportamentoGrupo = 'fixo' | 'variavel' | 'guardar'
 
 export function naturezaEhEntrada(natureza: Natureza): boolean {
   return natureza === 'Receita'
@@ -162,6 +187,10 @@ export interface GrupoRegistro {
   // com grupo cadastrado antes deste campo; na prática a migração preenche
   // todos na primeira abertura e o cadastro exige a escolha.
   tipo?: TipoGrupo
+  /* Como o grupo se comporta no mês — ver `ComportamentoGrupo` acima. É este
+     campo, e não o nome do grupo, que diz quem projeta por ritmo e quem fica
+     fora da conta de economia. */
+  comportamento?: ComportamentoGrupo
   // Ícone de identificação visual do grupo (31/08/2026, rodada seguinte) —
   // mesmo mecanismo/motivo de não precisar de índice que `Categoria.icone`
   // acima (tabela `grupos` também é pequena e sempre carregada inteira).
@@ -345,6 +374,15 @@ export interface ConfiguracaoIcones {
      das metas em R$ 0,00. Roda uma vez e nunca mais. */
   receitaFixaRevisada?: boolean
   // Marca de que a migração de tipo de grupo (entrada × saída) já rodou nesta
+  /* Marca da migração única do comportamento dos grupos (build 061) — ver
+     `migrarComportamentoDosGrupos()` em `gruposUtil.ts`. */
+  gruposComportamentoRevisado?: boolean
+  /* Marca da fusão dos grupos antigos ("Objetivos" e "Segurança") no
+     "Investimento" (build 062) — ver `migrarGruposAntigosParaInvestimento()`
+     em `gruposUtil.ts`. A base do produto virou 50/30/20 só na planilha e no
+     arquivo de backup; dentro do app, quem já usava continuou com os quatro
+     grupos. Roda uma vez, não apaga nada e nunca mais volta. */
+  gruposFundidosRevisado?: boolean
   // instalação (11/09/2026) — ver `migrarTipoDosGrupos()` em
   // `src/gruposUtil.ts`. Mesma regra do campo acima: aditivo, não indexado.
   gruposTipoRevisado?: boolean
@@ -363,7 +401,11 @@ export interface ConfiguracaoIcones {
   // `db.configuracoes.get(1)` direto — não precisa de bump de schema.
   // Ausente/undefined = 'premium' (compatível com quem já usava o app antes
   // deste campo existir). Ver `src/configuracaoIcones.ts`.
-  modoVisao?: 'light' | 'premium'
+  // 13/09/2026: entra a 'ideal' — a versão NOVA, entre a Light e a Premium
+  // (ver "Diretrizes de Layout — Versão Ideal (v2)"). Ela é o PADRÃO a partir
+  // desta build: quem não tem o campo gravado abre nela. Light e Premium não
+  // foram tocadas — continuam inteiras, e a troca é em Configurações.
+  modoVisao?: 'light' | 'ideal' | 'premium'
   // Ordem das 5 abas do rodapé (04/09/2026, Roteiro de Parametrização Morfo,
   // Etapa 4 — "Kit de Estrutura Mínima", adaptação da seção "Ordem dos menus"
   // de `LayoutTenantScreen` do Kit). Lista das chaves de `TELAS` em
@@ -567,6 +609,14 @@ export interface ConfiguracaoIcones {
   /* Item 6 (12/09/2026): o tour guiado abre a cada abertura do app até a
      pessoa marcar "Não exibir novamente" — é este campo que guarda a escolha. */
   tourNaoExibir?: boolean
+  /* ONBOARDING INVERTIDO (13/09/2026, versão Ideal — ver
+     `src/components/BoasVindas.tsx`). A ordem antiga explicava as telas antes
+     de existir qualquer dado; a nova é boas-vindas → 3 passos → tour.
+     `boasVindasVistas`: a tela de abertura já foi lida (nunca volta sozinha).
+     `tourConviteFeito`: o convite do tour já foi oferecido — ele aparece uma
+     vez só, quando o plano fica pronto (fim do passo 2), e nunca insiste. */
+  boasVindasVistas?: boolean
+  tourConviteFeito?: boolean
   /* Qual versão do padrão de Categorias/Grupos cada ambiente já recebeu
      (item 15, 12/09/2026). Antes era um número único (`padraoCatVersaoAplicada`,
      mantido por compatibilidade): um cliente novo nunca recebia o padrão

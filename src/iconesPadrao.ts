@@ -55,6 +55,16 @@ export const ICONES_PADRAO_CATEGORIA: Record<string, IconePadrao> = {
   Reembolso: { icone: 'refazer', iconeEstilo: 'preenchido', iconeCor: '#22c55e' },
   'Outras receitas': { icone: 'cambio', iconeEstilo: 'preenchido', iconeCor: '#22c55e' },
   Investimentos: { icone: 'documentoFinanceiro', iconeEstilo: 'colorido', iconeCor: '#3b82f6' },
+  // 13/09/2026 (versão Ideal): as 5 categorias de cofrinho viraram 2. Os nomes
+  // antigos ficam aqui para que um ambiente que ainda não migrou continue
+  // achando o ícone dele — o mapa é por NOME, nunca por id.
+  /* 13/09/2026 (build 062) — as duas nasceram na migração da base com o MESMO
+     desenho (`cofreDigital`), diferindo só na cor. Foi escolha minha, não
+     dele, e é exatamente a reclamação "está tudo com o mesmo ícone": cor não
+     distingue ícone à distância, desenho distingue. Agora uma é o cofre
+     (entra) e a outra é a seta de saída do investimento (sai). */
+  'Investimento — Guardar': { icone: 'cofreDigital', iconeEstilo: 'borda', iconeCor: '#22c55e' },
+  'Investimento — Usar': { icone: 'quedaInvestimento', iconeEstilo: 'borda', iconeCor: '#ef4444' },
   '# Objetivos': { icone: 'negocio', iconeEstilo: 'borda', iconeCor: '#22c55e' },
   '# Segurança': { icone: 'viagem', iconeEstilo: 'borda', iconeCor: '#22c55e' },
   '$ Objetivos - Metas': { icone: 'negocio', iconeEstilo: 'borda', iconeCor: '#ef4444' },
@@ -67,6 +77,12 @@ export const ICONES_PADRAO_CATEGORIA: Record<string, IconePadrao> = {
 export const ICONES_PADRAO_GRUPO: Record<string, IconePadrao> = {
   Fixo: { icone: 'cofreDigital', iconeEstilo: 'preenchido', iconeCor: '#3b82f6' },
   Variável: { icone: 'cadeadoAberto', iconeEstilo: 'preenchido', iconeCor: '#3b82f6' },
+  /* 13/09/2026 (build 062): nasceu com o MESMO desenho do "Fixo"
+     (`cofreDigital`) quando o grupo foi criado na migração para 50/30/20 —
+     dois grupos com o mesmo ícone na mesma tela. Foi invenção minha; os dois
+     grupos que ele fundiu aqui tinham ícones próprios (`negocio` e `viagem`).
+     Agora tem desenho próprio. */
+  Investimento: { icone: 'investimento', iconeEstilo: 'preenchido', iconeCor: '#3b82f6' },
   Objetivos: { icone: 'negocio', iconeEstilo: 'preenchido', iconeCor: '#3b82f6' },
   Segurança: { icone: 'viagem', iconeEstilo: 'preenchido', iconeCor: '#3b82f6' },
   // Grupo de ENTRADA criado em 11/09/2026 (tipo de grupo, `gruposUtil.ts`).

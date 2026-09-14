@@ -11,6 +11,7 @@ import { BUILD_NUMBER } from '../buildInfo'
 import {
   useModoVisao,
   salvarModoVisao,
+  ROTULO_MODO_VISAO,
   useOrdemAbas,
   salvarOrdemAbas,
 } from '../configuracaoIcones'
@@ -390,29 +391,24 @@ export default function Manutencao({
       <h2 style={{ marginTop: 0 }}>Visão do App</h2>
       <div className="cartao">
         <p className="texto-fraco" style={{ marginTop: 0 }}>
-          <strong>Light</strong> mostra o essencial no rodapé (Resumo, Lançamentos, Carteira e
-          Planejamento). <strong>Premium</strong> mostra as 5 abas de hoje, incluindo Situação. Nenhum
-          dado muda entre as duas — é só o que aparece no rodapé.
+          <strong>Light</strong> é o essencial. <strong>Ideal</strong> é a versão nova: abre em
+          "Hoje", com dois números que respondem quanto dá pra gastar sem se preocupar e quanto dá
+          pra tentar economizar. <strong>Premium</strong> é o app completo, com Resumo e Situação.
+          Nenhum dado muda entre as três — o mesmo mês, os mesmos lançamentos, as mesmas metas.
         </p>
         <div className="abas-tela" role="tablist">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={modoVisao === 'light'}
-            className={`aba-tela-item ${modoVisao === 'light' ? 'ativa' : ''}`}
-            onClick={() => salvarModoVisao('light')}
-          >
-            Light
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={modoVisao === 'premium'}
-            className={`aba-tela-item ${modoVisao === 'premium' ? 'ativa' : ''}`}
-            onClick={() => salvarModoVisao('premium')}
-          >
-            Premium
-          </button>
+          {(['light', 'ideal', 'premium'] as const).map((m) => (
+            <button
+              key={m}
+              type="button"
+              role="tab"
+              aria-selected={modoVisao === m}
+              className={`aba-tela-item ${modoVisao === m ? 'ativa' : ''}`}
+              onClick={() => salvarModoVisao(m)}
+            >
+              {ROTULO_MODO_VISAO[m]}
+            </button>
+          ))}
         </div>
       </div>
 

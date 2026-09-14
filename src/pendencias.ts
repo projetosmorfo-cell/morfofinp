@@ -27,6 +27,7 @@
 import { db, type Lancamento } from './db'
 import { hojeEfetivoISO } from './hojeSimulado'
 import { lerDoAmbiente } from './ambiente'
+import { jaAconteceu } from './statusPagamento'
 
 export interface MesPendente {
   /** `AAAA-MM`. */
@@ -47,7 +48,12 @@ export async function mesesComPendencia(hojeISOForcado?: string): Promise<MesPen
   const porMes = new Map<string, MesPendente>()
 
   for (const l of lancamentos as Lancamento[]) {
-    if (l.pago !== false) continue
+    /* 14/09/2026: compra de cartão de mês fechado NÃO é pendência — ela
+       aconteceu, e quem liquida é a fatura (um lançamento na conta que paga,
+       esse sim aparece aqui se ficar em aberto). Sem isso a tarja passaria a
+       acusar todo mês fechado, porque compra de cartão só é marcada como paga
+       quando a fatura do mês SEGUINTE é quitada. */
+    if (jaAconteceu(l)) continue
     if (l.transferenciaId != null) continue
     const mes = l.dataCompetencia.slice(0, 7)
     if (mes >= mesAtual) continue // mês corrente não conta — ver nota acima

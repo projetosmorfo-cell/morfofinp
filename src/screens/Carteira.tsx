@@ -11,12 +11,14 @@ import {
 import { CampoBusca, FolhaFiltros, FILTROS_VAZIOS, aplicarFiltros, contarFiltrosAtivos, type FiltrosAvancados } from '../components/BuscaEFiltros'
 import { obterOuCriarCategoriaPagamentoFatura } from '../categoriasSistema'
 import { formatarCabecalhoData } from '../formatoData'
+import SaldoDoCofrinho from '../components/SaldoDoCofrinho'
 import { fmtBRL, formatarMoeda, aplicarMascaraValor, paraNumero } from '../formatoMoeda'
 import { useHojeSimuladoISO } from '../hojeSimulado'
 import TituloTelaN1 from '../kit/CabecalhoN1'
 import { ExportSheet, type ExportRow } from '../kit/ExportSheet'
 import { EXPLICACAO_CARTEIRA, SUBTITULO_CARTEIRA } from '../subtitulosTelas'
 import { lerDoAmbiente, marcaDoAmbiente } from '../ambiente'
+import EdicaoEmMassa from '../components/EdicaoEmMassa'
 
 function fmtBRLComSinal(v: number) {
   return `${v < 0 ? '-' : ''}${fmtBRL(v)}`
@@ -109,6 +111,14 @@ export default function Carteira({ mes, aoMudarMes, aoAbrirLancamento }: TelaPro
     return categorias!.filter((c) => c.contaVinculada === contaId).map((c) => c.id!)
   }
 
+  const totalAportes = todosLancamentos
+    .filter((l) => naturezaDoLancamento(l) === 'Aporte')
+    .reduce((s, l) => s + Math.abs(l.valor), 0)
+  const totalGastosCofrinho = todosLancamentos
+    .filter((l) => naturezaDoLancamento(l) === 'Gasto de cofrinho')
+    .reduce((s, l) => s + Math.abs(l.valor), 0)
+  const saldoCofrinho = totalAportes - totalGastosCofrinho
+
   if (selecionado !== null) {
     const conta = typeof selecionado === 'number' ? contas.find((c) => c.id === selecionado) : undefined
     const lancamentosDoLugar = conta
@@ -129,6 +139,7 @@ export default function Carteira({ mes, aoMudarMes, aoAbrirLancamento }: TelaPro
       <DetalheConta
         titulo={conta ? conta.nome : 'Cofrinho'}
         conta={conta}
+        saldoCofrinho={conta ? undefined : saldoCofrinho}
         mes={mes}
         aoMudarMes={aoMudarMes}
         aoAbrirLancamento={aoAbrirLancamento}
@@ -144,14 +155,6 @@ export default function Carteira({ mes, aoMudarMes, aoAbrirLancamento }: TelaPro
       />
     )
   }
-
-  const totalAportes = todosLancamentos
-    .filter((l) => naturezaDoLancamento(l) === 'Aporte')
-    .reduce((s, l) => s + Math.abs(l.valor), 0)
-  const totalGastosCofrinho = todosLancamentos
-    .filter((l) => naturezaDoLancamento(l) === 'Gasto de cofrinho')
-    .reduce((s, l) => s + Math.abs(l.valor), 0)
-  const saldoCofrinho = totalAportes - totalGastosCofrinho
 
   /* G44 regra 11b. `valorDoCard` é a MESMA conta que cada card faz logo
      abaixo — extraída pra função pra a exportação nunca divergir do que está
@@ -281,11 +284,7 @@ export default function Carteira({ mes, aoMudarMes, aoAbrirLancamento }: TelaPro
       })}
 
       <button type="button" className="card-conta" onClick={() => setSelecionado('cofrinho')}>
-        <div className="linha-destaque" style={{ marginTop: 0 }}>
-          <strong>Cofrinho</strong>
-          <strong className="valor-pos">{fmtBRL(saldoCofrinho)}</strong>
-        </div>
-        <span className="texto-fraco">Total acumulado (Objetivos + Segurança)</span>
+        <SaldoDoCofrinho calculado={saldoCofrinho} />
         {(() => {
           const recentesCofrinho = todosLancamentos
             .filter((l) => naturezaDoLancamento(l) === 'Aporte' || naturezaDoLancamento(l) === 'Gasto de cofrinho')
@@ -334,12 +333,17 @@ function BlocoTotais({
   isCartao: boolean
   totalFatura: number
 }) {
+  /* ORDEM CRONOLÓGICA (build 066, pedido do Rafael): primeiro o que aconteceu
+     NO MÊS (entrou · saiu · movimento), depois o que veio de ANTES, e só então
+     o total grande. Ele leu a ordem antiga como invertida — e estava: começava
+     pelo saldo herdado, que é o mais distante do que a lista acima mostra.
+
+     Os dois números continuam os mesmos e continuam significando coisas
+     diferentes: "movimento do mês" é quanto a conta andou, "saldo" é onde ela
+     está. O que mudou é que agora um leva ao outro, em degraus. */
+  const movimento = entradasPeriodo - saidasPeriodo
   return (
     <div className="total-geral">
-      <div className="linha" style={{ border: 'none', padding: '2px 0' }}>
-        <span className="texto-fraco">Saldo inicial do período</span>
-        <strong className={saldoInicial >= 0 ? 'valor-pos' : 'valor-neg'}>{fmtBRLComSinal(saldoInicial)}</strong>
-      </div>
       <div className="linha" style={{ border: 'none', padding: '2px 0' }}>
         <span className="texto-fraco">Entradas do período</span>
         <strong className="valor-pos">+{fmtBRL(entradasPeriodo)}</strong>
@@ -347,6 +351,18 @@ function BlocoTotais({
       <div className="linha" style={{ border: 'none', padding: '2px 0' }}>
         <span className="texto-fraco">Saídas do período</span>
         <strong className="valor-neg">-{fmtBRL(saidasPeriodo)}</strong>
+      </div>
+      <div
+        className="linha"
+        style={{ border: 'none', padding: '6px 0 0', borderTop: '1px solid var(--borda)', marginTop: 4 }}
+        data-testid="movimento-do-mes"
+      >
+        <span className="texto-fraco">Movimento do mês</span>
+        <strong className={movimento >= 0 ? 'valor-pos' : 'valor-neg'}>{fmtBRLComSinal(movimento)}</strong>
+      </div>
+      <div className="linha" style={{ border: 'none', padding: '6px 0 0' }}>
+        <span className="texto-fraco">Herdado do mês anterior</span>
+        <strong className={saldoInicial >= 0 ? 'valor-pos' : 'valor-neg'}>{fmtBRLComSinal(saldoInicial)}</strong>
       </div>
       <div className="linha" style={{ border: 'none', padding: '6px 0 0', borderTop: '1px solid var(--borda)', marginTop: 4 }}>
         <span>Saldo final do período</span>
@@ -391,9 +407,12 @@ function DetalheConta({
   contaPorId,
   contasDisponiveis,
   todosLancamentos,
+  saldoCofrinho,
 }: {
   titulo: string
   conta?: Conta
+  /** Só no cofrinho virtual: o saldo pelos lançamentos, pra informar o real aqui dentro. */
+  saldoCofrinho?: number
   mes: string
   aoMudarMes: (mes: string) => void
   aoAbrirLancamento: TelaProps['aoAbrirLancamento']
@@ -416,6 +435,8 @@ function DetalheConta({
   const [busca, setBusca] = useState('')
   const [buscaAberta, setBuscaAberta] = useState(false)
   const [filtrosAbertos, setFiltrosAbertos] = useState(false)
+  /* Edição em massa (14/09/2026) — a MESMA peça da tela de Lançamentos. */
+  const [massaAberta, setMassaAberta] = useState(false)
   const [filtros, setFiltros] = useState<FiltrosAvancados>(FILTROS_VAZIOS)
 
   const doPeriodoBruto = lancamentosDoLugar.filter((l) => l.dataCompetencia >= janela.inicio && l.dataCompetencia <= janela.fim)
@@ -565,7 +586,7 @@ function DetalheConta({
         )}
         {selecao.ativa && (
           <div className="linha" style={{ border: 'none', padding: 0, alignItems: 'flex-start', gap: 8 }}>
-            <BarraSelecao selecao={selecao} total={doPeriodo.length} />
+            <BarraSelecao selecao={selecao} total={doPeriodo.length} onAlterar={() => setMassaAberta(true)} />
           </div>
         )}
       </div>
@@ -579,11 +600,29 @@ function DetalheConta({
           onAplicar={(f, ordem) => { setFiltros(f); setOrdemDesc(ordem); setFiltrosAbertos(false) }}
         />
       )}
+      {massaAberta && (
+        <EdicaoEmMassa
+          ids={[...selecao.marcados]}
+          mes={mes}
+          onFechar={(r) => {
+            setMassaAberta(false)
+            if (r) selecao.sair()
+          }}
+        />
+      )}
       {isCartao && (
         <p className="texto-fraco" style={{ marginTop: -10, marginBottom: 14 }}>
           Fatura de {formatarDataCurta(janela.inicio)} a {formatarDataCurta(janela.fim)}
           {conta?.diaVencimento ? ` · vence dia ${conta.diaVencimento}` : ''}
         </p>
+      )}
+
+      {/* Informar o saldo real também AQUI DENTRO (build 059): quem tocou no card
+          veio ver o cofrinho, e era só do lado de fora que dava pra informar. */}
+      {saldoCofrinho != null && (
+        <div className="cartao" style={{ marginBottom: 12 }}>
+          <SaldoDoCofrinho calculado={saldoCofrinho} />
+        </div>
       )}
 
       {conta?.tipo === 'cofre' && (
@@ -717,13 +756,21 @@ function DetalheConta({
       {/* Entrada · Saída · Total da lista, FIXO no rodapé (10/09/2026). Vem
           por ÚLTIMO de propósito: um elemento `sticky` com fundo opaco esconde
           o que vier depois dele quando a rolagem passa — o bloco de saldo do
-          período (`BlocoTotais`, acima) ficaria inalcançável. */}
-      {doPeriodo.length > 0 && (
+          período (`BlocoTotais`, acima) ficaria inalcançável.
+
+          BUILD 066: aqui ela só aparece com RECORTE ATIVO (busca, filtro ou
+          seleção). Sem recorte, ela repetia exatamente o "movimento do mês" do
+          bloco acima — dois totais iguais, com nomes diferentes, um em cima do
+          outro: o começo da confusão que o Rafael relatou. Com recorte ela
+          informa o que o bloco não informa (o total do que está filtrado), e aí
+          ganha o lugar de volta. Em Lançamentos nada muda: lá ela é o ÚNICO
+          total da tela. */}
+      {doPeriodo.length > 0 && (selecao.ativa || busca.trim() !== '' || contarFiltrosAtivos(filtros) > 0) && (
         <RodapeTotais>
           <TotaisEntradaSaida
             recolhivel
             destaque={selecao.ativa}
-            rotulo={selecao.ativa ? `Selecionados (${selecao.qtd})` : 'Total da lista'}
+            rotulo={selecao.ativa ? `Selecionados (${selecao.qtd})` : 'Total do que está filtrado'}
             itens={selecao.ativa ? doPeriodo.filter((l) => selecao.marcados.has(l.id!)) : doPeriodo}
           />
         </RodapeTotais>

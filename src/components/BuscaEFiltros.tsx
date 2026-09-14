@@ -101,7 +101,10 @@ const ROTULO_RECORRENCIA: Record<RecorrenciaFiltro, string> = {
   fixo: 'Fixo',
   parcelado: 'Parcelado',
 }
-const TODOS_STATUS: StatusPagamento[] = ['pago', 'recebido', 'atrasado', 'a_pagar', 'a_receber']
+/* 'no_cartao' entra aqui (14/09/2026): é um estado de verdade na lista — a
+   compra que já aconteceu e está na fatura em aberto. Sem o chip, não haveria
+   como filtrar justamente o que o cartão produz em maior quantidade. */
+const TODOS_STATUS: StatusPagamento[] = ['pago', 'recebido', 'no_cartao', 'atrasado', 'a_pagar', 'a_receber']
 
 export function FolhaFiltros({
   filtros,

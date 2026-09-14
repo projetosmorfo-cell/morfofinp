@@ -2,14 +2,26 @@ import { Fragment, useEffect, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { PencilSquareIcon } from '@heroicons/react/24/outline'
 import SeletorComExplicacao, { type OpcaoExplicada } from '../components/SeletorComExplicacao'
-import { db, NATUREZAS_ORCAMENTAVEIS, type Categoria, type GrupoRegistro, type Natureza, type TipoGrupo } from '../db'
+import { db, type Categoria, type GrupoRegistro, type Natureza } from '../db'
+import { categoriaConsomeMeta } from '../orcamento'
 import { marcarCategoriasEditadas } from '../kit/padraoCategorias'
 import type { TelaProps } from '../mes'
 import { Icone, type EstiloIcone } from '../icones'
 import SeletorIcone from '../components/SeletorIcone'
+import {
+  CamposCategoria,
+  CamposGrupo,
+  NATUREZAS,
+  EXPLICACAO_NATUREZA,
+  NATUREZAS_VINCULAVEIS,
+  rascunhoGrupoVazio,
+  rascunhoVazio,
+  type RascunhoCategoria,
+  type RascunhoGrupo,
+} from '../components/FormulariosCadastro'
 import MenuLinha from '../components/MenuLinha'
 import ModalCadastro from '../components/ModalCadastro'
-import { ROTULO_TIPO_GRUPO, gruposParaNatureza, tipoDoGrupo } from '../gruposUtil'
+import { ROTULO_TIPO_GRUPO, comportamentoDoGrupo, gruposParaNatureza, tipoDoGrupo } from '../gruposUtil'
 import { fmtBRL, formatarMoeda, aplicarMascaraValor, paraNumero } from '../formatoMoeda'
 import { baseMetaDoMes, categoriasDaBaseMeta, EXPLICACAO_BASE_META } from '../baseMeta'
 import { useConfiguracaoIcones, tamanhoIconePx, salvarConfiguracaoIcones } from '../configuracaoIcones'
@@ -22,22 +34,13 @@ import {
   restaurarPadraoIconeGrupo,
 } from '../iconesPadrao'
 
-const NATUREZAS: Natureza[] = ['Consumo', 'Receita', 'Aporte', 'Neutro', 'Gasto de cofrinho', 'Pagamento de fatura']
 
 /* O que cada natureza FAZ nos cálculos (12/09/2026, pedido do Rafael: "o
    campo Natureza pode ser confuso pro usuário, ele precisa saber o impacto
    nos cálculos"). Cada texto descreve o efeito real, conferido no código das
    telas: quem entra em Entrou/Saiu (ResumoDoMes), quem tem teto e entra na
-   meta do grupo (NATUREZAS_ORCAMENTAVEIS) e quem é só movimento de caixa. */
-const EXPLICACAO_NATUREZA: Record<Natureza, string> = {
-  Consumo: 'Gasto do dia a dia. Tem teto (aceitável) e conta na meta de gasto do grupo.',
-  Receita: 'Dinheiro entrando. Soma em "Entrou" e é a base da meta — nunca conta como gasto.',
-  Aporte: 'Dinheiro guardado (cofrinho/objetivo). Sai do mês e conta na meta do grupo, como gasto planejado.',
-  Neutro: 'Não entra em nenhum total do mês — use pra registro que não é receita nem despesa.',
-  'Gasto de cofrinho': 'Uso do dinheiro já guardado. Reduz o cofrinho e não conta de novo como gasto do mês.',
-  'Pagamento de fatura': 'Quitação de cartão. Fica fora de Entrou/Saiu — a despesa já entrou na compra.',
-  'Transferência': 'Dinheiro trocando de lugar entre contas suas. Nunca entra em Entrou/Saiu nem em meta.',
-}
+   meta do grupo (ver `categoriaConsomeMeta`, src/orcamento.ts) e quem é só
+   movimento de caixa. */
 
 // Naturezas onde faz sentido vincular a categoria a um cofrinho cadastrado —
 // "Gasto de cofrinho" é o caso central (pagar direto pelo Bradesco usando uma
@@ -46,7 +49,6 @@ const EXPLICACAO_NATUREZA: Record<Natureza, string> = {
 // NÃO move mais fisicamente o saldo do cofrinho — é só um AJUSTE DE FLUXO
 // informativo daquele mês (ver Carteira.tsx e CLAUDE.md), nunca uma
 // transferência real de saldo.
-const NATUREZAS_VINCULAVEIS: Natureza[] = ['Gasto de cofrinho', 'Aporte']
 
 // F-06/F-07 da revisão de UI (04/09/2026): as 6 seções desta tela (do
 // "Tamanho dos ícones" até "Nova categoria") viviam numa rolagem única de
@@ -78,45 +80,7 @@ function mesAnteriorISO() {
   return d.toISOString().slice(0, 7)
 }
 
-interface RascunhoCategoria {
-  nome: string
-  grupo: string
-  natureza: Natureza
-  aceitavelMensal: string
-  esperadoMensal: string
-  receitaFixa: boolean
-  contaVinculada: string
-  icone: string
-  iconeEstilo: EstiloIcone
-  iconeCor: string
-}
 
-function rascunhoVazio(grupoPadrao: string): RascunhoCategoria {
-  return {
-    nome: '',
-    grupo: grupoPadrao,
-    natureza: 'Consumo',
-    aceitavelMensal: '',
-    esperadoMensal: '',
-    receitaFixa: false,
-    contaVinculada: '',
-    icone: 'outros',
-    iconeEstilo: 'colorido',
-    iconeCor: '#3b82f6',
-  }
-}
-
-interface RascunhoGrupo {
-  nome: string
-  tipo: TipoGrupo
-  icone: string
-  iconeEstilo: EstiloIcone
-  iconeCor: string
-}
-
-function rascunhoGrupoVazio(): RascunhoGrupo {
-  return { nome: '', tipo: 'saida', icone: 'outros', iconeEstilo: 'colorido', iconeCor: '#3b82f6' }
-}
 
 // "Categorias e Grupos" (renomeada de "Categorias" em 31/08/2026, rodada
 // seguinte, ponto 11) — cadastro central de categoria + grupo + metas por
@@ -231,7 +195,7 @@ export default function Categorias(_props: TelaProps & { aoVoltar: () => void })
   const somaAceitavelPorGrupo = new Map<string, number>()
   for (const c of categorias) {
     if (!c.ativa) continue
-    if (!NATUREZAS_ORCAMENTAVEIS.includes(c.natureza)) continue
+    if (!categoriaConsomeMeta(c.natureza)) continue
     somaAceitavelPorGrupo.set(c.grupo, (somaAceitavelPorGrupo.get(c.grupo) ?? 0) + c.aceitavelMensal)
   }
 
@@ -259,7 +223,7 @@ export default function Categorias(_props: TelaProps & { aoVoltar: () => void })
     const realizado = lancamentosMesAnterior
       .filter((l) => {
         const cat = categoriaPorId.get(l.categoriaId)
-        return cat?.grupo === g.nome && NATUREZAS_ORCAMENTAVEIS.includes(cat.natureza)
+        return cat?.grupo === g.nome && categoriaConsomeMeta(cat.natureza)
       })
       .reduce((s, l) => s + -l.valor, 0)
     return { grupo: g.nome, realizado, meta: metaDoGrupoEmReais(g.nome), percentualMeta: percentuais[g.nome] || 0 }
@@ -271,6 +235,7 @@ export default function Categorias(_props: TelaProps & { aoVoltar: () => void })
     setRascunhoGrupo({
       nome: g.nome,
       tipo: tipoDoGrupo(g),
+      comportamento: comportamentoDoGrupo(g) ?? 'fixo',
       icone: g.icone ?? 'outros',
       iconeEstilo: g.iconeEstilo ?? 'colorido',
       iconeCor: g.iconeCor ?? '#3b82f6',
@@ -291,207 +256,27 @@ export default function Categorias(_props: TelaProps & { aoVoltar: () => void })
      (dois botões), não `<select>`: escolha de 2 valores com rótulo curto lê
      melhor assim, e `<select>` nativo não respeita o tema (regra da build
      023). */
-  function formularioGrupo(
+  /* Os campos dos dois cadastros moram em `components/FormulariosCadastro.tsx`
+     desde a build 059 — o Planejamento usa exatamente os mesmos. Antes havia
+     uma cópia reduzida lá, e as duas divergiram sem ninguém perceber. */
+  const formularioGrupo = (
     rascunho: RascunhoGrupo,
     setRascunho: React.Dispatch<React.SetStateAction<RascunhoGrupo>>,
     tipoTravado: boolean,
-  ) {
-    return (
-      <>
-        <label htmlFor="grupo-nome">Nome</label>
-        <input
-          id="grupo-nome"
-          type="text"
-          value={rascunho.nome}
-          onChange={(e) => setRascunho((r) => ({ ...r, nome: e.target.value }))}
-        />
-        <span style={{ display: 'block', fontSize: 12, color: 'var(--texto-fraco)', margin: '10px 0 6px' }}>Tipo</span>
-        <div style={{ display: 'flex', gap: 8 }}>
-          {(['saida', 'entrada'] as TipoGrupo[]).map((t) => (
-            <button
-              key={t}
-              type="button"
-              disabled={tipoTravado && rascunho.tipo !== t}
-              onClick={() => setRascunho((r) => ({ ...r, tipo: t }))}
-              style={{
-                flex: 1,
-                marginTop: 0,
-                padding: '10px 12px',
-                borderRadius: 10,
-                cursor: tipoTravado ? 'not-allowed' : 'pointer',
-                border: `1px solid ${rascunho.tipo === t ? 'var(--azul)' : 'var(--borda)'}`,
-                background: rascunho.tipo === t ? 'var(--bg-elevado)' : 'none',
-                color: 'var(--texto)',
-                fontWeight: rascunho.tipo === t ? 700 : 400,
-                opacity: tipoTravado && rascunho.tipo !== t ? 0.4 : 1,
-              }}
-            >
-              {ROTULO_TIPO_GRUPO[t]}
-            </button>
-          ))}
-        </div>
-        <p className="texto-fraco" style={{ marginTop: 6, marginBottom: 0, fontSize: 12 }}>
-          {tipoTravado
-            ? 'O tipo não pode mudar enquanto houver categoria vinculada a este grupo — mova as categorias primeiro.'
-            : rascunho.tipo === 'entrada'
-              ? 'Só aceita categoria de natureza Receita.'
-              : 'Aceita todas as naturezas, menos Receita.'}
-        </p>
-        <SeletorIcone
-          icone={rascunho.icone}
-          estilo={rascunho.iconeEstilo}
-          cor={rascunho.iconeCor}
-          onChange={({ icone, estilo, cor }) => setRascunho((r) => ({ ...r, icone, iconeEstilo: estilo, iconeCor: cor }))}
-        />
-      </>
-    )
-  }
+  ) => <CamposGrupo rascunho={rascunho} setRascunho={setRascunho} tipoTravado={tipoTravado} />
 
-  /* Formulário da categoria — o MESMO nos dois popups (nova e edição).
-
-     A regra de vínculo (11/09/2026) vive aqui, na forma mais simples que
-     existe: a lista de grupos oferecida é só a dos grupos compatíveis com a
-     natureza escolhida (`gruposParaNatureza`). Trocar a natureza pra Receita
-     num grupo de saída não dá erro — o campo Grupo se reposiciona sozinho no
-     primeiro grupo de entrada disponível. Não existe caminho pela tela que
-     grave a combinação errada. */
-  function formularioCategoria(
+  const formularioCategoria = (
     rasc: RascunhoCategoria,
     setRasc: React.Dispatch<React.SetStateAction<RascunhoCategoria>>,
-  ) {
-    const gruposValidos = gruposParaNatureza(gruposAtivos, rasc.natureza)
-    const grupoEscolhido = gruposValidos.some((g) => g.nome === rasc.grupo) ? rasc.grupo : (gruposValidos[0]?.nome ?? '')
-    return (
-      <>
-        <label htmlFor="cat-nome">Nome</label>
-        <input
-          id="cat-nome"
-          type="text"
-          value={rasc.nome}
-          onChange={(e) => setRasc((r) => ({ ...r, nome: e.target.value }))}
-        />
-        <label htmlFor="cat-natureza">Natureza</label>
-        <SeletorComExplicacao<Natureza>
-          id="cat-natureza"
-          titulo="Natureza da categoria"
-          valor={rasc.natureza}
-          opcoes={NATUREZAS.map((n): OpcaoExplicada<Natureza> => ({ valor: n, rotulo: n, explicacao: EXPLICACAO_NATUREZA[n] }))}
-          onEscolher={(natureza) => {
-            const permitidos = gruposParaNatureza(gruposAtivos, natureza)
-            setRasc((r) => ({
-              ...r,
-              natureza,
-              grupo: permitidos.some((g) => g.nome === r.grupo) ? r.grupo : (permitidos[0]?.nome ?? ''),
-            }))
-          }}
-        />
-        <label htmlFor="cat-grupo">Grupo</label>
-        <select
-          id="cat-grupo"
-          value={grupoEscolhido}
-          onChange={(e) => setRasc((r) => ({ ...r, grupo: e.target.value }))}
-        >
-          {gruposValidos.map((g2) => (
-            <option key={g2.id} value={g2.nome}>
-              {g2.nome}
-            </option>
-          ))}
-        </select>
-        <p className="texto-fraco" style={{ marginTop: 4, marginBottom: 0, fontSize: 12 }}>
-          Só aparecem grupos de {ROTULO_TIPO_GRUPO[rasc.natureza === 'Receita' ? 'entrada' : 'saida']} — é a
-          natureza da categoria que define onde ela pode ser vinculada.
-        </p>
-        {/* 12/09/2026 (build 054) — o Rafael, com razão: "quando a natureza é
-            Receita... pede 2 campos Meta e Planejado, por que esse segundo?".
-            Os dois nunca deveriam conviver numa categoria de entrada:
+  ) => (
+    <CamposCategoria
+      rasc={rasc}
+      setRasc={setRasc}
+      gruposAtivos={gruposAtivos}
+      contasVinculaveis={contasVinculaveis}
+    />
+  )
 
-            • "Meta da categoria" é TETO DE GASTO. Não existe teto pra dinheiro
-              que entra (receber mais não é problema), e o valor dela numa
-              categoria de Receita não era lido por tela nenhuma — era campo
-              morto pedindo atenção. Por isso SOME quando a natureza é Receita.
-            • "Planejado mensal" é usado de verdade: é o quanto se espera
-              receber, e é o lado Entradas do Planejamento (real × planejado).
-              Fica, com o rótulo dizendo o que é sem citar tela.
-
-            O modo expandido da lista já mostrava um campo só (esperado pra
-            Receita, meta pro resto) — o formulário é que estava fora do passo. */}
-        {rasc.natureza !== 'Receita' && (
-          <>
-            <label htmlFor="cat-aceitavel">Meta da categoria (R$)</label>
-            <input
-              id="cat-aceitavel"
-              type="text"
-              inputMode="decimal"
-              placeholder="0,00"
-              value={rasc.aceitavelMensal}
-              onChange={(e) => setRasc((r) => ({ ...r, aceitavelMensal: aplicarMascaraValor(e.target.value) }))}
-            />
-          </>
-        )}
-        {rasc.natureza === 'Receita' && (
-          <>
-            <label htmlFor="cat-esperado">Quanto espera receber por mês (R$)</label>
-            <input
-              id="cat-esperado"
-              type="text"
-              inputMode="decimal"
-              placeholder="0,00"
-              value={rasc.esperadoMensal}
-              onChange={(e) => setRasc((r) => ({ ...r, esperadoMensal: aplicarMascaraValor(e.target.value) }))}
-            />
-            {/* Flag de receita FIXA (12/09/2026) — é a soma destas categorias,
-                no mês da tela, que forma o 100% sobre o qual os percentuais de
-                meta de grupo incidem. Opcional e só oferecida em Receita. */}
-            <label
-              htmlFor="cat-receita-fixa"
-              style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}
-            >
-              <input
-                id="cat-receita-fixa"
-                type="checkbox"
-                checked={rasc.receitaFixa}
-                onChange={(e) => setRasc((r) => ({ ...r, receitaFixa: e.target.checked }))}
-                style={{ width: 18, height: 18, flex: 'none' }}
-              />
-              <span>É receita fixa (entra na base das metas)</span>
-            </label>
-            <p className="texto-fraco" style={{ marginTop: -4 }}>
-              Marque a renda que se repete todo mês (salário, pró-labore, aluguel recebido).
-              A soma dessas categorias no mês é o 100% das metas de grupo.
-            </p>
-          </>
-        )}
-        {NATUREZAS_VINCULAVEIS.includes(rasc.natureza) && contasVinculaveis.length > 0 && (
-          <>
-            <label htmlFor="cat-cofrinho">Vincular a um cofrinho (opcional)</label>
-            <select
-              id="cat-cofrinho"
-              value={rasc.contaVinculada}
-              onChange={(e) => setRasc((r) => ({ ...r, contaVinculada: e.target.value }))}
-            >
-              <option value="">Nenhum</option>
-              {contasVinculaveis.map((c2) => (
-                <option key={c2.id} value={c2.id}>
-                  {c2.nome}
-                </option>
-              ))}
-            </select>
-            <p className="texto-fraco" style={{ marginTop: 4, marginBottom: 0 }}>
-              Ajuste de fluxo, não movimentação real: um lançamento nesta categoria, mesmo pago por outra conta
-              (ex.: direto pelo Bradesco), aparece como nota informativa no cofrinho — não altera o saldo dele, só
-              sinaliza que esse gasto substituiu parte do aporte daquele mês.
-            </p>
-          </>
-        )}
-        <SeletorIcone
-          icone={rasc.icone}
-          estilo={rasc.iconeEstilo}
-          cor={rasc.iconeCor}
-          onChange={({ icone, estilo, cor }) => setRasc((r) => ({ ...r, icone, iconeEstilo: estilo, iconeCor: cor }))}
-        />
-      </>
-    )
-  }
 
   /* Único caso em que a regra trava de verdade: a natureza escolhida não tem
      NENHUM grupo compatível cadastrado (ex.: primeira categoria de receita num
@@ -518,6 +303,7 @@ export default function Categorias(_props: TelaProps & { aoVoltar: () => void })
       await db.grupos.update(id, {
         nome: novoNome,
         tipo: rascunhoGrupo.tipo,
+        comportamento: rascunhoGrupo.tipo === 'saida' ? rascunhoGrupo.comportamento : undefined,
         icone: rascunhoGrupo.icone,
         iconeEstilo: rascunhoGrupo.iconeEstilo,
         iconeCor: rascunhoGrupo.iconeEstilo === 'colorido' ? undefined : rascunhoGrupo.iconeCor,
@@ -555,6 +341,7 @@ export default function Categorias(_props: TelaProps & { aoVoltar: () => void })
       nome,
       ativo: true,
       tipo: novoGrupo.tipo,
+      comportamento: novoGrupo.tipo === 'saida' ? novoGrupo.comportamento : undefined,
       icone: novoGrupo.icone,
       iconeEstilo: novoGrupo.iconeEstilo,
       iconeCor: novoGrupo.iconeEstilo === 'colorido' ? undefined : novoGrupo.iconeCor,
@@ -1301,7 +1088,7 @@ export default function Categorias(_props: TelaProps & { aoVoltar: () => void })
                       {c.natureza === 'Receita' && !!c.esperadoMensal && (
                         <span className="texto-fraco" style={{ fontSize: 12 }}>~{fmtBRL(c.esperadoMensal)}/mês</span>
                       )}
-                      {temExemplo && NATUREZAS_ORCAMENTAVEIS.includes(c.natureza) && Math.abs(metaGrupo - somaAceitavel) >= 1 && (
+                      {temExemplo && categoriaConsomeMeta(c.natureza) && Math.abs(metaGrupo - somaAceitavel) >= 1 && (
                         <span
                           className={metaGrupo - somaAceitavel > 0 ? 'valor-pos' : 'valor-neg'}
                           style={{ fontSize: 11.5, whiteSpace: 'nowrap' }}

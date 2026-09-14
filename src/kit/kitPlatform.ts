@@ -373,6 +373,14 @@ export interface GlobalParams {
   respeitarAutorizacaoAcesso: boolean
   modoAcessoSuporte: 'total' | 'consulta'
   avisoVencimentoDiasAntes: number
+  /* Janela do ritmo da projeção, em dias corridos (13/09/2026, versão Ideal).
+     É o "nesse ritmo" da frase do veredito: a média de gastos dos últimos N
+     dias, projetada nos dias que faltam do mês. Parâmetro porque o Rafael foi
+     explícito — "não gosto de nada desse tipo chumbado no código", e por ser
+     decisão da PLATAFORMA, mora no N0, nunca no ambiente do cliente.
+     Testado nos 5 meses reais: 30 dias erra quase metade do que erra o ritmo
+     do mês corrente nos 3 primeiros dias do mês (ver src/projecao.ts). */
+  janelaMediaDias: number
   trialWarning: TrialWarningCfg
   chat: ChatConfig
 }
@@ -386,6 +394,7 @@ export function defaultGlobalParams(): GlobalParams {
        `alertSettings.vencendo.diasAntes`, que é a notificação do ADMIN Morfo
        sobre as assinaturas — este aqui é o que o cliente vê no app dele. */
     avisoVencimentoDiasAntes: 5,
+    janelaMediaDias: 30,
     trialWarning: { diasAntes: 3, texto: 'Seu período de teste no MorfoFinP termina em breve! Fale com a gente pra continuar usando sem interrupção.', repetirTodoDia: false },
     chat: { ...CHAT_CONFIG_PADRAO },
   }
@@ -573,7 +582,10 @@ export interface DevUserN0 { id: string; name: string; login: string; senha: str
    são os mesmos de `Categoria`/`GrupoRegistro`/`Meta` (`db.ts`): esta é a
    MESMA configuração do N1, só que guardada como padrão, nunca uma segunda
    modelagem paralela. */
-export interface GrupoPadraoN0 { nome: string; icone?: string; iconeEstilo?: string; iconeCor?: string; percentual: number }
+export interface GrupoPadraoN0 { nome: string; icone?: string; iconeEstilo?: string; iconeCor?: string; percentual: number;
+  /* Como o grupo se comporta no mês (build 061) — estrutura, não valor: viaja
+     no padrão junto com nome/ícone/percentual. */
+  comportamento?: 'fixo' | 'variavel' | 'guardar' }
 /* Build 056 (12/09/2026): `aceitavelMensal`/`esperadoMensal` continuam no tipo
    SÓ pra ler padrão gravado por uma build anterior sem quebrar — nenhuma tela
    do N0 os edita e `aplicarPadrao` não os escreve mais. Valor é do ambiente

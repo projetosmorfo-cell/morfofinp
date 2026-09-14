@@ -103,7 +103,15 @@ export function useSelecao(idsVisiveis: number[]) {
 
 export type Selecao = ReturnType<typeof useSelecao>
 
-export function BarraSelecao({ selecao, total }: { selecao: Selecao; total: number }) {
+export function BarraSelecao({ selecao, total, onAlterar }: {
+  selecao: Selecao
+  total: number
+  /* "Alterar" abre a edição em massa (14/09/2026) — mora aqui, e não em cada
+     tela, porque Lançamentos e o detalhe da Carteira usam esta MESMA barra;
+     duplicar o botão seria duplicar a regra de quando ele fica disponível.
+     Só habilita com algo marcado: aplicar "em nenhum" não quer dizer nada. */
+  onAlterar?: () => void
+}) {
   if (!selecao.ativa) {
     return (
       <button type="button" className="botao-ordem" onClick={selecao.ativar} data-testid="ativar-selecao">
@@ -115,6 +123,17 @@ export function BarraSelecao({ selecao, total }: { selecao: Selecao; total: numb
     <div className="barra-selecao">
       <span className="texto-fraco">{selecao.qtd} de {total} selecionado(s)</span>
       <div className="barra-selecao-acoes">
+        {onAlterar && (
+          <button
+            type="button"
+            className="botao-ordem botao-alterar-selecao"
+            onClick={onAlterar}
+            disabled={selecao.qtd === 0}
+            data-testid="abrir-edicao-massa"
+          >
+            Alterar
+          </button>
+        )}
         <button type="button" className="botao-ordem" onClick={selecao.marcarTodos}>Marcar todos</button>
         <button type="button" className="botao-ordem" onClick={selecao.desmarcarTodos}>Desmarcar todos</button>
         <button type="button" className="botao-ordem" onClick={selecao.sair}>Sair</button>

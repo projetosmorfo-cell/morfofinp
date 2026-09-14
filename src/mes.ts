@@ -77,4 +77,6 @@ export interface TelaProps {
   aoMudarMes: (mes: string) => void
   aoAbrirLancamento: (opcoes?: { id?: number; categoriaIdSugerida?: number; contaIdSugerida?: number }) => void
   aoAbrirPlanejamento: () => void
+  /** Abre a tela de Calibragem (build 059) — os percentuais vistos juntos. */
+  aoAbrirCalibragem?: () => void
 }

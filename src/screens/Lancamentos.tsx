@@ -3,6 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { db, type Categoria, type Lancamento } from '../db'
 import type { TelaProps } from '../mes'
 import SeletorMes from '../components/SeletorMes'
+import EdicaoEmMassa from '../components/EdicaoEmMassa'
 import LinhaLancamentoCompleta from '../components/LinhaLancamentoCompleta'
 import { CampoBusca, FolhaFiltros, FILTROS_VAZIOS, aplicarFiltros, contarFiltrosAtivos, type FiltrosAvancados } from '../components/BuscaEFiltros'
 import { formatarCabecalhoData } from '../formatoData'
@@ -45,6 +46,8 @@ export default function Lancamentos({ mes, aoMudarMes, aoAbrirLancamento }: Tela
   const [busca, setBusca] = useState('')
   const [buscaAberta, setBuscaAberta] = useState(false)
   const [filtrosAbertos, setFiltrosAbertos] = useState(false)
+  /* Edição em massa (14/09/2026) — ver `EdicaoEmMassa.tsx`. */
+  const [massaAberta, setMassaAberta] = useState(false)
   const [filtros, setFiltros] = useState<FiltrosAvancados>(FILTROS_VAZIOS)
   /* G44 regra 11b — hook ANTES do guard de carregamento logo abaixo. Ficou
      depois dele na 1ª versão e derrubou a tela inteira (React #310, "mais
@@ -121,7 +124,7 @@ export default function Lancamentos({ mes, aoMudarMes, aoAbrirLancamento }: Tela
         )}
         {selecao.ativa && (
           <div className="linha" style={{ border: 'none', padding: '0', alignItems: 'flex-start', gap: 8 }}>
-            <BarraSelecao selecao={selecao} total={filtrados.length} />
+            <BarraSelecao selecao={selecao} total={filtrados.length} onAlterar={() => setMassaAberta(true)} />
           </div>
         )}
       </div>
@@ -133,6 +136,18 @@ export default function Lancamentos({ mes, aoMudarMes, aoAbrirLancamento }: Tela
           ordemDesc={ordemDesc}
           onFechar={() => setFiltrosAbertos(false)}
           onAplicar={(f, ordem) => { setFiltros(f); setOrdemDesc(ordem); setFiltrosAbertos(false) }}
+        />
+      )}
+      {massaAberta && (
+        <EdicaoEmMassa
+          ids={[...selecao.marcados]}
+          mes={mes}
+          onFechar={(r) => {
+            setMassaAberta(false)
+            // Aplicou de verdade: a seleção perdeu o sentido (e parte dela pode
+            // até ter virado outra coisa, no caso do parcelamento).
+            if (r) selecao.sair()
+          }}
         />
       )}
       {/* G44 regra 11b: exporta exatamente o que está na tela — ou seja, o

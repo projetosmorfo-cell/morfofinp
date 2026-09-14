@@ -106,6 +106,25 @@ export default function PadraoCategoriasN0({ notify }: { notify: (m: string) => 
                 <Trash2 size={15} color="#F5615C" />
               </button>
             </div>
+            {/* O COMPORTAMENTO do grupo (13/09/2026) — o que antes era uma
+                regra chumbada no código, que reconhecia o grupo variável e o
+                de investimento pelo NOME. Um cliente que renomeie "Variável"
+                para "Dia a dia", ou que divida os gastos variáveis em dois
+                grupos, deixava a projeção sem nada para projetar. Aqui é o
+                padrão da plataforma; o dono do ambiente pode mudar o dele. */}
+            <div style={{ marginTop: 8 }}>
+              <label style={rotulo}>Comportamento</label>
+              <Segmented
+                dark
+                value={g.comportamento ?? 'fixo'}
+                onChange={(v) => setGrupo(i, { comportamento: v as GrupoPadraoN0['comportamento'] })}
+                options={[
+                  { value: 'fixo', label: 'Fixo' },
+                  { value: 'variavel', label: 'Variável' },
+                  { value: 'guardar', label: 'Guardar' },
+                ]}
+              />
+            </div>
             <div style={{ marginTop: 8 }}>
               <SeletorIcone icone={g.icone ?? 'outros'} estilo={(g.iconeEstilo ?? 'colorido') as EstiloIcone} cor={g.iconeCor ?? '#3b82f6'}
                 onChange={(v) => setGrupo(i, { icone: v.icone, iconeEstilo: v.estilo, iconeCor: v.cor })} />

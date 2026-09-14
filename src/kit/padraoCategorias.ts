@@ -23,6 +23,7 @@
       "já carregar o padrão atual lá" do pedido, em vez de abrir a tela do N0
       em branco. */
 import { db, type Categoria, type GrupoRegistro, type Natureza } from '../db'
+import { comportamentoDoGrupo, comportamentoPeloNome } from '../gruposUtil'
 import { comIconePadraoCategoria, comIconePadraoGrupo } from '../iconesPadrao'
 import { CONFIG_ICONES_PADRAO } from '../configuracaoIcones'
 import { lerPlatformN0Persistida, type CategoriaPadraoN0, type GrupoPadraoN0, type PadraoCategoriasN0 } from './kitPlatform'
@@ -57,7 +58,7 @@ export async function lerPadraoDoAmbienteAtual(ambienteAlvo?: string): Promise<P
   return {
     grupos: grupos.filter((g) => g.ativo).map((g): GrupoPadraoN0 => {
       const comIcone = comIconePadraoGrupo(g) as GrupoRegistro
-      return { nome: g.nome, icone: comIcone.icone, iconeEstilo: comIcone.iconeEstilo, iconeCor: comIcone.iconeCor, percentual: percentualDe(g.nome) }
+      return { nome: g.nome, icone: comIcone.icone, iconeEstilo: comIcone.iconeEstilo, iconeCor: comIcone.iconeCor, percentual: percentualDe(g.nome), comportamento: comportamentoDoGrupo(g) ?? undefined }
     }),
     categorias: categorias.filter((c) => c.ativa).map((c): CategoriaPadraoN0 => {
       const comIcone = comIconePadraoCategoria(c) as Categoria
@@ -106,12 +107,31 @@ export async function aplicarPadrao(padrao: PadraoEditavel, ambienteAlvo?: strin
       const cats = padrao.categorias.filter((c) => c.grupo === nome)
       return cats.length > 0 && cats.every((c) => c.natureza === 'Receita') ? 'entrada' : 'saida'
     }
+    /* BUG REAL corrigido em 13/09/2026 (build 062): `Dexie.update()` com um
+       valor `undefined` APAGA a propriedade. Um padrão salvo em que algum
+       item não tenha ícone escolhido apagava o ícone do cadastro de quem
+       recebesse o padrão — e uma categoria/grupo sem ícone cai no genérico
+       "outros", que é o mesmo desenho cinza para todo mundo. Ou seja: uma
+       aplicação de padrão podia deixar a tela inteira com o mesmo ícone, sem
+       ninguém ter pedido nada disso.
+       A regra agora é: o padrão só ESCREVE ícone quando tem um para escrever;
+       ausência no padrão significa "não mexe", nunca "apaga". */
+    const soIconeDefinido = (i?: string, e?: string, c?: string) => ({
+      ...(i === undefined ? {} : { icone: i }),
+      ...(e === undefined ? {} : { iconeEstilo: e }),
+      ...(c === undefined ? {} : { iconeCor: c }),
+    })
     for (const g of padrao.grupos) {
       const existente = doAmbiente(await db.grupos.toArray(), amb).find((x) => x.nome === g.nome)
       if (existente?.id != null) {
-        await db.grupos.update(existente.id, { icone: g.icone, iconeEstilo: g.iconeEstilo as GrupoRegistro['iconeEstilo'], iconeCor: g.iconeCor })
+        await db.grupos.update(existente.id, { ...soIconeDefinido(g.icone, g.iconeEstilo, g.iconeCor) as Partial<GrupoRegistro>,
+          /* só preenche o comportamento se o grupo ainda não tiver um: a
+             escolha do dono do ambiente nunca é sobrescrita pelo padrão */
+          ...(existente.comportamento ? {} : { comportamento: g.comportamento ?? comportamentoPeloNome(g.nome) }) })
       } else {
-        await db.grupos.add({ ...carimbo, nome: g.nome, ativo: true, tipo: tipoDoGrupoNoPadrao(g.nome), icone: g.icone, iconeEstilo: g.iconeEstilo as GrupoRegistro['iconeEstilo'], iconeCor: g.iconeCor })
+        const tipoNovo = tipoDoGrupoNoPadrao(g.nome)
+        await db.grupos.add({ ...carimbo, nome: g.nome, ativo: true, tipo: tipoNovo, icone: g.icone, iconeEstilo: g.iconeEstilo as GrupoRegistro['iconeEstilo'], iconeCor: g.iconeCor,
+          comportamento: tipoNovo === 'saida' ? (g.comportamento ?? comportamentoPeloNome(g.nome)) : undefined })
       }
       nGrupos++
       if (g.percentual > 0) {
@@ -129,8 +149,8 @@ export async function aplicarPadrao(padrao: PadraoEditavel, ambienteAlvo?: strin
          preencher. O que o padrão escreve é só estrutura. */
       const campos = {
         grupo: c.grupo, natureza: c.natureza as Natureza,
-        receitaFixa: c.receitaFixa, icone: c.icone,
-        iconeEstilo: c.iconeEstilo as Categoria['iconeEstilo'], iconeCor: c.iconeCor,
+        receitaFixa: c.receitaFixa,
+        ...(soIconeDefinido(c.icone, c.iconeEstilo, c.iconeCor) as Partial<Categoria>),
       }
       if (existente?.id != null) await db.categorias.update(existente.id, campos)
       else await db.categorias.add({ ...carimbo, nome: c.nome, ativa: true, aceitavelMensal: 0, ...campos })

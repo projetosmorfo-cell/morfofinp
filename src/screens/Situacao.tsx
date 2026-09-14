@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { db, NATUREZAS_ORCAMENTAVEIS, type Categoria, type Lancamento } from '../db'
+import { db, type Categoria, type Lancamento } from '../db'
+import { categoriaConsomeMeta } from '../orcamento'
 import { mesAtualISO, type TelaProps } from '../mes'
 import { proximaDataRecorrencia } from '../recorrencia'
 import { hojeEfetivoISO } from '../hojeSimulado'
@@ -14,6 +15,7 @@ import TituloTelaN1 from '../kit/CabecalhoN1'
 import { SUBTITULO_SITUACAO, EXPLICACAO_SITUACAO } from '../subtitulosTelas'
 import { ExportSheet, type ExportRow } from '../kit/ExportSheet'
 import { lerDoAmbiente } from '../ambiente'
+import { jaAconteceu } from '../statusPagamento'
 
 interface LinhaCategoria {
   cat: Categoria
@@ -79,7 +81,7 @@ export default function Situacao({ mes, aoMudarMes, aoAbrirLancamento, aoAbrirPl
   for (const l of lancamentosDoMes) {
     if (l.valor >= 0 || l.transferenciaId != null) continue
     gastoPorCategoria.set(l.categoriaId, (gastoPorCategoria.get(l.categoriaId) ?? 0) + -l.valor)
-    if (l.pago !== false) {
+    if (jaAconteceu(l)) {
       gastoPagoPorCategoria.set(l.categoriaId, (gastoPagoPorCategoria.get(l.categoriaId) ?? 0) + -l.valor)
     }
   }
@@ -111,7 +113,7 @@ export default function Situacao({ mes, aoMudarMes, aoAbrirLancamento, aoAbrirPl
   // regra usada em Categorias.tsx, generalizada pra funcionar com qualquer
   // grupo, inclusive um novo. ---
   const porGrupo = grupos.map((g) => {
-    const doGrupo = categorias.filter((c) => c.grupo === g.nome && NATUREZAS_ORCAMENTAVEIS.includes(c.natureza))
+    const doGrupo = categorias.filter((c) => c.grupo === g.nome && categoriaConsomeMeta(c.natureza))
     const aceitavel = doGrupo.reduce((s, c) => s + c.aceitavelMensal, 0)
     const gasto = doGrupo.reduce((s, c) => s + (gastoPorCategoria.get(c.id!) ?? 0), 0)
     return { grupo: g.nome, aceitavel, gasto, icone: g.icone, iconeEstilo: g.iconeEstilo, iconeCor: g.iconeCor }

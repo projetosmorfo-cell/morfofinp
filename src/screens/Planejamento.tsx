@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { db, NATUREZAS_ORCAMENTAVEIS, type Categoria, type GrupoRegistro, type Lancamento } from '../db'
+import { db, type Categoria, type GrupoRegistro, type Lancamento } from '../db'
+import { categoriaConsomeMeta } from '../orcamento'
 import { mesAtualISO, type TelaProps } from '../mes'
 import { proximaDataRecorrencia } from '../recorrencia'
 import { hojeEfetivoISO } from '../hojeSimulado'
@@ -14,11 +15,72 @@ import ListaLancamentosCategoria from '../components/ListaLancamentosCategoria'
 import { Icone } from '../icones'
 import { useConfiguracaoIcones, tamanhoIconePx } from '../configuracaoIcones'
 import TituloTelaN1 from '../kit/CabecalhoN1'
+import { InfoDot } from '../kit/PadraoUI'
+import { calcularProjecao, explicacaoRitmo, fraseVeredito, linhaAporte } from '../projecao'
+import { paramsGlobais, usePlatformN0 } from '../kit/kitPlatform'
+import { useModoVisao } from '../configuracaoIcones'
+import GraficosPlanejamento, { type ModeloGrafico } from '../components/GraficosPlanejamento'
 import { ExportSheet, type ExportRow } from '../kit/ExportSheet'
 import { lerDoAmbiente } from '../ambiente'
 import { baseMetaDoMes } from '../baseMeta'
+import { jaAconteceu } from '../statusPagamento'
 import { SUBTITULO_PLANEJAMENTO, EXPLICACAO_PLANEJAMENTO } from '../subtitulosTelas'
 import AvisoBaseMetaZerada from '../components/AvisoBaseMetaZerada'
+
+/* A linha de introdução dos cards de grupo: quanto é o 100% e quanto os
+   percentuais somam de verdade. Silêncio quando fecha; alerta quando não. */
+function FaixaPercentuais({
+  base,
+  metas,
+  grupos,
+  aoAbrirCalibragem,
+}: {
+  base: number
+  metas: { grupo: string; percentual: number }[]
+  grupos: { nome: string; tipo?: string; ativo?: boolean }[]
+  aoAbrirCalibragem?: () => void
+}) {
+  const deSaida = grupos.filter((g) => g.tipo === 'saida' && g.ativo !== false)
+  if (deSaida.length === 0) return null
+  const total = deSaida.reduce((s, g) => s + (metas.find((m) => m.grupo === g.nome)?.percentual ?? 0), 0)
+  const dif = total - 100
+  const fechou = Math.abs(dif) < 0.5
+  const conteudo = (
+    <>
+      <span style={{ flex: 1, minWidth: 0 }}>
+        Receita fixa {fmt(base)} · percentuais somam{' '}
+        <strong data-testid="total-pct-planejamento">{Number(total.toFixed(2))}%</strong>
+        {!fechou && (dif > 0 ? ` — ${Number(dif.toFixed(2))}% a mais` : ` — faltam ${Number((-dif).toFixed(2))}%`)}
+      </span>
+      {aoAbrirCalibragem && <span className="aviso-calibragem-acao">calibrar</span>}
+    </>
+  )
+  /* A faixa é SEMPRE um botão que abre a Calibragem (13/09/2026). Até aqui só
+     virava botão quando os percentuais NÃO fechavam 100% — então, com tudo
+     calibrado, a palavra "calibrar" ficava escrita em cor de destaque sem
+     clicar em lugar nenhum, e a tela de calibragem só era alcançável pelo
+     lápis de um grupo. Era a reclamação literal: "ali não deveria ser um
+     botão? não achei em nenhum lugar um botão pra abrir a tela de calibragem".
+     O ⚠ continua marcando só o caso de erro. */
+  if (!aoAbrirCalibragem) {
+    return (
+      <div className="faixa-percentuais" data-testid="faixa-percentuais">
+        {conteudo}
+      </div>
+    )
+  }
+  return (
+    <button
+      type="button"
+      className={`faixa-percentuais ${fechou ? '' : 'alerta'}`}
+      onClick={aoAbrirCalibragem}
+      data-testid="faixa-percentuais"
+    >
+      {fechou ? null : '⚠ '}
+      {conteudo}
+    </button>
+  )
+}
 
 type Classe = 'entrada' | 'saida'
 
@@ -29,7 +91,7 @@ type Classe = 'entrada' | 'saida'
 // movimento de caixa entre lugares, não uma meta a bater.
 function classeDaCategoria(cat: Categoria): Classe | null {
   if (cat.natureza === 'Receita') return 'entrada'
-  if (NATUREZAS_ORCAMENTAVEIS.includes(cat.natureza)) return 'saida'
+  if (categoriaConsomeMeta(cat.natureza)) return 'saida'
   return null
 }
 
@@ -53,7 +115,7 @@ function somaTotais(xs: Totais[]): Totais {
 // que ainda falta) — aqui o eixo é "o que era esperado" contra "o que
 // aconteceu" e "o que ainda vai acontecer", com um fechamento (sobra/falta)
 // em cada nível.
-export default function Planejamento({ mes, aoMudarMes, aoAbrirLancamento }: TelaProps) {
+export default function Planejamento({ mes, aoMudarMes, aoAbrirLancamento, aoAbrirCalibragem }: TelaProps) {
   const categorias = useLiveQuery(() => lerDoAmbiente(db.categorias.toArray()), [])
   const grupos = useLiveQuery(() => lerDoAmbiente(db.grupos.toArray()), [])
   const lancamentosDoMes = useLiveQuery(
@@ -64,6 +126,12 @@ export default function Planejamento({ mes, aoMudarMes, aoAbrirLancamento }: Tel
 
   const [grupoAberto, setGrupoAberto] = useState<string | null>(null)
   const [exportOpen, setExportOpen] = useState(false) /* G44 regra 11b */
+  /* Aba 2 (Gráficos) — só na versão Ideal; Light e Premium continuam com a
+     árvore de sempre, sem nem ver o seletor de abas. */
+  const [abaPlan, setAbaPlan] = useState<'arvore' | 'graficos'>('arvore')
+  const [modeloGrafico, setModeloGrafico] = useState<ModeloGrafico>('linhas')
+  const [grupoFiltroGrafico, setGrupoFiltroGrafico] = useState<string | null>(null)
+  const [catAbertaGrafico, setCatAbertaGrafico] = useState<number | null>(null)
   const [categoriaAberta, setCategoriaAberta] = useState<number | null>(null)
   // Terceira seção (sem orçamento e sem movimento) vem recolhida por padrão
   // em cada grupo — pouco relevante no dia a dia, mas ainda acessível (30/08/2026,
@@ -76,6 +144,12 @@ export default function Planejamento({ mes, aoMudarMes, aoAbrirLancamento }: Tel
   const [editandoCategoria, setEditandoCategoria] = useState<Categoria | null>(null)
   const [editandoGrupo, setEditandoGrupo] = useState<GrupoRegistro | null>(null)
   const metas = useLiveQuery(() => lerDoAmbiente(db.metas.toArray()), [])
+  /* A frase do veredito também aqui (13/09/2026, escolha do Rafael: "nas duas
+     telas"). É a mesma função da tela Hoje — uma conta só, dois lugares. Fora
+     da Ideal ela não aparece: Light e Premium não foram tocadas. */
+  const contasParaProjecao = useLiveQuery(() => lerDoAmbiente(db.contas.toArray()), [])
+  const platformProjecao = usePlatformN0()
+  const modoVisaoAtual = useModoVisao()
   const { pctGrupo, pctCategoria } = useConfiguracaoIcones()
 
   if (!categorias || !grupos || !lancamentosDoMes || !lancamentosTodos) return null
@@ -129,7 +203,11 @@ export default function Planejamento({ mes, aoMudarMes, aoAbrirLancamento }: Tel
     for (const l of lancamentos) {
       const pertence = classe === 'entrada' ? l.valor > 0 : l.valor < 0
       if (!pertence) continue
-      if (l.pago !== false) realizado += Math.abs(l.valor)
+      /* `jaAconteceu`, não `pago !== false` (14/09/2026): compra de cartão de
+         data já passada é REALIZADO, mesmo com a fatura em aberto. Sem isso a
+         barra do mês ficava âmbar inteira até a fatura ser paga, no mês
+         seguinte — ver `contasCartao.ts`. */
+      if (jaAconteceu(l)) realizado += Math.abs(l.valor)
       else previstoLancado += Math.abs(l.valor)
     }
     const previsto = previstoLancado + (previstoFuturoPorCategoria.get(cat.id!) ?? 0)
@@ -181,9 +259,11 @@ export default function Planejamento({ mes, aoMudarMes, aoAbrirLancamento }: Tel
   /* Meta em R$ do grupo — a MESMA conta do donut e da aba Metas (percentual ×
      salário do mês anterior). Existe como função pra o cabeçalho do grupo
      poder mostrar, ao lado da soma dos limites, o número que o gráfico usa. */
+  function percentualDoGrupo(nome: string) {
+    return metas?.find((m) => m.grupo === nome)?.percentual ?? 0
+  }
   function metaEmReaisDoGrupo(nome: string) {
-    const pct = metas?.find((m) => m.grupo === nome)?.percentual ?? 0
-    return (baseMetaEmReais * pct) / 100
+    return (baseMetaEmReais * percentualDoGrupo(nome)) / 100
   }
 
   const fatiasMeta: FatiaGrupo[] = porGrupo
@@ -219,17 +299,23 @@ export default function Planejamento({ mes, aoMudarMes, aoAbrirLancamento }: Tel
   // função de propósito (não componente aninhado), devolve JSX direto pra
   // não forçar remount da subárvore a cada render (mesmo motivo do
   // `cabecalhoExpansivel` em Situacao.tsx).
-  function linhaTotais(rotulo: string, classe: Classe, t: Totais, icone?: ReactNode) {
+  /* 13/09/2026 — a linha "já pago X · previsto Y" saiu daqui. A barra logo
+     acima já diz "X de Y" e desenha o realizado e o comprometido em cores
+     diferentes; repetir em texto era metade do excesso que o Rafael apontou
+     ("tem muito texto... a palavra-chave mandatória é a limpeza"). O detalhe
+     de cada lançamento continua a um toque, na cascata. */
+  function linhaTotais(rotulo: string, classe: Classe, t: Totais, icone?: ReactNode, acao?: ReactNode) {
     const movimento = t.realizado + t.previsto
     if (classe === 'saida') {
       return (
-        <div>
-          <BarraMeta rotulo={rotulo} gasto={movimento} previsto={t.planejado} mostrarDestaque={false} icone={icone} />
-          <p className="texto-fraco" style={{ margin: '2px 0 0' }}>
-            já pago {fmt(t.realizado)}
-            {t.previsto > 0.005 && ` · previsto ${fmt(t.previsto)}`}
-          </p>
-        </div>
+        <BarraMeta
+          rotulo={rotulo}
+          gasto={movimento}
+          previsto={t.planejado}
+          mostrarDestaque={false}
+          icone={icone}
+          acao={acao}
+        />
       )
     }
     // Entrada: mais é bom, não "estourar" — barra neutra sem semântica de
@@ -243,23 +329,25 @@ export default function Planejamento({ mes, aoMudarMes, aoAbrirLancamento }: Tel
             {icone}
             {rotulo}
           </span>
-          <span className="texto-fraco">
-            {fmt(movimento)} {t.planejado > 0 ? `de ${fmt(t.planejado)}` : '(sem planejado)'}
+          <span className="texto-fraco barra-topo-valor">
+            {fmt(movimento)} {t.planejado > 0 ? `de ${fmt(t.planejado)}` : 'sem previsão'}
           </span>
+          {acao}
         </div>
         <div className="barra-meta">
           <div className="fill" style={{ width: `${pct}%` }} />
           {t.planejado > 0 && <div className="marcador" style={{ left: '100%' }} />}
         </div>
-        <p className="texto-fraco" style={{ margin: '2px 0 0' }}>
-          já recebido {fmt(t.realizado)}
-          {t.previsto > 0.005 && ` · previsto ${fmt(t.previsto)}`}
-        </p>
       </div>
     )
   }
 
-  function linhaFechamento(rotulo: string, valor: number) {
+  /* O RÓTULO acompanha o sinal (13/09/2026). "Sobra planejada −R$ 16.717" é
+     uma contradição escrita: se o número é negativo, não é sobra, é falta.
+     Ele perguntou exatamente isso — "quero entender como esses textos vão
+     explicar se ele muda dependendo se for negativo ou positivo". */
+  function linhaFechamento(quando: string, valor: number) {
+    const rotulo = `${valor >= 0 ? 'Sobra' : 'Falta'} ${quando}`
     return (
       <div className="linha" style={{ border: 'none', padding: '4px 0' }}>
         <span>{rotulo}</span>
@@ -271,12 +359,71 @@ export default function Planejamento({ mes, aoMudarMes, aoAbrirLancamento }: Tel
     )
   }
 
+  const blocoVeredito = modoVisaoAtual === 'ideal' ? (() => {
+        const proj = calcularProjecao({
+          lancamentos: lancamentosTodos ?? [],
+          categorias: categorias ?? [],
+          contas: contasParaProjecao,
+          grupos: grupos ?? [],
+          metas: metas ?? [],
+          mesISO: mes,
+          hojeISO: hojeEfetivoISO(),
+          janelaDias: paramsGlobais(platformProjecao).janelaMediaDias,
+        })
+        const frase = fraseVeredito(proj)
+        if (!frase) return null
+        const aporte = linhaAporte(proj)
+        return (
+          <div className="cartao" style={{ marginTop: 0 }} data-testid="veredito-planejamento">
+            <div className="linha-veredito" style={{ marginTop: 0, paddingTop: 0, borderTop: 'none' }}>
+              <span
+                className={`ideal-t3 ${proj.variavel < 0 ? 'veredito-mal' : 'veredito-bem'}`}
+                data-testid="frase-veredito-planejamento"
+              >
+                {frase}
+              </span>
+              <InfoDot titulo="Nesse ritmo" info={explicacaoRitmo(paramsGlobais(platformProjecao).janelaMediaDias)} />
+            </div>
+            {aporte && <p className="linha-aporte ideal-t4">{aporte}</p>}
+          </div>
+        )
+      })() : null
+
   return (
     <>
       <div className="cabecalho-fixo">
-        <TituloTelaN1 titulo="Planejamento" subtitulo={SUBTITULO_PLANEJAMENTO} explicacao={<>{EXPLICACAO_PLANEJAMENTO} São 4 níveis: Geral, Grupo, Categoria e Lançamento — toque num grupo pra descer de nível.</>} onExportar={() => setExportOpen(true)} />
+        <TituloTelaN1
+          titulo="Planejamento"
+          subtitulo={SUBTITULO_PLANEJAMENTO}
+          explicacao={<>{EXPLICACAO_PLANEJAMENTO} São 4 níveis: Geral, Grupo, Categoria e Lançamento — toque num grupo pra descer de nível.</>}
+          onExportar={() => setExportOpen(true)}
+          /* ⚖ sempre disponível, mesmo com tudo calibrado — a faixa de alerta
+             abaixo só aparece quando há algo errado (build 059). */
+          antes={aoAbrirCalibragem ? (
+            <button
+              type="button"
+              className="botao-voltar-circular"
+              onClick={aoAbrirCalibragem}
+              aria-label="Calibragem"
+              data-testid="abrir-calibragem"
+            >
+              ⚖
+            </button>
+          ) : undefined}
+        />
         <SeletorMes mes={mes} onMudar={aoMudarMes} />
       </div>
+      {/* O TOTAL DOS PERCENTUAIS, antes dos cards de grupo (pedido do Rafael ao
+          aprovar o A1: "apresentar um total dos percentuais logo no topo antes
+          dos cards de grupos, isso dá a introdução aos cards abaixo"). Quando
+          não fecha 100%, a linha inteira vira o alerta e leva à Calibragem —
+          era essa a ponte que faltava. */}
+      <FaixaPercentuais
+        base={baseMetaEmReais}
+        metas={metas ?? []}
+        grupos={grupos ?? []}
+        aoAbrirCalibragem={aoAbrirCalibragem}
+      />
       {exportOpen && <ExportSheet title="Planejamento" filenameBase={`morfofinp-planejamento-${mes}`}
         screenColumns={[
           { key: 'item', label: 'Item' },
@@ -308,34 +455,76 @@ export default function Planejamento({ mes, aoMudarMes, aoAbrirLancamento }: Tel
 
       {/* Base zerada não pode passar em silêncio: sem ela toda meta vira
           R$ 0,00 e o donut desenha contra zero (bug real de 12/09/2026). */}
+      {modoVisaoAtual === 'ideal' && (
+        <div className="abas-planejamento" role="tablist" aria-label="Modo do Planejamento">
+          <button type="button" role="tab" aria-selected={abaPlan === 'arvore'}
+            className={abaPlan === 'arvore' ? 'ativa' : ''}
+            onClick={() => setAbaPlan('arvore')} data-testid="aba-arvore">Árvore</button>
+          <button type="button" role="tab" aria-selected={abaPlan === 'graficos'}
+            className={abaPlan === 'graficos' ? 'ativa' : ''}
+            onClick={() => setAbaPlan('graficos')} data-testid="aba-graficos">Gráficos</button>
+        </div>
+      )}
+
+      {modoVisaoAtual === 'ideal' && abaPlan === 'graficos' ? (
+        <GraficosPlanejamento
+          porGrupo={porGrupo}
+          modelo={modeloGrafico}
+          aoTrocarModelo={setModeloGrafico}
+          grupoFiltro={grupoFiltroGrafico}
+          aoFiltrarGrupo={(g) => { setGrupoFiltroGrafico(g); setCatAbertaGrafico(null) }}
+          categoriaAberta={catAbertaGrafico}
+          aoAbrirCategoria={setCatAbertaGrafico}
+          lancamentosPorCategoria={lancamentosPorCategoria}
+          aoAbrirLancamento={aoAbrirLancamento}
+          veredito={blocoVeredito}
+          iconeDaCategoria={(c) => (c.icone && c.icone !== 'nenhum'
+            ? <Icone id={c.icone} estilo={c.iconeEstilo} cor={c.iconeCor} tamanho={tamanhoIconePx('categoria', pctCategoria)} />
+            : null)}
+        />
+      ) : (
+      <>
+      {blocoVeredito}
       {baseMetaEmReais === 0 && <AvisoBaseMetaZerada />}
       <GraficoMetasGrupos fatias={fatiasMeta} />
 
-      <h2>Nível Geral</h2>
-      <div className="cartao">
-        <p className="texto-fraco" style={{ marginTop: 0, textTransform: 'uppercase', fontSize: 12 }}>
-          Entradas
-        </p>
-        <div className="total-geral">{linhaTotais('Total de entradas', 'entrada', totalEntradas)}</div>
-        <p className="texto-fraco" style={{ marginTop: 16, textTransform: 'uppercase', fontSize: 12 }}>
-          Saídas
-        </p>
-        <div className="total-geral">{linhaTotais('Total de saídas', 'saida', totalSaidas)}</div>
-        <div className="total-geral" style={{ marginTop: 16 }}>
-          {linhaFechamento('Sobra/falta planejada', sobraPlanejada)}
-          {linhaFechamento('Sobra/falta até agora', sobraAteAgora)}
-          {linhaFechamento('Sobra/falta projetada', sobraProjetada)}
+      {/* 13/09/2026 — o card do mês, enxuto. Saíram os títulos de jargão
+          ("Nível Geral", "Nível Grupo", "Nível Categoria", "Nível
+          Lançamento"): a tela é uma cascata, e o que diz em que nível a
+          pessoa está é o que ela acabou de tocar, não um rótulo técnico.
+          Saíram também os rótulos "ENTRADAS"/"SAÍDAS" acima de linhas que já
+          se chamam "Entradas"/"Saídas", e o parágrafo de 3 linhas sobre a
+          sobra planejada — virou uma frase curta, que é quando ela aparece. */}
+      <div className="cartao" data-testid="card-mes-planejamento">
+        <div className="total-geral">{linhaTotais('Entradas', 'entrada', totalEntradas)}</div>
+        <div className="total-geral" style={{ marginTop: 10 }}>{linhaTotais('Saídas', 'saida', totalSaidas)}</div>
+        <div className="total-geral" style={{ marginTop: 10 }}>
+          {linhaFechamento('planejada', sobraPlanejada)}
+          {linhaFechamento('até agora', sobraAteAgora)}
+          {linhaFechamento('projetada', sobraProjetada)}
         </div>
         {totalEntradas.planejado === 0 && (
-          <p className="texto-fraco" style={{ marginTop: 8 }}>
-            "Sobra/falta planejada" parece só falta porque nenhuma categoria de Receita tem um
-            planejado cadastrado ainda — cadastre em Categorias ("Planejado mensal", só aparece pra
-            natureza Receita) pra esse número refletir a realidade.
+          /* TEXTO CORRIGIDO (13/09/2026). O anterior dizia "falta dizer quanto
+             espera receber nas categorias de Receita" e o Rafael leu como se
+             ele ainda precisasse marcar alguma coisa — sendo que o Salário dele
+             JÁ está marcado como receita fixa. São dois campos diferentes e o
+             texto não distinguia:
+               • a FLAG "é receita fixa" define a base das metas (o 100%) —
+                 está marcada, e é por isso que as metas por grupo funcionam;
+               • "quanto espera receber por mês" (`esperadoMensal`) é o
+                 planejado de ENTRADA — é este que está vazio, e só ele afeta
+                 a linha "sobra planejada".
+             Agora o texto diz qual é qual e mostra que a base está de pé —
+             em duas frases, não num parágrafo (a palavra-chave da versão
+             Ideal continua sendo limpeza). */
+          <p className="texto-fraco texto-quebra" style={{ margin: '8px 0 0', fontSize: 11.5 }}>
+            Nenhuma categoria de receita tem “quanto espera receber por mês” preenchido — por isso a
+            linha “planejada” só conta o que está previsto gastar. Esse campo é diferente da flag de
+            receita fixa, que já está marcada e é o que forma a base das metas ({fmt(baseMetaEmReais)}).
           </p>
         )}
       </div>
 
-      <h2>Nível Grupo</h2>
       {porGrupo.map(({ grupo, tipo: tipoGrupo, icone, iconeEstilo, iconeCor, itens, totalGrupo }) => {
         const grupoExpandido = grupoAberto === grupo
         const temMovimentoNoGrupo = totalGrupo.planejado > 0 || totalGrupo.realizado > 0 || totalGrupo.previsto > 0
@@ -378,8 +567,18 @@ export default function Planejamento({ mes, aoMudarMes, aoAbrirLancamento }: Tel
 
         function linhaCategoria({ cat, classe, totais }: (typeof itens)[number]) {
           const catExpandida = categoriaAberta === cat.id
+          /* IDENTIFICAÇÃO VISUAL da receita fixa (13/09/2026, pedido dele):
+             dentro do card de um grupo de RECEITA, dá para ver de relance
+             quais categorias formam a base das metas — sem precisar abrir cada
+             uma. É só marca: não marca nem desmarca no toque (a linha inteira
+             já abre os lançamentos), e quem muda a flag é o lápis. */
+          const ehBase = cat.natureza === 'Receita' && !!cat.receitaFixa
           return (
-            <div key={cat.id} style={{ padding: '10px 0', borderBottom: '1px solid var(--borda)' }}>
+            <div
+              key={cat.id}
+              className={ehBase ? 'linha-cat-base-meta' : undefined}
+              style={{ padding: '10px 0', borderBottom: '1px solid var(--borda)' }}
+            >
               <div
                 className={`linha-expansivel ${catExpandida ? 'expandida' : ''}`}
                 onClick={() => alternarCategoria(cat.id!)}
@@ -397,29 +596,32 @@ export default function Planejamento({ mes, aoMudarMes, aoAbrirLancamento }: Tel
                     cat.icone !== 'nenhum' && (
                       <Icone id={cat.icone} estilo={cat.iconeEstilo} cor={cat.iconeCor} tamanho={tamanhoIconePx('categoria', pctCategoria)} />
                     ),
+                    /* O lápis da CATEGORIA entra na linha de título da própria
+                       barra (13/09/2026), no lugar da coluna que existia à
+                       direita e espremia nome, valor e barra. */
+                    <button
+                      type="button"
+                      className="acao-topo-barra"
+                      aria-label={`Editar a categoria ${cat.nome}`}
+                      data-testid={`editar-aceitavel-${cat.id}`}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setEditandoCategoria(cat)
+                      }}
+                    >
+                      <PencilSquareIcon width={15} height={15} />
+                    </button>,
+                  )}
+                  {cat.natureza === 'Receita' && (
+                    <p className="selo-base-meta texto-quebra" data-testid={`base-meta-${cat.id}`}>
+                      <span aria-hidden>{ehBase ? '☑' : '☐'}</span>{' '}
+                      {ehBase ? 'Entra na base das metas' : 'Fora da base das metas'}
+                    </p>
                   )}
                 </div>
-                <button
-                  type="button"
-                  aria-label={`Editar meta de ${cat.nome}`}
-                  data-testid={`editar-aceitavel-${cat.id}`}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    setEditandoCategoria(cat)
-                  }}
-                  /* `flex: 0 0 auto` sobrescreve a regra do `index.css` que dá
-                     `flex: 1` ao ÚLTIMO filho de uma linha expansível — regra
-                     escrita quando o último filho ERA o conteúdo. Com o lápis
-                     no fim, sem isso o botão é que esticava e o conteúdo
-                     encolhia. */
-                  style={{ flex: '0 0 auto', background: 'none', border: 'none', padding: 4, cursor: 'pointer', color: 'var(--texto-fraco)', display: 'flex', alignSelf: 'flex-start', marginTop: 2 }}
-                >
-                  <PencilSquareIcon width={16} height={16} />
-                </button>
               </div>
               {catExpandida && (
                 <div style={{ marginTop: 8 }}>
-                  <h2 style={{ margin: '0 0 4px', fontSize: 12 }}>Nível Lançamento</h2>
                   <ListaLancamentosCategoria
                     lancamentos={lancamentosPorCategoria.get(cat.id!) ?? []}
                     categoriaPorId={categoriaPorId}
@@ -439,30 +641,52 @@ export default function Planejamento({ mes, aoMudarMes, aoAbrirLancamento }: Tel
               onClick={() => alternarGrupo(grupo)}
             >
               <span className="seta-expandir">▶</span>
-              <div style={{ flex: 1 }}>
-                <div className="linha linha-cabecalho-grupo" style={{ border: 'none', padding: 0 }}>
-                  <strong style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    {icone !== 'nenhum' && (
-                      <Icone id={icone} estilo={iconeEstilo} cor={iconeCor} tamanho={tamanhoIconePx('grupo', pctGrupo)} />
-                    )}
-                    {grupo}
-                  </strong>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <span className="texto-fraco">{itens.length} categoria(s)</span>
-                    <button
-                      type="button"
-                      aria-label={`Editar meta do grupo ${grupo}`}
-                      data-testid={`editar-meta-${grupo}`}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        const g = grupos.find((x) => x.nome === grupo)
-                        if (g) setEditandoGrupo(g)
-                      }}
-                      style={{ background: 'none', border: 'none', padding: 4, cursor: 'pointer', color: 'var(--texto-fraco)', display: 'flex' }}
-                    >
-                      <PencilSquareIcon width={16} height={16} />
-                    </button>
-                  </span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                {/* Cabeçalho A1 (escolha do Rafael no protótipo de 13/09/2026):
+                    quem MANDA no card é o percentual — ele é a decisão que a
+                    pessoa toma sobre o grupo, e o valor em R$ é consequência
+                    dele com a base do mês. Por isso o número grande à direita,
+                    com o R$ embaixo em letra pequena, e a contagem de
+                    categorias saiu da mesma linha do nome (era ela que roubava
+                    o lugar de destaque). O total dos percentuais fica na faixa
+                    do topo da tela, antes de qualquer card. */}
+                <div className="cabecalho-grupo-a1 linha-cabecalho-grupo">
+                  <div className="ident-grupo-a1">
+                    <strong style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                      {icone !== 'nenhum' && (
+                        <Icone id={icone} estilo={iconeEstilo} cor={iconeCor} tamanho={tamanhoIconePx('grupo', pctGrupo)} />
+                      )}
+                      <span className="texto-quebra">{grupo}</span>
+                    </strong>
+                    <span className="texto-fraco" style={{ fontSize: 11.5 }}>{itens.length} categoria(s)</span>
+                  </div>
+                  {percentualDoGrupo(grupo) > 0 && (
+                    <div className="pct-grupo-a1">
+                      <span className="numero" data-testid={`pct-card-${grupo}`}>
+                        {Number(percentualDoGrupo(grupo).toFixed(2))}%
+                      </span>
+                      <span className="texto-fraco">{fmt(metaEmReaisDoGrupo(grupo))}</span>
+                    </div>
+                  )}
+                  {/* O lápis do GRUPO mora AQUI, no cabeçalho do card, ao lado
+                      do percentual — não numa coluna própria à direita de tudo
+                      (13/09/2026: "você esmagou a barra e todos os dados do
+                      lado... coloca esse ícone em outro lugar, que ele fique
+                      visível mas sem sacrificar tudo"). A barra abaixo voltou à
+                      largura inteira do card. */}
+                  <button
+                    type="button"
+                    className="acao-topo-barra acao-editar-grupo"
+                    aria-label={`Editar o grupo ${grupo}`}
+                    data-testid={`editar-meta-${grupo}`}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      const g = grupos.find((x) => x.nome === grupo)
+                      if (g) setEditandoGrupo(g)
+                    }}
+                  >
+                    <PencilSquareIcon width={17} height={17} />
+                  </button>
                 </div>
                 {/* Barra de verdade em vez de só texto (30/08/2026) — reusa a
                     mesma linhaTotais() do nível Geral/Categoria. */}
@@ -481,8 +705,11 @@ export default function Planejamento({ mes, aoMudarMes, aoAbrirLancamento }: Tel
                         a tela de Metas de Grupo já dá, agora aqui também.
                         Assim o real × previsto da meta do grupo e o
                         fechamento das categorias ficam separados e nítidos. */}
+                    {/* "Total", não "Total do grupo": o nome do grupo está logo
+                        acima, no cabeçalho do card, e o rótulo longo era cortado
+                        depois que o botão de editar entrou na linha. */}
                     {linhaTotais(
-                      'Total do grupo',
+                      'Total',
                       classeGrupo,
                       classeGrupo === 'saida' && metaEmReaisDoGrupo(grupo) > 0
                         ? { ...totalGrupo, planejado: metaEmReaisDoGrupo(grupo) }
@@ -493,15 +720,20 @@ export default function Planejamento({ mes, aoMudarMes, aoAbrirLancamento }: Tel
                         const metaGrupo = metaEmReaisDoGrupo(grupo)
                         const somaCategorias = totalGrupo.planejado
                         const diferenca = metaGrupo - somaCategorias
+                        /* Curto de propósito (13/09/2026): esta é a linha que
+                           cumpre a função da tela ("esse planejamento não está
+                           regular, não está batendo, tem que fazer ajuste"),
+                           então ela fica — mas em uma linha, não em duas
+                           frases. Quando fecha, some: silêncio é a resposta
+                           certa pra "está tudo certo". */
+                        if (Math.abs(diferenca) < 1) return null
                         return (
-                          <p style={{ margin: '4px 0 0', fontSize: 11.5 }} className="texto-fraco">
-                            Metas das categorias somam {fmt(somaCategorias)} ·{' '}
-                            {Math.abs(diferenca) < 1 ? (
-                              <span className="valor-pos texto-quebra">fecham certinho com a meta do grupo</span>
-                            ) : diferenca > 0 ? (
-                              <span className="valor-pos texto-quebra">sobram {fmt(diferenca)} da meta do grupo por distribuir</span>
+                          <p style={{ margin: '4px 0 0', fontSize: 11.5 }} className="texto-fraco texto-quebra">
+                            Categorias somam {fmt(somaCategorias)} —{' '}
+                            {diferenca > 0 ? (
+                              <span className="valor-pos">sobram {fmt(diferenca)} por distribuir</span>
                             ) : (
-                              <span className="valor-neg texto-quebra">excedem a meta do grupo em {fmt(-diferenca)}</span>
+                              <span className="valor-neg">excedem em {fmt(-diferenca)}</span>
                             )}
                           </p>
                         )
@@ -514,26 +746,22 @@ export default function Planejamento({ mes, aoMudarMes, aoAbrirLancamento }: Tel
 
             {grupoExpandido && (
               <div style={{ marginTop: 12, borderTop: '1px solid var(--borda)', paddingTop: 8 }}>
-                <h2 style={{ marginTop: 0 }}>Nível Categoria</h2>
-
+                {/* As categorias COM meta não levam mais rótulo de seção: é o
+                    caso normal, e o normal não precisa de título (13/09/2026).
+                    Só o que foge dele é anunciado — e em uma linha. */}
                 {comOrcamento.length > 0 && (
-                  <>
-                    <p className="texto-fraco" style={{ marginTop: 0, textTransform: 'uppercase', fontSize: 11, color: 'var(--azul)' }}>
-                      Com orçamento previsto
-                    </p>
-                    <div style={{ borderLeft: '3px solid var(--azul)', paddingLeft: 10 }}>
-                      {comOrcamento.map(linhaCategoria)}
-                    </div>
-                  </>
+                  <div style={{ borderLeft: '3px solid var(--azul)', paddingLeft: 10 }}>
+                    {comOrcamento.map(linhaCategoria)}
+                  </div>
                 )}
 
                 {semOrcamentoComMovimento.length > 0 && (
                   <>
                     <p
                       className="texto-fraco"
-                      style={{ marginTop: 16, textTransform: 'uppercase', fontSize: 11, color: 'var(--amarelo)' }}
+                      style={{ margin: '12px 0 0', fontSize: 11, color: 'var(--amarelo)' }}
                     >
-                      Sem orçamento, mas com movimento
+                      Gasto sem meta
                     </p>
                     <div style={{ borderLeft: '3px solid var(--amarelo)', paddingLeft: 10 }}>
                       {semOrcamentoComMovimento.map(linhaCategoria)}
@@ -542,7 +770,7 @@ export default function Planejamento({ mes, aoMudarMes, aoAbrirLancamento }: Tel
                 )}
 
                 {semOrcamentoSemMovimento.length > 0 && (
-                  <div style={{ marginTop: 16 }}>
+                  <div style={{ marginTop: 12 }}>
                     <button
                       type="button"
                       onClick={() => alternarSecaoSemMovimento(grupo)}
@@ -569,7 +797,7 @@ export default function Planejamento({ mes, aoMudarMes, aoAbrirLancamento }: Tel
                       >
                         ▶
                       </span>
-                      Sem orçamento e sem movimento ({semOrcamentoSemMovimento.length})
+                      Sem meta e sem movimento ({semOrcamentoSemMovimento.length})
                     </button>
                     {secoesSemMovimentoAbertas.has(grupo) && (
                       <div style={{ borderLeft: '3px solid var(--borda)', paddingLeft: 10, marginTop: 8 }}>
@@ -584,6 +812,9 @@ export default function Planejamento({ mes, aoMudarMes, aoAbrirLancamento }: Tel
         )
       })}
 
+      </>
+      )}
+
       {/* Botão flutuante presente em toda tela principal (31/08/2026, mesmo dia). */}
       <button type="button" className="botao-flutuante" onClick={() => aoAbrirLancamento()} aria-label="Novo lançamento">
         +
@@ -595,6 +826,7 @@ export default function Planejamento({ mes, aoMudarMes, aoAbrirLancamento }: Tel
         <PopupMetaGrupo
           grupo={editandoGrupo}
           percentualAtual={metas?.find((m) => m.grupo === editandoGrupo.nome)?.percentual ?? 0}
+          aoAbrirCalibragem={aoAbrirCalibragem ? () => { setEditandoGrupo(null); aoAbrirCalibragem() } : undefined}
           baseEmReais={baseMetaEmReais}
           mesVigencia={mes.replace('-', '')}
           onFechar={() => setEditandoGrupo(null)}
