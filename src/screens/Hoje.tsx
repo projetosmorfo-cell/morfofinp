@@ -33,6 +33,7 @@ import { InfoDot } from '../kit/PadraoUI'
 import { fmtBRL as fmt, fmtComSinal } from '../formatoMoeda'
 import { categoriaConsomeMeta, idsDeCofre, lancamentoConsomeMeta } from '../orcamento'
 import BlocoRecolhivel from '../components/BlocoRecolhivel'
+import BarrasTopoHoje from '../components/BarrasTopoHoje'
 import {
   calcularDoisNumeros,
   fraseSaldoLivre,
@@ -92,6 +93,11 @@ export default function Hoje({ mes, aoMudarMes, aoAbrirLancamento, aoAbrirPlanej
        realizado (azul), não comprometido (âmbar) — ver `contasCartao.ts`. */
     if (!jaAconteceu(l)) compPorCategoria.set(cat.id!, (compPorCategoria.get(cat.id!) ?? 0) + v)
   }
+  /* O âmbar da barra da meta (build 067): o que já está lançado no mês mas
+     ainda não aconteceu. Sai da MESMA conta das categorias, então a barra do
+     topo e as barras de baixo nunca contam coisas diferentes. */
+  let comprometidoTotal = 0
+  for (const v of compPorCategoria.values()) comprometidoTotal += v
 
   /* Toda categoria que CONSOME META entra — não só as de natureza Consumo.
      Enquanto os cards eram "onde estourei/onde economizar" (só gasto) isso não
@@ -220,19 +226,21 @@ export default function Hoje({ mes, aoMudarMes, aoAbrirLancamento, aoAbrirPlanej
               donut mostra composição e barra mostra PROGRESSO — a pergunta é
               "em que ponto do mês eu estou". Em 430px também rende bem mais. */}
           <div className="cartao" data-testid="hoje-topo">
-            {/* A IDENTIDADE, uma linha só, sempre visível (build 066). É ela
-                que amarra os dois totais — e era o número que faltava na tela
-                antiga: sem o caixa acumulado escrito, "sobrou 1.818,93" (o
-                resultado DO MÊS) e "livre 2.878,53" (acumulado menos reservas)
-                pareciam contradição. */}
-            <div className="linha-identidade" data-testid="linha-identidade">
-              <span className="texto-quebra">
-                Caixa <strong>{fmtComSinal(numeros.caixaAcumulado)}</strong> − reservado{' '}
-                <strong>{fmt(numeros.reservado)}</strong> = livre{' '}
-                <strong>{fmtComSinal(numeros.saldoLivre)}</strong>
-              </span>
-              <InfoDot titulo="Como esses números se somam" info={EXPLICACAO_IDENTIDADE} />
-            </div>
+            {/* A IDENTIDADE, agora DESENHADA (build 067). Era uma linha de texto
+                ("Caixa X − reservado Y = livre Z"), e o Rafael pediu para trocar
+                por barras: o mesmo conteúdo, lido de relance. Ver
+                `BarrasTopoHoje.tsx` para as três decisões que o pedido não
+                cobria. */}
+            <BarrasTopoHoje
+              meta={numeros.metaTotal}
+              realizado={numeros.realizado}
+              comprometido={comprometidoTotal}
+              resultadoDoMes={numeros.resultadoDoMes}
+              caixaAnterior={numeros.caixaAcumulado - numeros.resultadoDoMes}
+              caixaAcumulado={numeros.caixaAcumulado}
+              saldoLivre={numeros.saldoLivre}
+              reservado={numeros.reservado}
+            />
 
             {/* ---------- 1 · LIVRE DE TUDO ---------- */}
             <div className="bloco-numero" data-testid="bloco-saldo-livre">
@@ -264,27 +272,12 @@ export default function Hoje({ mes, aoMudarMes, aoAbrirLancamento, aoAbrirPlanej
                     {fmtComSinal(numeros.saldoLivre)}
                   </span>
                 </div>
-                {/* O mês em si — o que a faixa "MÊS ENCERRADO" mostrava solta no
-                    topo até a build 065. Ela é detalhe do CAIXA, não um terceiro
-                    número grande. */}
-                <div className="linha-detalhe-cat" style={{ marginTop: 8 }}>
-                  <span className="ideal-t4">
-                    {mesFechado ? 'Entrou no mês (encerrado)' : 'Entrou no mês'}
-                  </span>
-                  <span className="ideal-t3">{fmt(numeros.entradas)}</span>
-                </div>
-                <div className="linha-detalhe-cat">
-                  <span className="ideal-t4">Saiu no mês</span>
-                  <span className="ideal-t3">{fmt(numeros.saidas)}</span>
-                </div>
-                <div className="linha-detalhe-cat total" data-testid="resultado-do-mes">
-                  <span className="ideal-t3">
-                    {numeros.resultadoDoMes < 0 ? 'Faltou no mês' : 'Sobrou no mês'}
-                  </span>
-                  <span className={`ideal-t3 ${numeros.resultadoDoMes < 0 ? 'valor-neg' : 'valor-pos'}`}>
-                    {fmt(numeros.resultadoDoMes)}
-                  </span>
-                </div>
+                {/* O bloco "Entrou / Saiu / Sobrou no mês" saiu daqui na build
+                    067, a pedido do Rafael: *"esse valor não mostra em nenhum
+                    lugar ali visualmente então retirar o trecho inteiro"*. O
+                    resultado do mês virou a 3ª barra do topo, com nome e valor
+                    — repetir a conta aqui era um segundo caminho para o mesmo
+                    número, que é como a tela antiga virou confusa. */}
               </BlocoRecolhivel>
             </div>
 
@@ -355,8 +348,9 @@ export default function Hoje({ mes, aoMudarMes, aoAbrirLancamento, aoAbrirPlanej
           {gruposDescalibrados.length > 0 && (
             <div className="cartao" data-testid="cartao-calibragem">
               <BlocoRecolhivel
+                comoBotao
                 testid="aviso-calibragem"
-                rotulo={`\u26a0 ${gruposDescalibrados.length} ${gruposDescalibrados.length === 1 ? 'grupo precisa' : 'grupos precisam'} de ajuste`}
+                rotulo={`⚠ ${gruposDescalibrados.length} ${gruposDescalibrados.length === 1 ? 'grupo precisa' : 'grupos precisam'} de ajuste`}
               >
                 {gruposDescalibrados.map((g) => {
                   const linha = numeros.porGrupo.find((x) => x.nome === g.nome)
@@ -365,13 +359,13 @@ export default function Hoje({ mes, aoMudarMes, aoAbrirLancamento, aoAbrirPlanej
                     <div className="linha-detalhe-cat" key={g.nome}>
                       <span className="ideal-t4">{g.nome}</span>
                       <span className={`ideal-t3 ${dif > 0 ? 'valor-neg' : 'valor-pos'}`}>
-                        {dif > 0 ? '+' : '\u2212'} {fmt(Math.abs(dif))}
+                        {dif > 0 ? '+' : '−'} {fmt(Math.abs(dif))}
                       </span>
                     </div>
                   )
                 })}
                 <p className="ideal-t4 texto-quebra" style={{ margin: '6px 0 8px' }}>
-                  \u00c9 a diferen\u00e7a entre a meta do grupo e a soma das metas das categorias dele.
+                  É a diferença entre a meta do grupo e a soma das metas das categorias dele.
                 </p>
                 <button
                   type="button"
@@ -396,13 +390,13 @@ export default function Hoje({ mes, aoMudarMes, aoAbrirLancamento, aoAbrirPlanej
   )
 }
 
-/* Uma linha de GRUPO dentro do 2\u00ba total (build 066).
+/* Uma linha de GRUPO dentro do 2º total (build 066).
  *
- * A r\u00e9gua do total \u00e9 o GRUPO, nunca a categoria — at\u00e9 a build 065 a tela
- * misturava as duas (o n\u00famero de cima vinha do percentual do grupo e os cards
- * de baixo da soma das metas de categoria), e por isso os n\u00fameros n\u00e3o
+ * A régua do total é o GRUPO, nunca a categoria — até a build 065 a tela
+ * misturava as duas (o número de cima vinha do percentual do grupo e os cards
+ * de baixo da soma das metas de categoria), e por isso os números não
  * fechavam. A categoria virou o detalhe DENTRO do grupo, e o descalibre entre
- * as duas r\u00e9guas aparece como linha pr\u00f3pria no fechamento.
+ * as duas réguas aparece como linha própria no fechamento.
  */
 function LinhaGrupoHoje({
   linha,
@@ -443,8 +437,8 @@ function LinhaGrupoHoje({
       </button>
       <p className="ideal-t4 texto-quebra linha-legenda-grupo">
         {guardar
-          ? `aportou ${fmt(linha.realizado)} de ${fmt(linha.meta)} \u00b7 falta aportar`
-          : `gastou ${fmt(linha.realizado)} de ${fmt(linha.meta)} \u00b7 ${
+          ? `aportou ${fmt(linha.realizado)} de ${fmt(linha.meta)} · falta aportar`
+          : `gastou ${fmt(linha.realizado)} de ${fmt(linha.meta)} · ${
               linha.diferenca < 0 ? 'passou da meta' : 'sobrou da meta'
             }`}
       </p>
@@ -480,7 +474,7 @@ function LinhaGrupoHoje({
                   : 'suas metas de categoria ficam abaixo da meta do grupo'}
               </span>
               <span className={`ideal-t3 ${descalibre > 0 ? 'valor-neg' : 'valor-pos'}`}>
-                {descalibre > 0 ? '\u2212' : '+'} {fmt(Math.abs(descalibre))}
+                {descalibre > 0 ? '−' : '+'} {fmt(Math.abs(descalibre))}
               </span>
             </div>
           )}
@@ -496,7 +490,7 @@ function LinhaGrupoHoje({
   )
 }
 
-/** Uma linha de categoria: barra + UM n\u00famero. O detalhe vem ao tocar. */
+/** Uma linha de categoria: barra + UM número. O detalhe vem ao tocar. */
 function LinhaCat({
   linha,
   icone,

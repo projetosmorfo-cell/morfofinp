@@ -344,11 +344,25 @@ export default function Calibragem({ mes, aoVoltar }: CalibragemProps) {
                       {c.nome}
                     </span>
                     <span
-                      className="col-ref-calibragem"
-                      data-testid={`ref-cat-${c.id}`}
-                      /* Sem movimento no período é "—", nunca R$ 0,00: zero
+                      /* A referência ganha COR comparada à meta ao lado (build
+                         067): vermelha quando o histórico é MAIOR que a meta
+                         (a meta não cabe no que você costuma gastar) e verde
+                         quando é menor. Sem meta cadastrada não há comparação,
+                         então fica neutra — colorir contra zero acusaria toda
+                         categoria ainda não calibrada.
+                         Sem movimento no período é "—", nunca R$ 0,00: zero
                          afirma que não gastou; o traço diz que não há de onde
                          tirar referência. */
+                      className={`col-ref-calibragem ${
+                        ref == null || !(c.aceitavelMensal > 0)
+                          ? ''
+                          : ref > c.aceitavelMensal + 0.005
+                            ? 'valor-neg'
+                            : ref < c.aceitavelMensal - 0.005
+                              ? 'valor-pos'
+                              : ''
+                      }`}
+                      data-testid={`ref-cat-${c.id}`}
                     >
                       {ref ? fmtBRL(ref) : '—'}
                     </span>

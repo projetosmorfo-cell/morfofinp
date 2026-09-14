@@ -87,7 +87,7 @@ export interface Projecao {
   faltaAportar: number
   /** Quantos dias do mês ainda faltam, contando a partir de amanhã. */
   diasQueFaltam: number
-  /** Como chamar o que projeta na frase: o nome do grupo, ou o plural. */
+  /** Como chamar o que projeta na frase: "o grupo X", ou o plural. */
   nomeDoVariavel: string
   /** Quantos grupos estão marcados como variáveis (0 = ninguém projeta). */
   quantosVariaveis: number
@@ -212,8 +212,16 @@ export function calcularProjecao(e: EntradaProjecao): Projecao {
     diasQueFaltam,
     mesFechado: mesJaFechou,
     quantosVariaveis: variaveis.length,
+    /* "o grupo Variável", nunca só "Variável" (build 067, pedido do Rafael):
+       sozinho, o nome do grupo lia como se fosse uma categoria ou um tipo de
+       gasto. Com vários grupos variáveis a frase já fala do conjunto, e aí o
+       prefixo não cabe. */
     nomeDoVariavel:
-      variaveis.length === 1 ? variaveis[0].nome : variaveis.length > 1 ? 'seus gastos variáveis' : '',
+      variaveis.length === 1
+        ? `o grupo ${variaveis[0].nome}`
+        : variaveis.length > 1
+          ? 'seus gastos variáveis'
+          : '',
     temPlano: base > 0,
   }
 }

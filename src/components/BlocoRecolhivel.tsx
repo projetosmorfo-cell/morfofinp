@@ -20,16 +20,19 @@ export default function BlocoRecolhivel({
   rotuloAberto,
   children,
   testid,
+  comoBotao,
 }: {
   rotulo?: string
   /** Texto quando já está aberto. Padrão: "Recolher". */
   rotuloAberto?: string
   children: ReactNode
   testid?: string
+  /** Cabeçalho com contorno e fundo — para quando o bloco é uma AÇÃO. */
+  comoBotao?: boolean
 }) {
   const [aberto, setAberto] = useState(false)
   return (
-    <div className="bloco-recolhivel">
+    <div className={`bloco-recolhivel ${comoBotao ? 'como-botao' : ''}`}>
       <button
         type="button"
         className="bloco-recolhivel-botao"

@@ -52,7 +52,11 @@ function FaixaPercentuais({
         <strong data-testid="total-pct-planejamento">{Number(total.toFixed(2))}%</strong>
         {!fechou && (dif > 0 ? ` — ${Number(dif.toFixed(2))}% a mais` : ` — faltam ${Number((-dif).toFixed(2))}%`)}
       </span>
-      {aoAbrirCalibragem && <span className="aviso-calibragem-acao">calibrar</span>}
+      {/* Cara de BOTÃO, não palavra em destaque (build 067, pedido do Rafael:
+          *"a linha no topo que tem o botão Calibrar deve mostrar realmente um
+          botão e não só texto"*). A faixa inteira já era clicável desde a 059 —
+          o que faltava era o sinal visual de que ali se toca. */}
+      {aoAbrirCalibragem && <span className="aviso-calibragem-acao">Calibrar</span>}
     </>
   )
   /* A faixa é SEMPRE um botão que abre a Calibragem (13/09/2026). Até aqui só
@@ -129,7 +133,7 @@ export default function Planejamento({ mes, aoMudarMes, aoAbrirLancamento, aoAbr
   /* Aba 2 (Gráficos) — só na versão Ideal; Light e Premium continuam com a
      árvore de sempre, sem nem ver o seletor de abas. */
   const [abaPlan, setAbaPlan] = useState<'arvore' | 'graficos'>('arvore')
-  const [modeloGrafico, setModeloGrafico] = useState<ModeloGrafico>('linhas')
+  const [modeloGrafico, setModeloGrafico] = useState<ModeloGrafico>('colunas')
   const [grupoFiltroGrafico, setGrupoFiltroGrafico] = useState<string | null>(null)
   const [catAbertaGrafico, setCatAbertaGrafico] = useState<number | null>(null)
   const [categoriaAberta, setCategoriaAberta] = useState<number | null>(null)

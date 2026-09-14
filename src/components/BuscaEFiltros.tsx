@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { Categoria, Conta, Lancamento } from '../db'
+import type { Categoria, Conta, GrupoRegistro, Lancamento } from '../db'
 import { statusDoLancamento, ROTULO_STATUS, type StatusPagamento } from '../statusPagamento'
 import { aplicarMascaraValor, paraNumero } from '../formatoMoeda'
 
@@ -12,6 +12,11 @@ export type RecorrenciaFiltro = 'unico' | 'fixo' | 'parcelado'
 
 export interface FiltrosAvancados {
   categoriaIds: number[]
+  // Nome do grupo (não id — mesma convenção de `Categoria.grupo`/`Meta.grupo`
+  // no resto do app: grupo é cadastro pequeno, sempre carregado inteiro,
+  // referenciado por nome). 14/09/2026, pedido do Rafael: "falta o filtro por
+  // grupos" — filtra pelo grupo da CATEGORIA do lançamento.
+  grupos: string[]
   contaIds: number[]
   tipos: TipoFiltro[]
   status: StatusPagamento[]
@@ -24,6 +29,7 @@ export interface FiltrosAvancados {
 
 export const FILTROS_VAZIOS: FiltrosAvancados = {
   categoriaIds: [],
+  grupos: [],
   contaIds: [],
   tipos: [],
   status: [],
@@ -37,6 +43,7 @@ export const FILTROS_VAZIOS: FiltrosAvancados = {
 export function contarFiltrosAtivos(f: FiltrosAvancados): number {
   let n = 0
   if (f.categoriaIds.length) n++
+  if (f.grupos.length) n++
   if (f.contaIds.length) n++
   if (f.tipos.length) n++
   if (f.status.length) n++
@@ -71,6 +78,10 @@ export function aplicarFiltros(
       if (!alvo.includes(buscaNorm)) return false
     }
     if (filtros.categoriaIds.length && !filtros.categoriaIds.includes(l.categoriaId)) return false
+    if (filtros.grupos.length) {
+      const grupoDaCategoria = categoriaPorId.get(l.categoriaId)?.grupo
+      if (!grupoDaCategoria || !filtros.grupos.includes(grupoDaCategoria)) return false
+    }
     if (filtros.contaIds.length && !filtros.contaIds.includes(l.contaId)) return false
     if (filtros.tipos.length && !filtros.tipos.includes(tipoDoLancamento(l))) return false
     if (filtros.status.length && !filtros.status.includes(statusDoLancamento(l))) return false
@@ -109,6 +120,7 @@ const TODOS_STATUS: StatusPagamento[] = ['pago', 'recebido', 'no_cartao', 'atras
 export function FolhaFiltros({
   filtros,
   categorias,
+  grupos,
   contas,
   ordemDesc,
   onFechar,
@@ -116,6 +128,7 @@ export function FolhaFiltros({
 }: {
   filtros: FiltrosAvancados
   categorias: Categoria[]
+  grupos: GrupoRegistro[]
   contas: Conta[]
   /* Ordenação (10/09/2026, pedido do Rafael: "pra dentro dessa tela de filtro
      deve ir a funcionalidade de ordenar") — era um botão de texto solto na
@@ -212,6 +225,25 @@ export function FolhaFiltros({
             />
           ))}
         </div>
+
+        <label>Grupo (múltipla seleção)</label>
+        <select
+          multiple
+          value={rascunho.grupos}
+          onChange={(e) =>
+            setRascunho((r) => ({
+              ...r,
+              grupos: Array.from(e.target.selectedOptions).map((o) => o.value),
+            }))
+          }
+          style={{ height: 72 }}
+        >
+          {grupos.map((g) => (
+            <option key={g.id} value={g.nome}>
+              {g.nome}
+            </option>
+          ))}
+        </select>
 
         <label>Categoria (múltipla seleção)</label>
         <select

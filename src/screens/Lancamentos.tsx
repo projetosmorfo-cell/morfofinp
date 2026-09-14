@@ -35,6 +35,7 @@ export default function Lancamentos({ mes, aoMudarMes, aoAbrirLancamento }: Tela
   )
   const categorias = useLiveQuery(() => lerDoAmbiente(db.categorias.orderBy('nome').toArray()), [])
   const contas = useLiveQuery(() => lerDoAmbiente(db.contas.toArray()), [])
+  const grupos = useLiveQuery(() => lerDoAmbiente(db.grupos.orderBy('nome').toArray()), [])
   // Só pra forçar re-render quando a data simulada mudar (05/09/2026, Etapa
   // 7 — Ferramentas de teste): esta tela não tinha motivo prévio pra se
   // inscrever em `db.configuracoes`, mas `statusDoLancamento` abaixo lê
@@ -60,7 +61,7 @@ export default function Lancamentos({ mes, aoMudarMes, aoAbrirLancamento }: Tela
      motivo do `exportOpen` logo acima (React #310). */
   const selecao = useSelecao((lancamentosDoMes ?? []).map((l) => l.id!).filter(Boolean))
 
-  if (!lancamentosDoMes || !categorias || !contas) return null
+  if (!lancamentosDoMes || !categorias || !contas || !grupos) return null
 
   const categoriaPorId = new Map(categorias.map((c) => [c.id!, c]))
   const contaPorId = new Map(contas.map((c) => [c.id!, c]))
@@ -132,6 +133,7 @@ export default function Lancamentos({ mes, aoMudarMes, aoAbrirLancamento }: Tela
         <FolhaFiltros
           filtros={filtros}
           categorias={categorias}
+          grupos={grupos}
           contas={contas}
           ordemDesc={ordemDesc}
           onFechar={() => setFiltrosAbertos(false)}

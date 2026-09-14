@@ -2311,12 +2311,83 @@ html[data-mloc-tema='claro'] .tarja-inativa {
 
 /* A linha que amarra as três caixas da tela Hoje (13/09/2026) — é ela que
    responde "de onde vem esse número". */
-.linha-identidade {
-  display: flex; align-items: center; gap: 6px;
-  margin-top: 12px; padding-top: 8px;
-  border-top: 1px solid var(--borda);
-  font-size: 11.5px; line-height: 1.3; color: var(--texto-fraco);
+/* As TRÊS barras do topo da tela Hoje (build 067) — ver BarrasTopoHoje.tsx.
+   Grade de 3 colunas e 5 linhas: título · barra · valor · rodapé. A grade é o
+   que mantém as três barras e os três valores ALINHADOS entre si mesmo com
+   títulos de alturas diferentes (um deles quebra em duas linhas a 430px). */
+.barras-topo {
+  display: grid;
+  grid-template-columns: 1.35fr 1fr 1fr;
+  column-gap: 10px;
+  align-items: end;
+  margin: 2px 0 4px;
 }
+/* BLOCO, não flex: num flex o "i" (24px de largura fixa) rouba a largura do
+   texto e "Caixa do mês passado" quebrava em TRÊS linhas numa coluna de 90px.
+   Em bloco o "i" flui junto com a última palavra, como pontuação. */
+.barras-topo-titulo {
+  grid-row: 1; align-self: end;
+  margin-bottom: 3px;
+  font-size: 11px; line-height: 1.2; text-align: center;
+  color: var(--texto);
+}
+.barras-topo-titulo [role='button'] { vertical-align: middle; }
+.barras-topo-barra {
+  grid-row: 2; position: relative;
+  display: flex; height: 16px; border-radius: 8px; overflow: hidden;
+  background: var(--ideal-trilho);
+}
+.barras-topo-barra > i { display: block; height: 100%; }
+.barras-topo-barra .seg-realizado { background: var(--ideal-azul); }
+.barras-topo-barra .seg-comprometido { background: var(--ideal-ambar); }
+.barras-topo-barra .seg-estouro { background: var(--ideal-vermelho); }
+.barras-topo-barra .seg-sobrou { background: var(--ideal-verde); }
+.barras-topo-linha-meta {
+  position: absolute; top: 0; bottom: 0; width: 2px;
+  margin-left: -1px; background: #fff; opacity: 0.9;
+}
+.barras-topo-valor {
+  grid-row: 3; margin-top: 5px; text-align: center;
+  font-size: var(--ideal-t3-tam); font-weight: 700; white-space: nowrap;
+}
+.barras-topo-rodape-1 {
+  grid-row: 4; grid-column: 1; align-self: end;
+  display: flex; flex-direction: column; align-items: center; gap: 1px;
+  margin-top: 6px;
+  font-size: 10.5px; line-height: 1.25; text-align: center; color: var(--texto);
+}
+.barras-topo-rodape-1 strong { white-space: nowrap; }
+.barras-topo-rodape-1 [role='button'] { vertical-align: middle; }
+/* A chave que une as barras 2 e 3: um traço que abre para cima, ligando as
+   duas colunas, e abaixo dele a divisão do caixa (livre × reservado). */
+.barras-topo-chave { grid-row: 4; grid-column: 2 / 4; margin-top: 6px; }
+.barras-topo-chave-traco {
+  display: block; height: 6px;
+  border-left: 1px solid var(--borda);
+  border-right: 1px solid var(--borda);
+  border-bottom: 1px solid var(--borda);
+  border-radius: 0 0 6px 6px;
+}
+.barras-topo-chave-titulo {
+  display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 3px;
+  margin-top: 4px; font-size: 10.5px; line-height: 1.2; color: var(--texto);
+}
+.barras-topo-chave-barra {
+  display: flex; height: 7px; border-radius: 4px; overflow: hidden;
+  margin-top: 5px; background: var(--ideal-trilho);
+}
+.barras-topo-chave-barra > i { display: block; height: 100%; }
+.barras-topo-chave-barra .seg-sobrou { background: var(--ideal-verde); }
+.barras-topo-chave-barra .seg-reservado { background: var(--ideal-azul); opacity: 0.45; }
+.barras-topo-chave-legenda {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 8px;
+  margin-top: 3px; font-size: 10px; line-height: 1.25; color: var(--texto);
+}
+/* Rótulo em cima, valor embaixo: numa faixa de ~100px por metade, deixar os
+   dois na mesma linha partia o número ("reservado R$ / 1.307,16"). */
+.barras-topo-chave-legenda > span { display: flex; flex-direction: column; min-width: 0; }
+.barras-topo-chave-legenda > span:last-child { text-align: right; }
+.barras-topo-chave-legenda strong { white-space: nowrap; }
 
 /* Faixa de mês encerrado, no topo do card da tela Hoje (13/09/2026). */
 .faixa-mes-fechado {
@@ -2382,7 +2453,18 @@ html[data-mloc-tema='claro'] .tarja-inativa {
   font-size: var(--ideal-t3-tam); font-weight: var(--ideal-t3-peso);
   text-align: left; cursor: pointer;
 }
-.aviso-calibragem-acao { color: var(--ideal-ambar-txt); font-weight: 600; flex-shrink: 0; }
+/* A ação da faixa vira um BOTÃO de verdade (build 067, pedido do Rafael:
+   "deve mostrar realmente um botão e não só texto"). É um `<span>` porque o
+   contêiner já é um `<button>` e botão dentro de botão é HTML inválido — o
+   que muda é a aparência e o alvo, que passa a ter contorno e área própria. */
+.aviso-calibragem-acao {
+  color: var(--ideal-ambar-txt); font-weight: 700; flex-shrink: 0;
+  border: 1px solid currentColor; border-radius: 8px;
+  padding: 5px 12px; font-size: 12px; line-height: 1.2;
+  /* `var(--bg-elevado)` e não um preto translúcido: no tema claro um véu escuro
+     viraria um borrão cinza atrás de um texto âmbar. */
+  background: var(--bg-elevado);
+}
 
 .titulo-bloco-ideal {
   font-size: 10.5px; letter-spacing: 0.7px; text-transform: uppercase;
@@ -2541,6 +2623,12 @@ html[data-mloc-tema='claro'] .tarja-inativa {
   flex: 0 0 auto; width: 90px; text-align: right; white-space: nowrap;
   font-size: var(--ideal-t4-tam); color: var(--texto-fraco);
 }
+/* A cor da referência precisa VENCER a cor neutra da coluna: `.valor-pos` e
+   `.valor-neg` têm a mesma especificidade e são declaradas bem antes daqui, no
+   topo do arquivo — sem este par a classe ficava no elemento sem nenhum efeito
+   na tela. */
+.col-ref-calibragem.valor-pos { color: var(--ideal-verde-txt); }
+.col-ref-calibragem.valor-neg { color: var(--ideal-vermelho-txt); }
 .col-meta-calibragem {
   flex: 0 0 auto; width: 76px; text-align: right; white-space: nowrap;
 }
@@ -2614,14 +2702,16 @@ html[data-mloc-tema='claro'] .tarja-inativa {
 }
 
 /* A barra da RÉGUA (modelo Linhas): faixa apagada de largura cheia, trilho =
-   meta, preenchido = gasto — todas na mesma escala de dinheiro. O texto é
-   desenhado duas vezes; a cópia escura é recortada na largura do preenchido
-   (`--fill`), então cada pedaço do nome fica na cor que contrasta com o que
-   está por baixo dele. */
-.regua-linha { padding: 3px 0; }
+   meta, preenchido = gasto — todas na mesma escala de dinheiro.
+
+   O NOME tem DOIS estados, nunca um meio-termo (build 067): dentro do
+   preenchido em texto ESCURO quando cabe, ou fora dele — logo à frente — em
+   texto CLARO quando não cabe. Quem decide é a medição em JS
+   (`BarraRegua`), não o CSS. O VALOR fica fora da barra, à direita. */
+.regua-linha { display: flex; align-items: center; gap: 8px; padding: 3px 0; }
 .regua-barra {
   position: relative; height: 22px; border-radius: 6px; overflow: hidden;
-  background: var(--bg);
+  background: var(--bg); flex: 1 1 auto; min-width: 0;
 }
 .regua-linha.forte .regua-barra { height: 30px; border-radius: 8px; }
 .regua-linha.selecionada .regua-barra { outline: 1.5px solid var(--texto); outline-offset: 1px; }
@@ -2630,22 +2720,25 @@ html[data-mloc-tema='claro'] .tarja-inativa {
 .regua-fill.estouro { background: var(--ideal-vermelho); }
 .regua-comprometido { position: absolute; top: 0; bottom: 0; background: var(--ideal-ambar); }
 .regua-meta { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: #fff; }
-/* UMA cor de texto só, nos dois fundos (13/09/2026). O texto era desenhado
-   duas vezes e recortado no limite do preenchido, então a palavra trocava de
-   cor no meio conforme a barra crescia. Agora é branco com uma sombra escura
-   atrás: legível sobre o azul/âmbar/verde do preenchido E sobre o trilho, sem
-   depender de onde a barra está. */
-.regua-texto {
-  position: absolute; inset: 0; display: flex; align-items: center; gap: 6px;
-  padding: 0 8px; color: #ffffff; pointer-events: none;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85), 0 0 1px rgba(0, 0, 0, 0.9);
-}
 .regua-nome {
+  position: absolute; top: 50%; transform: translateY(-50%);
   font-size: 11.5px; font-weight: 700; white-space: nowrap;
-  overflow: hidden; text-overflow: ellipsis; min-width: 0;
+  pointer-events: none; max-width: calc(100% - 16px);
+  overflow: hidden; text-overflow: ellipsis;
 }
+/* Dentro do preenchido (azul/âmbar/verde claros): texto escuro. */
+.regua-nome.dentro { left: 8px; color: #0b1220; }
+/* Fora dele, sobre o trilho escuro: texto claro. `left` vem do JS. */
+.regua-nome.fora { color: #ffffff; }
 .regua-linha.forte .regua-nome { font-size: 12.5px; letter-spacing: .04em; }
-.regua-valor { margin-left: auto; flex: 0 0 auto; font-size: 11px; font-weight: 700; white-space: nowrap; }
+.regua-valor {
+  flex: 0 0 auto; font-size: 11.5px; font-weight: 700; white-space: nowrap;
+}
+.regua-linha.forte .regua-valor { font-size: 12.5px; }
+
+/* A legenda de uma barra pertence à barra DE CIMA (build 067): fica colada
+   nela e com respiro embaixo, nunca o contrário. */
+.linha-meta-zoom { margin: 2px 0 12px !important; }
 
 /* Com algo em foco, as colunas encolhem pra uma faixa e o zoom abre AO LADO. */
 /* 13/09/2026: o zoom deixou de abrir AO LADO (gráfico espremido a 108px, nome
@@ -2657,7 +2750,7 @@ html[data-mloc-tema='claro'] .tarja-inativa {
 .zoom-grafico .regua-nome { font-size: 9.5px; }
 .zoom-grafico .regua-valor { font-size: 9.5px; }
 .zoom-grafico .regua-barra { height: 20px; }
-.zoom-grafico .regua-texto { padding: 0 6px; gap: 8px; }
+.zoom-grafico .regua-linha { gap: 6px; }
 
 /* Modelo COLUNAS: uma coluna por grupo, fatia = categoria, nome DENTRO.
    Altura mínima por fatia garante que nada some nem fique sem nome. */
@@ -2796,4 +2889,16 @@ html[data-mloc-tema='claro'] .tarja-inativa {
   padding: 4px 0 8px 10px;
   border-left: 2px solid var(--borda);
   margin: 4px 0 6px 2px;
+}
+
+/* Cabeçalho de bloco recolhível com CARA DE BOTÃO (build 067) — usado no aviso
+   de calibragem da tela Hoje, que é uma ação, não uma seção de leitura. */
+.bloco-recolhivel.como-botao { margin-top: 0; border-top: none; padding-top: 0; }
+.bloco-recolhivel.como-botao .bloco-recolhivel-botao {
+  border: 1px solid var(--borda);
+  border-radius: 10px;
+  background: var(--bg-elevado);
+  padding: 10px 12px;
+  color: var(--texto);
+  min-height: 44px;
 }

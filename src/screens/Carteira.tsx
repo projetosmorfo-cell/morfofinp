@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { db, type Categoria, type Conta, type Lancamento } from '../db'
+import { db, type Categoria, type Conta, type GrupoRegistro, type Lancamento } from '../db'
 import type { TelaProps } from '../mes'
 import SeletorMes from '../components/SeletorMes'
 import LinhaLancamentoCompleta from '../components/LinhaLancamentoCompleta'
@@ -84,6 +84,7 @@ function janelaFaturaEmAberto(diaFechamento: number): { inicio: string; fim: str
 export default function Carteira({ mes, aoMudarMes, aoAbrirLancamento }: TelaProps) {
   const todasContas = useLiveQuery(() => lerDoAmbiente(db.contas.toArray()), [])
   const categorias = useLiveQuery(() => lerDoAmbiente(db.categorias.toArray()), [])
+  const grupos = useLiveQuery(() => lerDoAmbiente(db.grupos.orderBy('nome').toArray()), [])
   const todosLancamentos = useLiveQuery(() => lerDoAmbiente(db.lancamentos.toArray()), [])
   // Só pra forçar re-render quando a data simulada mudar (05/09/2026, Etapa
   // 7 — Ferramentas de teste), mesmo motivo de `Lancamentos.tsx`: o
@@ -95,7 +96,7 @@ export default function Carteira({ mes, aoMudarMes, aoAbrirLancamento }: TelaPro
      hook nunca pode ficar depois de um `return` condicional. */
   const [exportOpen, setExportOpen] = useState(false)
 
-  if (!todasContas || !categorias || !todosLancamentos) return null
+  if (!todasContas || !categorias || !grupos || !todosLancamentos) return null
 
   const contas = todasContas.filter((c) => c.ativa)
   const categoriaPorId = new Map(categorias.map((c) => [c.id!, c]))
@@ -151,6 +152,7 @@ export default function Carteira({ mes, aoMudarMes, aoAbrirLancamento }: TelaPro
         categoriaPorId={categoriaPorId}
         contaPorId={contaPorId}
         contasDisponiveis={todasContas}
+        grupos={grupos}
         todosLancamentos={todosLancamentos}
       />
     )
@@ -403,6 +405,7 @@ function DetalheConta({
   lancamentosDoLugar,
   vinculadosInformativos,
   categorias,
+  grupos,
   categoriaPorId,
   contaPorId,
   contasDisponiveis,
@@ -421,6 +424,7 @@ function DetalheConta({
   lancamentosDoLugar: Lancamento[]
   vinculadosInformativos?: Lancamento[]
   categorias: Categoria[]
+  grupos: GrupoRegistro[]
   categoriaPorId: Map<number, Categoria>
   contaPorId: Map<number, Conta>
   contasDisponiveis: Conta[]
@@ -594,6 +598,7 @@ function DetalheConta({
         <FolhaFiltros
           filtros={filtros}
           categorias={categorias}
+          grupos={grupos}
           contas={contasDisponiveis}
           ordemDesc={ordemDesc}
           onFechar={() => setFiltrosAbertos(false)}

@@ -31,7 +31,8 @@
  * Comprometido) saíram: a barra nova mostra as quatro coisas AO MESMO TEMPO,
  * então cada chip só apagava parte dela.
  */
-import type { ReactNode } from 'react'
+import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { fmtComSinal } from '../formatoMoeda'
 import BarraIdeal from './BarraIdeal'
 import ListaLancamentosCategoria from './ListaLancamentosCategoria'
 import type { Categoria, GrupoRegistro, Lancamento } from '../db'
@@ -60,9 +61,10 @@ export interface ItemGrupoGrafico {
 
 export type ModeloGrafico = 'linhas' | 'colunas'
 
+/* COLUNAS primeiro, e é o padrão ao abrir (build 067, pedido do Rafael). */
 export const MODELOS: { m: ModeloGrafico; rotulo: string }[] = [
-  { m: 'linhas', rotulo: 'Linhas' },
   { m: 'colunas', rotulo: 'Colunas' },
+  { m: 'linhas', rotulo: 'Linhas' },
 ]
 
 /** O que cada barra recebe — sempre a leitura cheia, sem vertente. */
@@ -91,23 +93,25 @@ const soma = (xs: TotaisGrafico[]): TotaisGrafico =>
    dividem a MESMA escala de dinheiro: é isso que deixa comparar categoria com
    categoria batendo o olho, que foi o motivo de o Rafael escolher este modelo.
 
-   Três camadas, na mesma escala: faixa apagada (largura toda, onde o nome
-   sempre cabe), TRILHO = a meta, e o preenchido = o gasto. A margem não usada
-   é o pedaço de trilho que sobra — visível de propósito.
+   O NOME É MEDIDO, NÃO ESTIMADO (build 067). A regra que ele pediu, literal:
+   *"se couber na barra clara todo texto a cor da fonte é preta, se não coube
+   fica fora e na frente na cor branca"*. Então o span do nome é medido contra a
+   largura do PREENCHIDO (`useLayoutEffect` + `getBoundingClientRect`, antes do
+   navegador pintar) e cai num de dois estados, nunca num meio-termo:
 
-   TEXTO DE UMA COR SÓ (13/09/2026). A build 060 desenhava o nome duas vezes —
-   uma clara e uma escura recortada na largura do preenchido — para cada trecho
-   contrastar com o que estivesse atrás. Funcionava, mas o nome trocava de cor
-   no meio da palavra conforme a barra crescia, e o Rafael leu isso como
-   defeito: "não está legal assim, tem que ser uma cor só o texto inteiro".
-   Agora é uma cor única, escolhida para contrastar com os DOIS fundos (o
-   preenchido e o trilho): branco puro com uma sombra escura de 1px atrás.
-   A sombra é o que garante a leitura sobre o verde/âmbar claro, sem trocar
-   nada de cor.
+     cabe   → dentro do preenchido, texto ESCURO (o preenchido é claro)
+     não cabe → fora dele, logo à frente, texto CLARO (o trilho é escuro)
 
-   SEM ÍCONE (mesmo pedido): "retire os ícones, não quero que tenha ícones,
-   está muito poluído assim". A barra do grupo já se distingue pelo filete
-   lateral, pela altura e pela caixa alta. */
+   Duas tentativas anteriores caíram e ficam registradas para ninguém
+   reintroduzir: a build 060 desenhava o nome DUAS vezes e recortava a cópia
+   escura no limite do preenchido — a palavra trocava de cor no meio; a 063
+   pintou tudo de branco com sombra — ele leu como "ficou ruim".
+
+   O VALOR sai da barra: fica à direita, fora, no formato normal do app
+   (`fmtBRL`, nunca "7,7k" — unidade abreviada não existe em nenhuma outra tela).
+   Recolhida, a barra mostra o RESULTADO (sobra ou estouro); aberta, a linha
+   "X de Y da meta" entra abaixo dela. É o mesmo padrão do zoom do modelo
+   Colunas, que foi o que ele apontou como certo. */
 function BarraRegua({
   nome,
   realizado,
@@ -128,9 +132,27 @@ function BarraRegua({
   const usado = realizado + comprometido
   const pct = (v: number) => `${Math.max(0, Math.min(100, (v / (escala || 1)) * 100))}%`
   const estourou = meta > 0 && usado > meta + 0.005
+  const resultado = meta - usado
+
+  const refBarra = useRef<HTMLDivElement>(null)
+  const refNome = useRef<HTMLSpanElement>(null)
+  const [cabeDentro, setCabeDentro] = useState(true)
+  const [fillPx, setFillPx] = useState(0)
+
+  useLayoutEffect(() => {
+    const barra = refBarra.current
+    const span = refNome.current
+    if (!barra || !span) return
+    const largura = barra.getBoundingClientRect().width
+    const preenchido = (largura * Math.max(0, Math.min(100, (usado / (escala || 1)) * 100))) / 100
+    setFillPx(preenchido)
+    // 8px de folga de cada lado — o texto não pode encostar na borda da cor.
+    setCabeDentro(span.getBoundingClientRect().width + 16 <= preenchido)
+  }, [nome, usado, escala, forte])
+
   return (
     <div className={`regua-linha ${forte ? 'forte' : ''} ${selecionada ? 'selecionada' : ''}`}>
-      <div className="regua-barra" style={{ ['--fill' as string]: pct(usado) }}>
+      <div className="regua-barra" ref={refBarra}>
         <div className="regua-trilho" style={{ width: pct(meta) }} />
         <div className={`regua-fill ${estourou ? 'estouro' : ''}`} style={{ width: pct(realizado) }} />
         {comprometido > 0.005 && (
@@ -140,11 +162,17 @@ function BarraRegua({
           />
         )}
         {estourou && <div className="regua-meta" style={{ left: pct(meta) }} />}
-        <div className="regua-texto">
-          <span className="regua-nome">{nome}</span>
-          <span className="regua-valor">{fmtCurto(usado)}</span>
-        </div>
+        <span
+          ref={refNome}
+          className={`regua-nome ${cabeDentro ? 'dentro' : 'fora'}`}
+          style={cabeDentro ? undefined : { left: Math.round(fillPx) + 8 }}
+        >
+          {nome}
+        </span>
       </div>
+      <span className={`regua-valor ${resultado < 0 ? 'valor-neg' : 'valor-pos'}`}>
+        {fmtComSinal(resultado)}
+      </span>
     </div>
   )
 }
@@ -179,12 +207,10 @@ function fmtCheio(v: number) {
   return `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
-/** R$ curto — o valor precisa caber dentro da barra, em qualquer largura. */
-function fmtCurto(v: number) {
-  const n = Math.abs(v)
-  if (n >= 1000) return `R$ ${(v / 1000).toFixed(1).replace('.', ',')}k`
-  return `R$ ${Math.round(v)}`
-}
+/* `fmtCurto` (o "R$ 7,7k") foi removido na build 067: unidade abreviada não
+   existe em nenhuma outra tela do app, e o valor saiu de dentro da barra —
+   então não há mais disputa de espaço que justificasse inventar um formato
+   próprio aqui. Todo valor destes gráficos usa `fmtBRL`/`fmtComSinal`. */
 
 export interface Props {
   porGrupo: ItemGrupoGrafico[]
