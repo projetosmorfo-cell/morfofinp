@@ -35,26 +35,38 @@ function ultimoDiaDoMes(ano: number, mesIndice0: number): number {
 
 // Janela FECHADA de uma fatura específica, identificada pelo mês em que ela
 // FECHA (mesISO = "yyyy-mm", o mesmo mês do SeletorMes comum do app) — do dia
-// seguinte ao fechamento do mês anterior até o fechamento deste mês.
+// seguinte ao fechamento do mês anterior até o dia ANTERIOR ao fechamento
+// deste mês (o próprio dia de fechamento já pertence à fatura SEGUINTE).
+//
+// 15/09/2026 — correção de bug real, achado na reconciliação contra o
+// Organizze (referência real, batendo com a fatura Porto Seguro do Rafael):
+// a versão anterior incluía o dia de fechamento na fatura que estava
+// FECHANDO, e a fatura seguinte começava só no dia depois — mas o
+// comportamento real de fatura de cartão (conferido contra o Organizze) é o
+// oposto: uma compra feita NO PRÓPRIO dia do fechamento já cai na fatura
+// SEGUINTE, não na que está fechando. Isso causava lançamentos "sumidos" da
+// janela (ex.: "Clareamento + Dentista 2/2", em 08/08, com fechamento no dia
+// 8 — ficava de fora tanto da fatura de julho quanto da de agosto do jeito
+// antigo). Agora o fim da janela é o dia ANTERIOR ao fechamento.
 function janelaFatura(diaFechamento: number, mesISO: string): { inicio: string; fim: string } {
   const [ano, mesUm] = mesISO.split('-').map(Number)
   const mesIdx = mesUm - 1
   const diaFechoEsteMes = Math.min(diaFechamento, ultimoDiaDoMes(ano, mesIdx))
   const fim = new Date(ano, mesIdx, diaFechoEsteMes)
+  fim.setDate(fim.getDate() - 1)
 
   const anoAnterior = mesIdx === 0 ? ano - 1 : ano
   const mesAnteriorIdx = mesIdx === 0 ? 11 : mesIdx - 1
   const diaFechoMesAnterior = Math.min(diaFechamento, ultimoDiaDoMes(anoAnterior, mesAnteriorIdx))
   const inicio = new Date(anoAnterior, mesAnteriorIdx, diaFechoMesAnterior)
-  inicio.setDate(inicio.getDate() + 1)
 
   const iso = (d: Date) => d.toISOString().slice(0, 10)
   return { inicio: iso(inicio), fim: iso(fim) }
 }
 
-// Janela da fatura em aberto de um cartão "até o momento" — do dia seguinte
-// ao último fechamento (passado) até hoje. Só usada no card resumido da
-// Carteira (fora do drill-in).
+// Janela da fatura em aberto de um cartão "até o momento" — do dia de
+// fechamento (inclusive, ver correção acima) até hoje. Só usada no card
+// resumido da Carteira (fora do drill-in).
 function janelaFaturaEmAberto(diaFechamento: number): { inicio: string; fim: string } {
   const hoje = new Date()
   const ano = hoje.getFullYear()
@@ -63,7 +75,6 @@ function janelaFaturaEmAberto(diaFechamento: number): { inicio: string; fim: str
   const ultimoFechamento =
     diaHoje >= diaFechamento ? new Date(ano, mes, diaFechamento) : new Date(ano, mes - 1, diaFechamento)
   const inicio = new Date(ultimoFechamento)
-  inicio.setDate(inicio.getDate() + 1)
   const iso = (d: Date) => d.toISOString().slice(0, 10)
   return { inicio: iso(inicio), fim: iso(hoje) }
 }

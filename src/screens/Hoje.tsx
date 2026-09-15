@@ -33,7 +33,6 @@ import { InfoDot } from '../kit/PadraoUI'
 import { fmtBRL as fmt, fmtComSinal } from '../formatoMoeda'
 import { categoriaConsomeMeta, idsDeCofre, lancamentoConsomeMeta } from '../orcamento'
 import BlocoRecolhivel from '../components/BlocoRecolhivel'
-import BarrasTopoHoje from '../components/BarrasTopoHoje'
 import {
   calcularDoisNumeros,
   fraseSaldoLivre,
@@ -56,6 +55,28 @@ interface LinhaCategoria {
   comprometido: number
   lancamentos: Lancamento[]
 }
+
+/* "O Rio" (14/09/2026) — as 5 caixas da tela Hoje, todas individualmente
+ * expansíveis, cada uma com um título "De onde vem X?" no botão que abre o
+ * detalhe (o mesmo padrão que o Reservado já usava) e um "i" quando
+ * recolhida. Substitui as três barras desenhadas (build 067,
+ * `BarrasTopoHoje.tsx`, removido) — o Rafael confirmou explicitamente
+ * ("Ainda quero O Rio, do jeito original") que queria voltar para caixas
+ * clicáveis com valor em R$, não barras. As duas primeiras caixas (Livre de
+ * tudo / Reservado) e a numeração "1 ·"/"2 ·" delas são as mesmas da build
+ * 066 (aprovada: "está aprovado") — só ganharam o título "De onde vem…?" no
+ * botão de abrir. As três novas (Mês passado / Este mês / Caixa de hoje) só
+ * existiam desenhadas em barra; agora são caixa com valor e detalhe, iguais
+ * às outras duas em comportamento. */
+const INFO_MES_PASSADO =
+  'O que sobrou no caixa somando todos os meses até o mês anterior. ' +
+  'Negativo quer dizer que o mês começou no vermelho.'
+const INFO_ESTE_MES =
+  'O que entrou menos o que saiu neste mês — só deste mês, sem o que veio de trás.'
+const INFO_CAIXA_HOJE =
+  'Tudo que sobrou no caixa até hoje, somando todos os meses: o mês passado mais o ' +
+  'resultado deste mês. Dele, uma parte está livre de tudo e o resto continua ' +
+  'reservado nas metas do mês que ainda não foram usadas.'
 
 export default function Hoje({ mes, aoMudarMes, aoAbrirLancamento, aoAbrirPlanejamento, aoAbrirCalibragem }: TelaProps) {
   const categorias = useLiveQuery(() => lerDoAmbiente(db.categorias.toArray()), []) ?? []
@@ -93,12 +114,6 @@ export default function Hoje({ mes, aoMudarMes, aoAbrirLancamento, aoAbrirPlanej
        realizado (azul), não comprometido (âmbar) — ver `contasCartao.ts`. */
     if (!jaAconteceu(l)) compPorCategoria.set(cat.id!, (compPorCategoria.get(cat.id!) ?? 0) + v)
   }
-  /* O âmbar da barra da meta (build 067): o que já está lançado no mês mas
-     ainda não aconteceu. Sai da MESMA conta das categorias, então a barra do
-     topo e as barras de baixo nunca contam coisas diferentes. */
-  let comprometidoTotal = 0
-  for (const v of compPorCategoria.values()) comprometidoTotal += v
-
   /* Toda categoria que CONSOME META entra — não só as de natureza Consumo.
      Enquanto os cards eram "onde estourei/onde economizar" (só gasto) isso não
      aparecia; com o detalhe organizado POR GRUPO (build 066), um grupo de
@@ -151,6 +166,26 @@ export default function Hoje({ mes, aoMudarMes, aoAbrirLancamento, aoAbrirPlanej
     ) : null
   }
 
+  /* Caixa acumulado até o mês ANTERIOR (a caixa "Mês passado") — o resto das
+     três primeiras caixas é derivado desta e de `numeros.resultadoDoMes`. */
+  const caixaAnterior = numeros.caixaAcumulado - numeros.resultadoDoMes
+
+  /* "O Rio", visual de funil (14/09/2026, build 070) — Rafael aprovou o
+   * protótipo com as caixas ligadas por setas e LARGURA proporcional ao valor
+   * real (Livre de tudo mais largo que Reservado, na mesma proporção dos
+   * dois valores) — não só as caixas soltas da build 069. As proporções são
+   * calculadas aqui; a caixa em si (conteúdo, expandir, InfoDot, frase de
+   * impacto) não muda nada, só a forma como as 5 caixas se organizam. Piso de
+   * 18%/82% pra nenhuma das duas ficar ilegível quando um dos valores é bem
+   * pequeno ou negativo. */
+  const baseRio = Math.abs(numeros.saldoLivre) + Math.abs(numeros.reservado)
+  const pctLivreRio = baseRio > 0.005
+    ? Math.max(18, Math.min(82, (Math.abs(numeros.saldoLivre) / baseRio) * 100))
+    : 50
+  const pctReservadoRio = 100 - pctLivreRio
+  const centroLivreRio = pctLivreRio / 2
+  const centroReservadoRio = pctLivreRio + pctReservadoRio / 2
+
   const frase = fraseVeredito(projecao)
   /* Mês já terminado muda o TEMPO VERBAL da tela inteira, não só da frase do
      veredito (13/09/2026): rótulo do 2º número, as duas frases de apoio e a
@@ -169,6 +204,14 @@ export default function Hoje({ mes, aoMudarMes, aoAbrirLancamento, aoAbrirPlanej
         subtitulo="Real × metas + compromissos"
         explicacao={
           <>
+            <p>
+              Toda caixa desta tela é clicável — toque nela para ver de onde vem o número.
+            </p>
+            <p>
+              <strong>Mês passado</strong>, <strong>Este mês</strong> e{' '}
+              <strong>Caixa de hoje</strong> são o caixa acumulado, por partes: o mês passado
+              mais o resultado deste mês forma a caixa de hoje.
+            </p>
             <p>
               A tela tem <strong>dois totais</strong>, e um é o resto do outro.
             </p>
@@ -226,24 +269,136 @@ export default function Hoje({ mes, aoMudarMes, aoAbrirLancamento, aoAbrirPlanej
               donut mostra composição e barra mostra PROGRESSO — a pergunta é
               "em que ponto do mês eu estou". Em 430px também rende bem mais. */}
           <div className="cartao" data-testid="hoje-topo">
-            {/* A IDENTIDADE, agora DESENHADA (build 067). Era uma linha de texto
-                ("Caixa X − reservado Y = livre Z"), e o Rafael pediu para trocar
-                por barras: o mesmo conteúdo, lido de relance. Ver
-                `BarrasTopoHoje.tsx` para as três decisões que o pedido não
-                cobria. */}
-            <BarrasTopoHoje
-              meta={numeros.metaTotal}
-              realizado={numeros.realizado}
-              comprometido={comprometidoTotal}
-              resultadoDoMes={numeros.resultadoDoMes}
-              caixaAnterior={numeros.caixaAcumulado - numeros.resultadoDoMes}
-              caixaAcumulado={numeros.caixaAcumulado}
-              saldoLivre={numeros.saldoLivre}
-              reservado={numeros.reservado}
-            />
+          <div className="rio-funil" data-testid="rio-funil">
+          <div className="rio-linha rio-linha-topo">
+            {/* ---------- MÊS PASSADO ---------- */}
+            <div className="bloco-numero" data-testid="bloco-mes-passado">
+              <div className="bloco-numero-rotulo">
+                Mês passado
+                <InfoDot titulo="Mês passado" info={INFO_MES_PASSADO} />
+              </div>
+              <div
+                className={`ideal-t1 ${caixaAnterior < 0 ? 'valor-neg' : 'valor-pos'}`}
+                data-testid="valor-mes-passado"
+              >
+                {fmtComSinal(caixaAnterior)}
+              </div>
+              <p className="ideal-t4 texto-quebra" style={{ margin: '2px 0 0' }}>
+                caixa acumulado até o mês anterior
+              </p>
+              <BlocoRecolhivel testid="detalhe-mes-passado" rotulo="De onde vem o mês passado?">
+                <div className="linha-detalhe-cat">
+                  <span className="ideal-t4">Caixa de hoje (acumulado)</span>
+                  <span className="ideal-t3">{fmtComSinal(numeros.caixaAcumulado)}</span>
+                </div>
+                <div className="linha-detalhe-cat">
+                  <span className="ideal-t4">− resultado deste mês</span>
+                  <span className="ideal-t3">{fmtComSinal(numeros.resultadoDoMes)}</span>
+                </div>
+                <div className="linha-detalhe-cat total">
+                  <span className="ideal-t3">Mês passado</span>
+                  <span className={`ideal-t3 ${caixaAnterior < 0 ? 'valor-neg' : 'valor-pos'}`}>
+                    {fmtComSinal(caixaAnterior)}
+                  </span>
+                </div>
+              </BlocoRecolhivel>
+            </div>
 
+            {/* ---------- ESTE MÊS ---------- */}
+            <div className="bloco-numero" data-testid="bloco-este-mes">
+              <div className="bloco-numero-rotulo">
+                Este mês
+                <InfoDot titulo="Este mês" info={INFO_ESTE_MES} />
+              </div>
+              <div
+                className={`ideal-t1 ${numeros.resultadoDoMes < 0 ? 'valor-neg' : 'valor-pos'}`}
+                data-testid="valor-este-mes"
+              >
+                {fmtComSinal(numeros.resultadoDoMes)}
+              </div>
+              <p className="ideal-t4 texto-quebra" style={{ margin: '2px 0 0' }}>
+                {numeros.resultadoDoMes < 0 ? 'faltou no mês' : 'sobrou no mês'}
+              </p>
+              <BlocoRecolhivel testid="detalhe-este-mes" rotulo="De onde vem este mês?">
+                <div className="linha-detalhe-cat">
+                  <span className="ideal-t4">Entrou no mês</span>
+                  <span className="ideal-t3">{fmtComSinal(numeros.entradas)}</span>
+                </div>
+                <div className="linha-detalhe-cat">
+                  <span className="ideal-t4">− saiu no mês</span>
+                  <span className="ideal-t3">{fmt(Math.abs(numeros.saidas))}</span>
+                </div>
+                <div className="linha-detalhe-cat total">
+                  <span className="ideal-t3">Resultado do mês</span>
+                  <span className={`ideal-t3 ${numeros.resultadoDoMes < 0 ? 'valor-neg' : 'valor-pos'}`}>
+                    {fmtComSinal(numeros.resultadoDoMes)}
+                  </span>
+                </div>
+              </BlocoRecolhivel>
+            </div>
+
+          </div>
+
+          {/* seta convergindo: Mês passado + Este mês → Caixa de hoje */}
+          <div className="rio-conector" aria-hidden="true">
+            <svg viewBox="0 0 100 100" preserveAspectRatio="none">
+              <line x1="25" y1="0" x2="50" y2="100" className="rio-linha-svg" />
+              <line x1="75" y1="0" x2="50" y2="100" className="rio-linha-svg" />
+            </svg>
+          </div>
+
+          <div className="rio-linha rio-linha-meio">
+            {/* ---------- CAIXA DE HOJE (ACUMULADO) ---------- */}
+            <div className="bloco-numero rio-caixa-hoje" data-testid="bloco-caixa-hoje">
+              <div className="bloco-numero-rotulo">
+                Caixa de hoje (acumulado)
+                <InfoDot titulo="Caixa de hoje" info={INFO_CAIXA_HOJE} />
+              </div>
+              <div
+                className={`ideal-t1 ${numeros.caixaAcumulado < 0 ? 'valor-neg' : 'valor-pos'}`}
+                data-testid="valor-caixa-hoje"
+              >
+                {fmtComSinal(numeros.caixaAcumulado)}
+              </div>
+              <p className="ideal-t4 texto-quebra" style={{ margin: '2px 0 0' }}>
+                acumulado até este mês
+              </p>
+              <BlocoRecolhivel testid="detalhe-caixa-hoje" rotulo="De onde vem a caixa de hoje?">
+                <div className="linha-detalhe-cat">
+                  <span className="ideal-t4">Mês passado</span>
+                  <span className="ideal-t3">{fmtComSinal(caixaAnterior)}</span>
+                </div>
+                <div className="linha-detalhe-cat">
+                  <span className="ideal-t4">+ resultado deste mês</span>
+                  <span className="ideal-t3">{fmtComSinal(numeros.resultadoDoMes)}</span>
+                </div>
+                <div className="linha-detalhe-cat total">
+                  <span className="ideal-t3">Caixa de hoje</span>
+                  <span className={`ideal-t3 ${numeros.caixaAcumulado < 0 ? 'valor-neg' : 'valor-pos'}`}>
+                    {fmtComSinal(numeros.caixaAcumulado)}
+                  </span>
+                </div>
+              </BlocoRecolhivel>
+            </div>
+
+          </div>
+
+          {/* seta divergindo: Caixa de hoje → Livre de tudo / Reservado, saindo
+              já nas posições proporcionais das duas caixas abaixo. */}
+          <div className="rio-conector" aria-hidden="true">
+            <svg viewBox="0 0 100 100" preserveAspectRatio="none">
+              <line x1="50" y1="0" x2={centroLivreRio} y2="100" className="rio-linha-svg" />
+              <line x1="50" y1="0" x2={centroReservadoRio} y2="100" className="rio-linha-svg" />
+            </svg>
+          </div>
+
+          <div className="rio-linha rio-linha-base">
             {/* ---------- 1 · LIVRE DE TUDO ---------- */}
-            <div className="bloco-numero" data-testid="bloco-saldo-livre">
+            <div
+              className="bloco-numero"
+              data-testid="bloco-saldo-livre"
+              style={{ flex: `0 0 calc(${pctLivreRio}% - 5px)` }}
+            >
               <div className="bloco-numero-rotulo">
                 1 · LIVRE DE TUDO
                 <InfoDot titulo="Livre de tudo" info={EXPLICACAO_SALDO_LIVRE} />
@@ -254,10 +409,10 @@ export default function Hoje({ mes, aoMudarMes, aoAbrirLancamento, aoAbrirPlanej
               >
                 {fmtComSinal(numeros.saldoLivre)}
               </div>
-              <p className="ideal-t4 texto-quebra" style={{ margin: '2px 0 0' }}>
+              <p className="ideal-t4 texto-quebra" style={{ margin: '2px 0 0' }} data-testid="frase-livre">
                 {fraseSaldoLivre(numeros.saldoLivre, mesFechado)}
               </p>
-              <BlocoRecolhivel testid="detalhe-livre">
+              <BlocoRecolhivel testid="detalhe-livre" rotulo="De onde vem o livre de tudo?">
                 <div className="linha-detalhe-cat">
                   <span className="ideal-t4">Caixa de hoje (acumulado)</span>
                   <span className="ideal-t3">{fmtComSinal(numeros.caixaAcumulado)}</span>
@@ -274,15 +429,20 @@ export default function Hoje({ mes, aoMudarMes, aoAbrirLancamento, aoAbrirPlanej
                 </div>
                 {/* O bloco "Entrou / Saiu / Sobrou no mês" saiu daqui na build
                     067, a pedido do Rafael: *"esse valor não mostra em nenhum
-                    lugar ali visualmente então retirar o trecho inteiro"*. O
-                    resultado do mês virou a 3ª barra do topo, com nome e valor
-                    — repetir a conta aqui era um segundo caminho para o mesmo
-                    número, que é como a tela antiga virou confusa. */}
+                    lugar ali visualmente então retirar o trecho inteiro"*. Esse
+                    número (resultado do mês) virou a própria caixa "Este mês"
+                    (O Rio, 14/09/2026) — repetir a conta aqui era um segundo
+                    caminho para o mesmo número, que é como a tela antiga
+                    virou confusa. */}
               </BlocoRecolhivel>
             </div>
 
             {/* ---------- 2 · PODE SOBRAR DAS METAS ---------- */}
-            <div className="bloco-numero" data-testid="bloco-pode-sobrar">
+            <div
+              className="bloco-numero"
+              data-testid="bloco-pode-sobrar"
+              style={{ flex: `0 0 calc(${pctReservadoRio}% - 5px)` }}
+            >
               <div className="bloco-numero-rotulo">
                 2 · {mesFechado ? 'SOBROU DAS METAS' : 'PODE SOBRAR DAS METAS'}
                 <InfoDot titulo="Pode sobrar das metas" info={EXPLICACAO_PODE_SOBRAR} />
@@ -293,23 +453,10 @@ export default function Hoje({ mes, aoMudarMes, aoAbrirLancamento, aoAbrirPlanej
               >
                 {fmtComSinal(numeros.podeSobrar)}
               </div>
-              <p className="ideal-t4 texto-quebra" style={{ margin: '2px 0 0' }}>
+              <p className="ideal-t4 texto-quebra" style={{ margin: '2px 0 0' }} data-testid="frase-pode-sobrar">
                 {frasePodeSobrar(numeros.podeSobrar, mesFechado)}
               </p>
-              {/* A frase do veredito fica VISÍVEL: é o que ainda pode mudar no
-                  mês, e é o coração desta tela desde a build 057. */}
-              {frase && (
-                <div className="linha-veredito" data-testid="veredito">
-                  <span
-                    className={`ideal-t3 ${projecao.variavel < 0 ? 'veredito-mal' : 'veredito-bem'}`}
-                    data-testid="frase-veredito"
-                  >
-                    {frase}
-                  </span>
-                  <InfoDot titulo="Nesse ritmo" info={explicacaoRitmo(janelaDias)} />
-                </div>
-              )}
-              <BlocoRecolhivel testid="detalhe-pode-sobrar" rotulo="Ver por grupo">
+              <BlocoRecolhivel testid="detalhe-pode-sobrar" rotulo="De onde vem o reservado?">
                 {/* A barra da meta de GASTO do mês — o gráfico da tela, agora
                     dentro do total a que pertence. */}
                 <BarraIdeal
@@ -344,6 +491,28 @@ export default function Hoje({ mes, aoMudarMes, aoAbrirLancamento, aoAbrirPlanej
               </BlocoRecolhivel>
             </div>
           </div>
+          </div>
+          </div>
+
+          {/* O veredito ("Nesse ritmo...") vive AQUI, fora de qualquer caixa
+              (O Rio, requisito 7) — antes ficava nascido dentro da caixa
+              Reservado (build 057-067); agora é seu próprio cartão, sempre
+              visível, entre o gráfico e a calibragem. A lógica/frase em si
+              não mudou — só o lugar. */}
+          {frase && (
+            <div className="cartao" style={{ marginTop: 14 }} data-testid="cartao-veredito">
+              <div className="linha-veredito" style={{ marginTop: 0, paddingTop: 0, borderTop: 'none' }} data-testid="veredito">
+                <span
+                  className={`ideal-t3 ${projecao.variavel < 0 ? 'veredito-mal' : 'veredito-bem'}`}
+                  data-testid="frase-veredito"
+                >
+                  {frase}
+                </span>
+                <InfoDot titulo="Nesse ritmo" info={explicacaoRitmo(janelaDias)} />
+              </div>
+            </div>
+          )}
+
           {/* Calibragem: silêncio quando está certo; recolhida quando não. */}
           {gruposDescalibrados.length > 0 && (
             <div className="cartao" data-testid="cartao-calibragem">

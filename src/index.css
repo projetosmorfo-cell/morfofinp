@@ -2309,85 +2309,11 @@ html[data-mloc-tema='claro'] .tarja-inativa {
 }
 .linha-cat-base-meta .selo-base-meta { color: var(--verde); font-weight: 600; }
 
-/* A linha que amarra as três caixas da tela Hoje (13/09/2026) — é ela que
-   responde "de onde vem esse número". */
-/* As TRÊS barras do topo da tela Hoje (build 067) — ver BarrasTopoHoje.tsx.
-   Grade de 3 colunas e 5 linhas: título · barra · valor · rodapé. A grade é o
-   que mantém as três barras e os três valores ALINHADOS entre si mesmo com
-   títulos de alturas diferentes (um deles quebra em duas linhas a 430px). */
-.barras-topo {
-  display: grid;
-  grid-template-columns: 1.35fr 1fr 1fr;
-  column-gap: 10px;
-  align-items: end;
-  margin: 2px 0 4px;
-}
-/* BLOCO, não flex: num flex o "i" (24px de largura fixa) rouba a largura do
-   texto e "Caixa do mês passado" quebrava em TRÊS linhas numa coluna de 90px.
-   Em bloco o "i" flui junto com a última palavra, como pontuação. */
-.barras-topo-titulo {
-  grid-row: 1; align-self: end;
-  margin-bottom: 3px;
-  font-size: 11px; line-height: 1.2; text-align: center;
-  color: var(--texto);
-}
-.barras-topo-titulo [role='button'] { vertical-align: middle; }
-.barras-topo-barra {
-  grid-row: 2; position: relative;
-  display: flex; height: 16px; border-radius: 8px; overflow: hidden;
-  background: var(--ideal-trilho);
-}
-.barras-topo-barra > i { display: block; height: 100%; }
-.barras-topo-barra .seg-realizado { background: var(--ideal-azul); }
-.barras-topo-barra .seg-comprometido { background: var(--ideal-ambar); }
-.barras-topo-barra .seg-estouro { background: var(--ideal-vermelho); }
-.barras-topo-barra .seg-sobrou { background: var(--ideal-verde); }
-.barras-topo-linha-meta {
-  position: absolute; top: 0; bottom: 0; width: 2px;
-  margin-left: -1px; background: #fff; opacity: 0.9;
-}
-.barras-topo-valor {
-  grid-row: 3; margin-top: 5px; text-align: center;
-  font-size: var(--ideal-t3-tam); font-weight: 700; white-space: nowrap;
-}
-.barras-topo-rodape-1 {
-  grid-row: 4; grid-column: 1; align-self: end;
-  display: flex; flex-direction: column; align-items: center; gap: 1px;
-  margin-top: 6px;
-  font-size: 10.5px; line-height: 1.25; text-align: center; color: var(--texto);
-}
-.barras-topo-rodape-1 strong { white-space: nowrap; }
-.barras-topo-rodape-1 [role='button'] { vertical-align: middle; }
-/* A chave que une as barras 2 e 3: um traço que abre para cima, ligando as
-   duas colunas, e abaixo dele a divisão do caixa (livre × reservado). */
-.barras-topo-chave { grid-row: 4; grid-column: 2 / 4; margin-top: 6px; }
-.barras-topo-chave-traco {
-  display: block; height: 6px;
-  border-left: 1px solid var(--borda);
-  border-right: 1px solid var(--borda);
-  border-bottom: 1px solid var(--borda);
-  border-radius: 0 0 6px 6px;
-}
-.barras-topo-chave-titulo {
-  display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 3px;
-  margin-top: 4px; font-size: 10.5px; line-height: 1.2; color: var(--texto);
-}
-.barras-topo-chave-barra {
-  display: flex; height: 7px; border-radius: 4px; overflow: hidden;
-  margin-top: 5px; background: var(--ideal-trilho);
-}
-.barras-topo-chave-barra > i { display: block; height: 100%; }
-.barras-topo-chave-barra .seg-sobrou { background: var(--ideal-verde); }
-.barras-topo-chave-barra .seg-reservado { background: var(--ideal-azul); opacity: 0.45; }
-.barras-topo-chave-legenda {
-  display: flex; align-items: flex-start; justify-content: space-between; gap: 8px;
-  margin-top: 3px; font-size: 10px; line-height: 1.25; color: var(--texto);
-}
-/* Rótulo em cima, valor embaixo: numa faixa de ~100px por metade, deixar os
-   dois na mesma linha partia o número ("reservado R$ / 1.307,16"). */
-.barras-topo-chave-legenda > span { display: flex; flex-direction: column; min-width: 0; }
-.barras-topo-chave-legenda > span:last-child { text-align: right; }
-.barras-topo-chave-legenda strong { white-space: nowrap; }
+/* As três barras desenhadas do topo da tela Hoje (build 067) foram removidas
+   na build 069 ("O Rio", do jeito original — 5 caixas clicáveis com valor em
+   R$, não barras desenhadas). O bloco `.barras-topo*` saiu inteiro daqui;
+   `.bloco-numero`/`.linha-detalhe-cat`/`.ideal-t1` (mais abaixo neste
+   arquivo) são reaproveitados pelas caixas novas, sem classe nova nenhuma. */
 
 /* Faixa de mês encerrado, no topo do card da tela Hoje (13/09/2026). */
 .faixa-mes-fechado {
@@ -2429,6 +2355,25 @@ html[data-mloc-tema='claro'] .tarja-inativa {
 .ideal-t2 { font-size: var(--ideal-t2-tam); font-weight: var(--ideal-t2-peso); }
 .ideal-t3 { font-size: var(--ideal-t3-tam); font-weight: var(--ideal-t3-peso); }
 .ideal-t4 { font-size: var(--ideal-t4-tam); font-weight: var(--ideal-t4-peso); opacity: var(--ideal-t4-opac); }
+
+/* "O Rio", visual de funil (14/09/2026, build 070) — Mês passado + Este mês
+   convergem em Caixa de hoje, que diverge em Livre de tudo/Reservado, com a
+   LARGURA das duas últimas caixas proporcional ao valor real de cada uma
+   (calculado em Hoje.tsx). As caixas em si (`.bloco-numero`) não mudaram nada
+   — só a forma como elas se organizam aqui dentro. */
+.rio-funil { display: flex; flex-direction: column; }
+.rio-linha { display: flex; gap: 10px; align-items: stretch; }
+.rio-linha .bloco-numero { flex: 1 1 0; min-width: 0; margin-top: 0; }
+.rio-linha-topo { margin-top: 14px; }
+.rio-caixa-hoje {
+  border: 1px solid var(--azul);
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: var(--bg-elevado);
+}
+.rio-conector { position: relative; height: 20px; margin: 2px 0; }
+.rio-conector svg { width: 100%; height: 100%; display: block; }
+.rio-linha-svg { stroke: var(--borda); stroke-width: 1.5; }
 
 /* Versão Ideal — blocos da tela Hoje e o cartão de primeiros passos. */
 .bloco-numero { margin-top: 14px; }

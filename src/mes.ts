@@ -40,22 +40,20 @@ export function formatarMes(mesISO: string): string {
   return `${nome[0].toUpperCase()}${nome.slice(1)} de ${ano}`
 }
 
-// Mês inicial pra abrir o app: o mês atual de verdade, ou o último mês com
-// dados reais semeados (agosto/2026) se o app for aberto depois disso — assim
-// ele sempre abre num mês com informação, e dá pra avançar manualmente até o
-// mês corrente de verdade (mesmo que vazio).
-export const ULTIMO_MES_COM_DADOS_REAIS = '2026-08'
-
-// Usa a data REAL do sistema direto (nunca `mesAtualISO()`/`hojeEfetivoISO()`
-// simulada) de propósito (05/09/2026, Etapa 7): a tela inicial que abre não
-// deve pular pro mês de uma simulação que o Rafael talvez tenha deixado
-// ativa numa sessão anterior — isso seria surpreendente logo na abertura do
-// app, o oposto do que a Decisão 6 pediu pra evitar. Simular data continua
-// afetando tudo o resto (status, projeção, navegação de mês) assim que o app
-// já está aberto — só o PONTO DE PARTIDA fica de fora.
+// Mês inicial pra abrir o app: sempre o mês atual DE VERDADE.
+//
+// 15/09/2026 — correção de bug real reportado pelo Rafael ("abre em
+// agosto/15-08-2026 em vez de hoje"). `ULTIMO_MES_COM_DADOS_REAIS` (fixado em
+// '2026-08' desde 30/08/2026, quando a semente ainda não cobria setembro)
+// nunca foi atualizado depois que a semente passou a incluir setembro em
+// aberto (`MES_EM_ABERTO_NA_SEMENTE`, build 063) — o clamp continuava
+// forçando agosto pra sempre, mesmo com o app já sabendo lidar com o mês
+// corrente vazio/em aberto. Removido: o app agora sempre abre no mês real,
+// sem nenhum teto artificial. Se um dia a semente for descontinuada e um mês
+// muito à frente do último dado real precisar de um teto de novo, isso volta
+// a ser decisão explícita do Rafael, não um valor esquecido no código.
 export function mesInicial(): string {
-  const atual = new Date().toISOString().slice(0, 7)
-  return atual > ULTIMO_MES_COM_DADOS_REAIS ? ULTIMO_MES_COM_DADOS_REAIS : atual
+  return new Date().toISOString().slice(0, 7)
 }
 
 // Props comuns de tela — todas recebem o mês selecionado (fixo no cabeçalho,
