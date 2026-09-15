@@ -227,6 +227,12 @@ interface AlvoLancamento {
   // formulário abre pré-preenchido com o que foi lido do texto, e ao salvar
   // a notificação vira 'confirmada' — ver `NotificacoesBancarias.tsx`.
   notificacao?: NotificacaoPendente
+  // Item 11 (15/09/2026): abrir já em modo "clonando" — usado pelo atalho de
+  // duplicar revelado ao arrastar a linha (Lançamentos e o drill-in de
+  // Carteira, ver `ItemLancamentoAcoes.tsx`). Mesmo mecanismo do botão
+  // "Clonar este lançamento" já existente dentro do formulário — só pula o
+  // passo de abrir em edição e clicar em Clonar manualmente.
+  abrirClonando?: boolean
 }
 
 // Engrenagem fixa no topo (30/08/2026) — abre um popover com as duas telas
@@ -1036,7 +1042,7 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: ModoConsultaN
             /* Calibragem (build 059) — chamada pelo aviso da tela Hoje, pela
                faixa do Planejamento e pelo ⚖ do cabeçalho dele. Não entra no
                menu "⋮": não é um destino de configuração, é uma ação do plano. */
-            <Calibragem mes={mes} aoVoltar={fecharConfig} />
+            <Calibragem mes={mes} aoVoltar={fecharConfig} aoAbrirLancamento={aoAbrirLancamento} />
           ) : configAberta === 'contas' ? (
             <Contas aoVoltar={fecharConfig} />
           ) : configAberta === 'assinatura' ? (
@@ -1117,6 +1123,7 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: ModoConsultaN
           alvoId={lancamentoAberto.id}
           categoriaIdSugerida={lancamentoAberto.categoriaIdSugerida}
           contaIdSugerida={lancamentoAberto.contaIdSugerida}
+          abrirClonando={lancamentoAberto.abrirClonando}
           aoMudarMes={setMes}
           sugestao={
             lancamentoAberto.notificacao

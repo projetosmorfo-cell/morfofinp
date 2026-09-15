@@ -1,20 +1,21 @@
-import { useRef, useState } from 'react'
+import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, type Categoria, type Lancamento } from '../db'
 import type { TelaProps } from '../mes'
 import SeletorMes from '../components/SeletorMes'
 import EdicaoEmMassa from '../components/EdicaoEmMassa'
-import LinhaLancamentoCompleta from '../components/LinhaLancamentoCompleta'
+import GrupoReordenavel from '../components/GrupoReordenavel'
+import { compararDentroDoDia } from '../lancamentosUtil'
 import { CampoBusca, FolhaFiltros, FILTROS_VAZIOS, aplicarFiltros, contarFiltrosAtivos, type FiltrosAvancados } from '../components/BuscaEFiltros'
 import { formatarCabecalhoData } from '../formatoData'
 import { fmtBRL } from '../formatoMoeda'
-import { statusDoLancamento, FUNDO_STATUS } from '../statusPagamento'
+import { statusDoLancamento } from '../statusPagamento'
 import { useHojeSimuladoISO } from '../hojeSimulado'
 import TituloTelaN1 from '../kit/CabecalhoN1'
 import { ExportSheet, type ExportRow } from '../kit/ExportSheet'
 import { lerDoAmbiente } from '../ambiente'
 import {
-  useSelecao, BarraSelecao, TotaisEntradaSaida, MarcadorLinha, blocosPorCorte, RodapeTotais,
+  useSelecao, BarraSelecao, TotaisEntradaSaida, blocosPorCorte, RodapeTotais,
 } from '../components/SelecaoETotais'
 
 // Tela "Lançamentos" (antes "Lançar") — 30/08/2026: lista-primeiro, agrupada
@@ -29,9 +30,19 @@ import {
 // sem coluna de data (a sessão já é o agrupador). Ganhou busca + filtros
 // avançados no topo (ver BuscaEFiltros) — pontos 1, 8, 9 e 10 do feedback.
 export default function Lancamentos({ mes, aoMudarMes, aoAbrirLancamento }: TelaProps) {
+  // Item 6 da lista pendente (15/09/2026): filtro por período (data de/até),
+  // alternável clicando no nome do mês — clicar de novo volta pro mês e limpa
+  // os filtros. Só existe nesta tela (pedido explícito); as outras telas de
+  // mês continuam com `SeletorMes` do jeito de sempre.
+  const [modoPeriodo, setModoPeriodo] = useState(false)
+  const [periodoDe, setPeriodoDe] = useState(`${mes}-01`)
+  const [periodoAte, setPeriodoAte] = useState(`${mes}-31`)
   const lancamentosDoMes = useLiveQuery(
-    () => lerDoAmbiente(db.lancamentos.where('dataCompetencia').startsWith(mes).toArray()),
-    [mes],
+    () =>
+      modoPeriodo
+        ? lerDoAmbiente(db.lancamentos.where('dataCompetencia').between(periodoDe, periodoAte, true, true).toArray())
+        : lerDoAmbiente(db.lancamentos.where('dataCompetencia').startsWith(mes).toArray()),
+    [mes, modoPeriodo, periodoDe, periodoAte],
   )
   const categorias = useLiveQuery(() => lerDoAmbiente(db.categorias.orderBy('nome').toArray()), [])
   const contas = useLiveQuery(() => lerDoAmbiente(db.contas.toArray()), [])
@@ -77,9 +88,16 @@ export default function Lancamentos({ mes, aoMudarMes, aoAbrirLancamento }: Tela
     recorrencia: l.recorrencia ?? 'único',
     descricaoOriginal: l.descricaoOriginal ?? '',
   }))
-  const ordenados = [...filtrados].sort((a, b) =>
-    ordemDesc ? b.dataCompetencia.localeCompare(a.dataCompetencia) : a.dataCompetencia.localeCompare(b.dataCompetencia),
-  )
+  // Item 12 (15/09/2026): a ordenação asc/desc troca a ordem dos DIAS, nunca
+  // a ordem DENTRO de um dia — essa é sempre `ordemManual` (arrasto) quando
+  // existe, senão a ordem de criação (`compararDentroDoDia`). Ver
+  // `GrupoReordenavel.tsx`.
+  const ordenados = [...filtrados].sort((a, b) => {
+    const porData = ordemDesc
+      ? b.dataCompetencia.localeCompare(a.dataCompetencia)
+      : a.dataCompetencia.localeCompare(b.dataCompetencia)
+    return porData !== 0 ? porData : compararDentroDoDia(a, b)
+  })
 
   // Agrupa em sessões por data, mantendo a ordem já escolhida.
   function agrupar(itens: Lancamento[]) {
@@ -119,7 +137,47 @@ export default function Lancamentos({ mes, aoMudarMes, aoAbrirLancamento }: Tela
             filtrosAtivos: contarFiltrosAtivos(filtros),
           }}
         />
-        <SeletorMes mes={mes} onMudar={aoMudarMes} />
+        {modoPeriodo ? (
+          <div className="periodo-filtro" data-testid="periodo-filtro">
+            <input
+              type="date"
+              value={periodoDe}
+              onChange={(e) => setPeriodoDe(e.target.value)}
+              aria-label="De"
+              data-testid="periodo-de"
+            />
+            <span className="texto-fraco">até</span>
+            <input
+              type="date"
+              value={periodoAte}
+              onChange={(e) => setPeriodoAte(e.target.value)}
+              aria-label="Até"
+              data-testid="periodo-ate"
+            />
+            <button
+              type="button"
+              className="secundario"
+              data-testid="voltar-modo-mes"
+              onClick={() => {
+                setModoPeriodo(false)
+                setFiltros(FILTROS_VAZIOS)
+                setBusca('')
+              }}
+            >
+              ‹ Voltar ao mês
+            </button>
+          </div>
+        ) : (
+          <SeletorMes
+            mes={mes}
+            onMudar={aoMudarMes}
+            aoClicarNome={() => {
+              setPeriodoDe(`${mes}-01`)
+              setPeriodoAte(`${mes}-31`)
+              setModoPeriodo(true)
+            }}
+          />
+        )}
         {(buscaAberta || busca !== '') && (
           <CampoBusca busca={busca} onBuscaChange={setBusca} onFechar={() => setBuscaAberta(false)} />
         )}
@@ -263,145 +321,23 @@ function SessoesDeData({ sessoes, categoriaPorId, contaPorId, aoAbrirLancamento,
       {sessoes.map((sessao) => (
         <div key={sessao.data}>
           <div className="sessao-data">{formatarCabecalhoData(sessao.data)}</div>
-          {sessao.itens.map((l) => (
-            <div className="linha-selecionavel" key={l.id}>
-              {selecao.ativa && (
-                <MarcadorLinha marcado={selecao.estaMarcado(l.id!)} onAlternar={() => selecao.alternar(l.id!)} />
-              )}
-              <ItemLancamento
-                lancamento={l}
-                categoria={categoriaPorId.get(l.categoriaId)}
-                contaNome={contaPorId.get(l.contaId)?.nome}
-                onAbrir={() => (selecao.ativa ? selecao.alternar(l.id!) : aoAbrirLancamento({ id: l.id }))}
-                onExcluir={() => db.lancamentos.delete(l.id!)}
-              />
-            </div>
-          ))}
+          {/* Item 12 (15/09/2026): um `GrupoReordenavel` por DIA — o arrasto de
+              reordenar nunca cruza pra outro dia, porque cada dia é a própria
+              instância do componente, com a própria lista de ids. */}
+          <GrupoReordenavel
+            itens={sessao.itens}
+            categoriaPorId={categoriaPorId}
+            contaPorId={contaPorId}
+            aoAbrirLancamento={aoAbrirLancamento}
+            selecao={selecao}
+          />
         </div>
       ))}
     </>
   )
 }
 
-// Item com clique = abrir detalhe (universal, web incluso) e arrastar pra
-// esquerda no mobile = atalho de exclusão com duplo check (complementar,
-// nunca obrigatório).
-function ItemLancamento({
-  lancamento,
-  categoria,
-  contaNome,
-  onAbrir,
-  onExcluir,
-}: {
-  lancamento: Lancamento
-  categoria?: Categoria
-  contaNome?: string
-  onAbrir: () => void
-  onExcluir: () => void
-}) {
-  const [arrastadoX, setArrastadoX] = useState(0)
-  const [confirmandoExclusao, setConfirmandoExclusao] = useState(false)
-  const inicioX = useRef<number | null>(null)
-  const arrastando = useRef(false)
-
-  function onTouchStart(e: React.TouchEvent) {
-    inicioX.current = e.touches[0].clientX
-    arrastando.current = false
-  }
-
-  function onTouchMove(e: React.TouchEvent) {
-    if (inicioX.current == null) return
-    const delta = e.touches[0].clientX - inicioX.current
-    if (Math.abs(delta) > 8) arrastando.current = true
-    setArrastadoX(Math.max(-80, Math.min(0, delta)))
-  }
-
-  function onTouchEnd() {
-    setArrastadoX(arrastadoX < -40 ? -80 : 0)
-    inicioX.current = null
-  }
-
-  function onClickConteudo() {
-    if (arrastando.current || arrastadoX !== 0) {
-      setArrastadoX(0)
-      arrastando.current = false
-      return
-    }
-    onAbrir()
-  }
-
-  // Fundo do status "não pago" aplicado aqui (no wrapper que já vai de
-  // borda a borda do cartão), não na `LinhaLancamentoCompleta` interna (que
-  // ainda tem seu próprio padding de 12px) — assim o destaque preenche 100%
-  // da largura visível da linha, não só o miolo (pedido do Rafael,
-  // 31/08/2026, mesmo dia).
-  const status = statusDoLancamento(lancamento)
-
-  return (
-    <div className="item-lancamento">
-      <div className="item-lancamento-acao" onClick={() => setConfirmandoExclusao(true)} style={{ cursor: 'pointer' }}>
-        Excluir
-      </div>
-      <div
-        className={`item-lancamento-conteudo ${FUNDO_STATUS[status]}`}
-        style={{ transform: `translateX(${arrastadoX}px)` }}
-        onTouchStart={onTouchStart}
-        onTouchMove={onTouchMove}
-        onTouchEnd={onTouchEnd}
-      >
-        <LinhaLancamentoCompleta
-          lancamento={lancamento}
-          categoria={categoria}
-          origemLabel={contaNome}
-          onAbrir={onClickConteudo}
-        />
-      </div>
-
-      {confirmandoExclusao && (
-        <div className="modal-fundo" onClick={() => setConfirmandoExclusao(false)} style={{ alignItems: 'center' }}>
-          <div className="modal-conteudo" style={{ borderRadius: 16 }} onClick={(e) => e.stopPropagation()}>
-            <p>Excluir "{lancamento.descricao}"? Essa ação não pode ser desfeita.</p>
-            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-              <button
-                type="button"
-                style={{
-                  marginTop: 0,
-                  background: 'var(--vermelho)',
-                  border: 'none',
-                  borderRadius: 10,
-                  padding: '12px',
-                  flex: 1,
-                  cursor: 'pointer',
-                }}
-                onClick={() => {
-                  onExcluir()
-                  setConfirmandoExclusao(false)
-                }}
-              >
-                Confirmar exclusão
-              </button>
-              <button
-                type="button"
-                style={{
-                  marginTop: 0,
-                  background: 'none',
-                  border: '1px solid var(--borda)',
-                  borderRadius: 10,
-                  padding: '12px',
-                  flex: 1,
-                  cursor: 'pointer',
-                }}
-                onClick={() => {
-                  setConfirmandoExclusao(false)
-                  setArrastadoX(0)
-                }}
-              >
-                Cancelar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
+// O item de lista em si (arrastar-pra-agir + Duplicar/Editar/Excluir) virou
+// componente compartilhado (15/09/2026, item 11) — ver
+// `src/components/ItemLancamentoAcoes.tsx`, usado também no drill-in de
+// Carteira.tsx.

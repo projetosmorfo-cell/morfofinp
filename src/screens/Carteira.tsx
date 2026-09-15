@@ -2,8 +2,9 @@ import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, type Categoria, type Conta, type GrupoRegistro, type Lancamento } from '../db'
 import type { TelaProps } from '../mes'
+import { somarMes } from '../mes'
 import SeletorMes from '../components/SeletorMes'
-import LinhaLancamentoCompleta from '../components/LinhaLancamentoCompleta'
+import ItemLancamentoAcoes from '../components/ItemLancamentoAcoes'
 import SeloInstituicao from '../components/SeloInstituicao'
 import {
   useSelecao, BarraSelecao, TotaisEntradaSaida, MarcadorLinha, blocosPorCorte, RodapeTotais,
@@ -182,7 +183,12 @@ export default function Carteira({ mes, aoMudarMes, aoAbrirLancamento }: TelaPro
       return { rotulo: 'Fatura até o momento', valor: daConta.filter((l) => l.dataCompetencia >= inicio && l.dataCompetencia <= fim).reduce((s, l) => s - l.valor, 0) }
     }
     if (conta.tipo === 'cofre') return { rotulo: 'Total acumulado', valor: daConta.reduce((s, l) => s + l.valor, 0) }
-    return { rotulo: 'Total do mês', valor: daConta.filter((l) => l.dataCompetencia.startsWith(mes)).reduce((s, l) => s + l.valor, 0) }
+    // Item 2 da lista pendente (15/09/2026): conta corrente mostrava só o mês
+    // selecionado ("Total do mês"), diferente de cartão/cofre — que já mostram
+    // um número acumulado (fatura em aberto / total de sempre). Corrigido pra
+    // "Saldo atual" = saldo inicial cadastrado + todo o histórico de verdade,
+    // acumulado de sempre até hoje — o mesmo tipo de número que os outros dois.
+    return { rotulo: 'Saldo atual', valor: (conta.saldoInicial ?? 0) + daConta.reduce((s, l) => s + l.valor, 0) }
   }
   const linhasCarteira: ExportRow[] = [
     ...contas.map((c) => {
@@ -237,10 +243,10 @@ export default function Carteira({ mes, aoMudarMes, aoAbrirLancamento }: TelaPro
           valorNumero = lancamentosDaConta.reduce((s, l) => s + l.valor, 0)
           rotuloValor = 'Total acumulado'
         } else {
-          valorNumero = lancamentosDaConta
-            .filter((l) => l.dataCompetencia.startsWith(mes))
-            .reduce((s, l) => s + l.valor, 0)
-          rotuloValor = 'Total do mês'
+          // Item 2 (15/09/2026): acumulado de sempre, igual ao cofre — ver
+          // comentário em `valorDoCard`.
+          valorNumero = (conta.saldoInicial ?? 0) + lancamentosDaConta.reduce((s, l) => s + l.valor, 0)
+          rotuloValor = 'Saldo atual'
         }
         // F-05 da revisão de UI (04/09/2026): medido 549px (64% da área
         // útil) vazios abaixo do último card, com só 3 contas cadastradas —
@@ -454,7 +460,25 @@ function DetalheConta({
   const [massaAberta, setMassaAberta] = useState(false)
   const [filtros, setFiltros] = useState<FiltrosAvancados>(FILTROS_VAZIOS)
 
-  const doPeriodoBruto = lancamentosDoLugar.filter((l) => l.dataCompetencia >= janela.inicio && l.dataCompetencia <= janela.fim)
+  // Item 1 da lista pendente (15/09/2026): `faturaOverride` puxa um lançamento
+  // de cartão pro ciclo VIZINHO ao que a data indicaria — ex.: uma compra feita
+  // 1 dia depois do fechamento que o Rafael sabe que caiu na fatura anterior
+  // (atraso do banco em processar). Só é lido pra conta tipo 'cartao'; conta
+  // corrente/cofre ignora o campo por completo (não existe "ciclo" pra elas).
+  const janelaAnterior = isCartao ? janelaFatura(conta?.diaFechamento ?? 9, somarMes(mes, -1)) : janela
+  const janelaSeguinte = isCartao ? janelaFatura(conta?.diaFechamento ?? 9, somarMes(mes, 1)) : janela
+  const dentroDaJanela = (l: Lancamento, j: { inicio: string; fim: string }) =>
+    l.dataCompetencia >= j.inicio && l.dataCompetencia <= j.fim
+  const doPeriodoBruto = lancamentosDoLugar.filter((l) => {
+    if (!isCartao) return dentroDaJanela(l, janela)
+    const override = l.faturaOverride
+    // 'proxima' = o lançamento pertence à fatura SEGUINTE à da data dele, então
+    // pra aparecer na fatura ANTERIOR (a que ele foi puxado pra dentro) é a
+    // janela anterior que precisa bater com a data dele.
+    if (override === 'proxima') return dentroDaJanela(l, janelaAnterior)
+    if (override === 'anterior') return dentroDaJanela(l, janelaSeguinte)
+    return dentroDaJanela(l, janela)
+  })
   const antesDoPeriodo = lancamentosDoLugar.filter((l) => l.dataCompetencia < janela.inicio)
 
   const saldoInicial = (conta?.saldoInicial ?? 0) + antesDoPeriodo.reduce((s, l) => s + l.valor, 0)
@@ -487,21 +511,24 @@ function DetalheConta({
   const sessoes = blocos.flatMap((b) => b.sessoes)
 
   function linhaDe(l: Lancamento) {
-    // Wrapper só pra carregar a borda entre lançamentos (01/09/2026) — mesmo
-    // padrão visual de `.item-lancamento` em Lançamentos.tsx, ver index.css.
+    // Item 11 (15/09/2026): o drill-in de conta ganhou o mesmo gesto de
+    // arrastar-pra-agir (Duplicar/Editar/Excluir) que Lançamentos.tsx já
+    // tinha — antes só o clique abria o detalhe, sem atalho nenhum aqui.
+    // `ItemLancamentoAcoes` já inclui o próprio wrapper (`.item-lancamento`),
+    // então `.linha-completa-wrapper` (que só existia pra dar largura/borda
+    // ao conteúdo simples de antes) não é mais necessária aqui.
     return (
       <div key={l.id} className="linha-selecionavel">
         {selecao.ativa && (
           <MarcadorLinha marcado={selecao.estaMarcado(l.id!)} onAlternar={() => selecao.alternar(l.id!)} />
         )}
-        <div className="linha-completa-wrapper">
-          <LinhaLancamentoCompleta
-            lancamento={l}
-            categoria={categoriaPorId.get(l.categoriaId)}
-            origemLabel={conta && l.contaId === conta.id ? undefined : `via ${contaPorId.get(l.contaId)?.nome ?? '—'}`}
-            onAbrir={() => (selecao.ativa ? selecao.alternar(l.id!) : aoAbrirLancamento({ id: l.id }))}
-          />
-        </div>
+        <ItemLancamentoAcoes
+          lancamento={l}
+          categoria={categoriaPorId.get(l.categoriaId)}
+          origemLabel={conta && l.contaId === conta.id ? undefined : `via ${contaPorId.get(l.contaId)?.nome ?? '—'}`}
+          onAbrir={() => (selecao.ativa ? selecao.alternar(l.id!) : aoAbrirLancamento({ id: l.id }))}
+          onDuplicar={() => aoAbrirLancamento({ id: l.id, abrirClonando: true })}
+        />
       </div>
     )
   }

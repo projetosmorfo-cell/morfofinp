@@ -43,11 +43,16 @@ export default function DetalheLancamento({
   aoMudarMes,
   sugestao,
   aoSalvarComSucesso,
+  abrirClonando,
   onFechar,
 }: {
   alvoId?: number
   categoriaIdSugerida?: number
   contaIdSugerida?: number
+  // Item 11 (15/09/2026): abre já em modo "clonando" — mesmo efeito de abrir
+  // em edição e clicar em "Clonar este lançamento", só sem o passo manual.
+  // Usado pelo atalho de duplicar da linha (Lançamentos/Carteira).
+  abrirClonando?: boolean
   // 01/09/2026, rodada seguinte — bug real encontrado (não era exclusivo de
   // Transferência, como o Rafael relatou, e sim de QUALQUER lançamento):
   // o formulário sempre sugere a data de hoje, mas a tela "de mês" que abriu
@@ -103,7 +108,7 @@ export default function DetalheLancamento({
      de estar editando o original e passa a estar criando um lançamento novo,
      com todos os campos já preenchidos. "Cancelar clonagem" volta a editar o
      original, sem ter gravado coisa nenhuma. */
-  const [clonando, setClonando] = useState(false)
+  const [clonando, setClonando] = useState(!!abrirClonando)
   const editando = alvoId != null && !clonando
   const ehTransferenciaExistente = !!original?.transferenciaId
   const [carregado, setCarregado] = useState(false)
@@ -139,7 +144,13 @@ export default function DetalheLancamento({
   const [diaUtil, setDiaUtil] = useState('1')
   const [diaSemana, setDiaSemana] = useState('1')
   const [parcelaN, setParcelaN] = useState('2')
+  const [faturaOverride, setFaturaOverride] = useState<'anterior' | 'atual' | 'proxima'>('atual')
   const [confirmandoExclusao, setConfirmandoExclusao] = useState(false)
+  /* Item 3 da lista pendente do Rafael (15/09/2026): excluir um lançamento
+     que pertence a uma série (fixo ou parcelado) precisa perguntar o alcance
+     — antes excluía sempre só aquele registro, mesmo sendo parte de uma
+     série, sem opção de apagar os futuros ou a série inteira junto. */
+  const [escopoExclusao, setEscopoExclusao] = useState<'este' | 'futuros' | 'serie'>('este')
 
   // Preenche o formulário quando o lançamento a editar carrega (só uma vez).
   // Se for perna de transferência, espera o PAR carregar também antes de
@@ -150,6 +161,7 @@ export default function DetalheLancamento({
     setDescricao(original.descricao)
     setValor(formatarMoeda(original.valor))
     setPago(original.pago !== false)
+    setFaturaOverride(original.faturaOverride ?? 'atual')
     /* Item 9: abrir uma ocorrência de série mostra a recorrência dela já
        preenchida — antes o formulário voltava sempre pra "Único". */
     if (original.recorrencia) {
@@ -400,6 +412,13 @@ export default function DetalheLancamento({
     }
     const valorComSinal = tipo === 'saida' ? -numero : numero
 
+    // Item 1 da lista pendente (15/09/2026): faturaOverride só faz sentido em
+    // conta tipo 'cartao', e só grava quando difere do padrão 'atual' — assim
+    // um lançamento de conta corrente/cofre nunca carrega o campo à toa.
+    const contaEhCartao = (contas ?? []).find((c) => c.id === contaEscolhidaId)?.tipo === 'cartao'
+    const patchFaturaOverride =
+      contaEhCartao && faturaOverride !== 'atual' ? { faturaOverride } : { faturaOverride: undefined }
+
     if (editando && alvoId != null) {
       if (jaTemSerie) {
         /* Item 9 (12/09/2026): salvar uma ocorrência de série passou a
@@ -430,6 +449,7 @@ export default function DetalheLancamento({
           ...(recorrenciaFinal === 'fixo'
             ? { periodicidade, regraRecorrencia: regraEditada }
             : { parcelaN: nParcelas }),
+          ...patchFaturaOverride,
         })
         if (original?.serieId) {
           await reprocessarSerieAPartirDe(original.serieId, {
@@ -469,6 +489,7 @@ export default function DetalheLancamento({
           serieId,
           parcelaI: primeira.parcelaI,
           parcelaN: n,
+          ...patchFaturaOverride,
         })
         if (resto.length > 0) {
           await db.lancamentos.bulkAdd(
@@ -488,6 +509,7 @@ export default function DetalheLancamento({
               parcelaI: p.parcelaI,
               parcelaN: n,
               pago: false,
+              ...patchFaturaOverride,
             })),
           )
         }
@@ -514,6 +536,7 @@ export default function DetalheLancamento({
           serieId: gerarIdSerie(),
           periodicidade,
           regraRecorrencia: regra,
+          ...patchFaturaOverride,
         })
         fecharAposSalvar()
         return
@@ -527,6 +550,7 @@ export default function DetalheLancamento({
         categoriaId: Number(categoriaId),
         contaId: contaEscolhidaId,
         pago,
+        ...patchFaturaOverride,
       })
       fecharAposSalvar()
       return
@@ -554,6 +578,7 @@ export default function DetalheLancamento({
           parcelaI: p.parcelaI,
           parcelaN: n,
           pago: p.parcelaI === 1 ? pago : false,
+          ...patchFaturaOverride,
         })),
       )
       fecharAposSalvar()
@@ -583,6 +608,7 @@ export default function DetalheLancamento({
         periodicidade,
         regraRecorrencia: regra,
         pago,
+        ...patchFaturaOverride,
       })
       fecharAposSalvar()
       return
@@ -600,6 +626,7 @@ export default function DetalheLancamento({
       categoriaId: Number(categoriaId),
       status: 'manual',
       pago,
+      ...patchFaturaOverride,
     })
     fecharAposSalvar()
   }
@@ -609,6 +636,16 @@ export default function DetalheLancamento({
     if (original?.transferenciaId) {
       // Nunca deixa a transferência "manca" — excluir um lado leva o outro junto.
       await db.lancamentos.where('transferenciaId').equals(original.transferenciaId).delete()
+    } else if (original?.serieId && escopoExclusao !== 'este') {
+      // "Este e futuros": mesma série, data >= a deste registro (a lógica de
+      // "futuro" é sempre relativa à ocorrência que está sendo excluída, não
+      // a hoje — excluir uma ocorrência antiga não deveria apagar nada depois
+      // dela que já tenha acontecido antes de hoje). "Toda a série": todos.
+      const daSerie = await db.lancamentos.where('serieId').equals(original.serieId).toArray()
+      const idsParaExcluir = daSerie
+        .filter((l) => escopoExclusao === 'serie' || l.dataCompetencia >= original.dataCompetencia)
+        .map((l) => l.id!)
+      await db.lancamentos.bulkDelete(idsParaExcluir)
     } else {
       await db.lancamentos.delete(alvoId)
     }
@@ -845,6 +882,28 @@ export default function DetalheLancamento({
                     </option>
                   ))}
               </select>
+
+              {/* Item 1 da lista pendente do Rafael (15/09/2026): a data
+                  normalmente decide sozinha em qual fatura a compra entra
+                  (`janelaFatura`, Carteira.tsx) — este campo permite corrigir
+                  manualmente quando o banco processa com atraso/adiantado e a
+                  compra cai numa fatura diferente da que a data indicaria. Só
+                  aparece pra conta tipo cartão; some/reseta pra "atual" se a
+                  pessoa trocar pra uma conta que não é cartão. */}
+              {(contas ?? []).find((c) => c.id === (contaId || contas?.[0]?.id))?.tipo === 'cartao' && (
+                <>
+                  <label htmlFor="dl-fatura-override">Em qual fatura</label>
+                  <select
+                    id="dl-fatura-override"
+                    value={faturaOverride}
+                    onChange={(e) => setFaturaOverride(e.target.value as typeof faturaOverride)}
+                  >
+                    <option value="atual">Nesta fatura (pela data)</option>
+                    <option value="anterior">Fatura anterior</option>
+                    <option value="proxima">Próxima fatura</option>
+                  </select>
+                </>
+              )}
             </>
           )}
 
@@ -1016,10 +1075,31 @@ export default function DetalheLancamento({
                     Isso exclui os dois lados da transferência.
                   </p>
                 )}
+                {!ehTransferenciaExistente && original?.serieId && (
+                  <div style={{ width: '100%', margin: '0 0 4px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <p className="texto-fraco" style={{ margin: 0 }}>
+                      Este lançamento faz parte de uma série. O que excluir?
+                    </p>
+                    {(['este', 'futuros', 'serie'] as const).map((opcao) => (
+                      <label key={opcao} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+                        <input
+                          type="radio"
+                          name="escopo-exclusao"
+                          checked={escopoExclusao === opcao}
+                          onChange={() => setEscopoExclusao(opcao)}
+                        />
+                        {opcao === 'este' && 'Só este lançamento'}
+                        {opcao === 'futuros' && 'Este e os futuros da série'}
+                        {opcao === 'serie' && 'Toda a série (incluindo os já passados)'}
+                      </label>
+                    ))}
+                  </div>
+                )}
                 <button
                   type="button"
                   style={{ background: 'none', border: 'none', color: 'var(--vermelho)', cursor: 'pointer', padding: 0 }}
                   onClick={excluir}
+                  data-testid="confirmar-exclusao"
                 >
                   Confirmar exclusão
                 </button>
@@ -1035,7 +1115,7 @@ export default function DetalheLancamento({
               <button
                 type="button"
                 style={{ background: 'none', border: 'none', color: 'var(--vermelho)', cursor: 'pointer', padding: 0 }}
-                onClick={() => setConfirmandoExclusao(true)}
+                onClick={() => { setEscopoExclusao('este'); setConfirmandoExclusao(true) }}
               >
                 Excluir lançamento
               </button>

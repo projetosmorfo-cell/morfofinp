@@ -350,6 +350,23 @@ export default function Categorias(_props: TelaProps & { aoVoltar: () => void })
     setNovoGrupo(rascunhoGrupoVazio())
   }
 
+  /* Item 8 (15/09/2026): mesma ideia da categoria — copia tudo (tipo,
+     comportamento, ícone) com "(cópia)" no nome, nunca as categorias que
+     apontam pra ele (isso seria mover categoria de grupo sem pedir). */
+  async function duplicarGrupo(g: GrupoRegistro) {
+    await db.grupos.add({
+      ...marcaDoAmbiente(),
+      nome: `${g.nome} (cópia)`,
+      ativo: true,
+      tipo: g.tipo,
+      comportamento: g.comportamento,
+      icone: g.icone,
+      iconeEstilo: g.iconeEstilo,
+      iconeCor: g.iconeCor,
+    })
+    void marcarCategoriasEditadas()
+  }
+
   // --- CRUD de categorias ---
   function iniciarEdicao(cat: Categoria) {
     setEditandoId(cat.id!)
@@ -398,6 +415,28 @@ export default function Categorias(_props: TelaProps & { aoVoltar: () => void })
   async function alternarAtiva(cat: Categoria) {
     await db.categorias.update(cat.id!, { ativa: !cat.ativa })
     void marcarCategoriasEditadas() /* item 7: a partir daqui o padrão do N0 não é mais empurrado por cima */
+  }
+
+  /* Item 8 da lista pendente (15/09/2026): "duplicar" uma categoria copia
+     tudo (grupo, natureza, metas, ícone) menos o nome — que ganha "(cópia)"
+     pra nunca colidir por acaso com o original, e a pessoa ajusta dali. Nunca
+     copia histórico nenhum (a nova nasce sem nenhum lançamento vinculado). */
+  async function duplicarCategoria(cat: Categoria) {
+    await db.categorias.add({
+      ...marcaDoAmbiente(),
+      nome: `${cat.nome} (cópia)`,
+      grupo: cat.grupo,
+      natureza: cat.natureza,
+      aceitavelMensal: cat.aceitavelMensal,
+      esperadoMensal: cat.esperadoMensal,
+      receitaFixa: cat.receitaFixa,
+      contaVinculada: cat.contaVinculada,
+      icone: cat.icone,
+      iconeEstilo: cat.iconeEstilo,
+      iconeCor: cat.iconeCor,
+      ativa: true,
+    })
+    void marcarCategoriasEditadas()
   }
 
   /* Item 18 da lista de 12/09/2026: no modo "Todas abertas" cada campo grava
@@ -624,6 +663,15 @@ export default function Categorias(_props: TelaProps & { aoVoltar: () => void })
                         Restaurar ícone padrão
                       </button>
                     )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void duplicarGrupo(g)
+                        setMenuGrupoAberto(null)
+                      }}
+                    >
+                      Duplicar
+                    </button>
                     {temCategoria ? (
                       <button
                         type="button"
@@ -924,6 +972,9 @@ export default function Categorias(_props: TelaProps & { aoVoltar: () => void })
                               Restaurar ícone padrão
                             </button>
                           )}
+                          <button type="button" onClick={() => { void duplicarCategoria(c); setMenuCategoriaAberto(null) }}>
+                            Duplicar
+                          </button>
                           {temLancamentos ? (
                             <button type="button" onClick={() => { void alternarAtiva(c); setMenuCategoriaAberto(null) }}>
                               {c.ativa ? 'Inativar' : 'Reativar'}
@@ -1065,9 +1116,16 @@ export default function Categorias(_props: TelaProps & { aoVoltar: () => void })
                             estilo={c.iconeEstilo}
                             cor={c.iconeCor}
                             tamanho={tamanhoIconePx('categoria', configIcones.pctCategoria)}
+                            /* Item 8 (15/09/2026): `opacity: 0.5` no nome
+                               inteiro (título+natureza) deixava o título
+                               ilegível na lista compacta — o ícone continua
+                               esmaecido (sinal de "inativa" já dado por ele +
+                               pelo texto "· inativa" abaixo), mas o NOME em si
+                               volta pra opacidade cheia. */
+                            style={{ opacity: c.ativa ? 1 : 0.5 }}
                           />
                         )}
-                        <span style={{ opacity: c.ativa ? 1 : 0.5, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
                           {c.nome}
                           <span className="texto-fraco" style={{ fontSize: 11.5 }}>
                             {' · '}{c.natureza}
@@ -1143,6 +1201,15 @@ export default function Categorias(_props: TelaProps & { aoVoltar: () => void })
                                 Restaurar ícone padrão
                               </button>
                             )}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                void duplicarCategoria(c)
+                                setMenuCategoriaAberto(null)
+                              }}
+                            >
+                              Duplicar
+                            </button>
                             {temLancamentos ? (
                               <button
                                 type="button"

@@ -280,6 +280,17 @@ export interface Lancamento {
   // em todo lançamento do ciclo ao quitar a fatura — junto com `pago: true`.
   faturaId?: number
 
+  // Em qual fatura este lançamento de CARTÃO entra (15/09/2026, item 1 da
+  // lista pendente do Rafael) — campo aditivo, opcional, lido só via
+  // `.filter()` em `Carteira.tsx` (nenhum `.where()`, sem bump de schema).
+  // Ausente/'atual' = comportamento de sempre (a data decide o ciclo, via
+  // `janelaFatura`). 'anterior'/'proxima' PUXAM o lançamento pra um ciclo
+  // vizinho ao que a data indicaria — ex.: uma compra feita 1 dia depois do
+  // fechamento mas que o Rafael sabe que caiu na fatura anterior (atraso do
+  // banco em processar). Só faz sentido em conta tipo 'cartao'; ignorado em
+  // conta corrente/cofre.
+  faturaOverride?: 'anterior' | 'atual' | 'proxima'
+
   // Transferência entre contas próprias (30/08/2026, rodada seguinte) — um
   // "Transferência" gera SEMPRE 2 lançamentos (nunca 1 só), um de saída na
   // conta de origem e um de entrada na conta de destino, ambos com o mesmo
@@ -305,6 +316,19 @@ export interface Lancamento {
      limpar dados, entrar como o tenant). Não é índice: a filtragem acontece
      em memória, sobre tabelas que o app já carrega inteiras. */
   ambienteId?: string
+
+  // Ordem manual dentro do MESMO DIA (item 12, 15/09/2026) — press-and-hold
+  // pra reordenar a lista de Lançamentos. Campo aditivo, opcional, sem
+  // índice (lido só via `.filter()`/comparação em JS sobre a lista já
+  // carregada do mês, mesma regra de sempre pra campo novo — sem bump de
+  // schema). Nunca compara entre dias diferentes — o arrasto só reordena
+  // dentro do grupo de um dia, nunca move pra outro. Ausente = usa a ordem
+  // de criação (`id`) como desempate, ver `compararDentroDoDia` em
+  // `lancamentosUtil.ts`. Ao reordenar um dia, TODOS os itens dele ganham um
+  // valor explícito (0, 1, 2...) — nunca deixa alguns com e outros sem, pra
+  // não criar ambiguidade de "quem vem primeiro" entre um item com ordem
+  // escolhida e outro sem.
+  ordemManual?: number
 }
 
 export interface Meta {

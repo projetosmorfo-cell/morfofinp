@@ -73,7 +73,7 @@ export function mesInicial(): string {
 export interface TelaProps {
   mes: string
   aoMudarMes: (mes: string) => void
-  aoAbrirLancamento: (opcoes?: { id?: number; categoriaIdSugerida?: number; contaIdSugerida?: number }) => void
+  aoAbrirLancamento: (opcoes?: { id?: number; categoriaIdSugerida?: number; contaIdSugerida?: number; abrirClonando?: boolean }) => void
   aoAbrirPlanejamento: () => void
   /** Abre a tela de Calibragem (build 059) — os percentuais vistos juntos. */
   aoAbrirCalibragem?: () => void

@@ -316,6 +316,7 @@ export default function Planejamento({ mes, aoMudarMes, aoAbrirLancamento, aoAbr
           rotulo={rotulo}
           gasto={movimento}
           previsto={t.planejado}
+          comprometido={t.previsto}
           mostrarDestaque={false}
           icone={icone}
           acao={acao}

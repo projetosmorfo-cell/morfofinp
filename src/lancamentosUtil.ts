@@ -19,3 +19,21 @@ export async function alternarPago(l: Pick<Lancamento, 'id' | 'pago' | 'transfer
     await db.lancamentos.update(l.id, { pago: novoPago })
   }
 }
+
+// Item 12 (15/09/2026) — desempate de ordenação DENTRO do mesmo dia: usada
+// depois de comparar por `dataCompetencia` (crescente ou decrescente,
+// conforme o botão de ordenação da tela) — a ordem dentro de um dia nunca
+// inverte com esse botão, só a ordem dos PRÓPRIOS dias. `ordemManual` (ver
+// `db.ts`) vem do arrasto de press-and-hold em Lançamentos; sem ele, cai no
+// `id` (auto-incremento do Dexie), que é uma proxy estável e simples pra
+// "ordem de criação" — mesma estratégia já documentada no projeto pra outros
+// casos de "sem preferência explícita, usa quando foi criado".
+export function compararDentroDoDia(
+  a: Pick<Lancamento, 'id' | 'ordemManual'>,
+  b: Pick<Lancamento, 'id' | 'ordemManual'>,
+): number {
+  if (a.ordemManual != null && b.ordemManual != null) return a.ordemManual - b.ordemManual
+  if (a.ordemManual != null) return -1
+  if (b.ordemManual != null) return 1
+  return (a.id ?? 0) - (b.id ?? 0)
+}

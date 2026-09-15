@@ -178,7 +178,10 @@ export function GraficoMargem({
     ? [{ rotulo: 'Estourou o teto', valor: teto, cor: 'var(--vermelho)', de: 0, ate: 1 }]
     : [
         { rotulo: 'Já pago', valor: jaPago, cor: 'var(--vermelho)', de: 0, ate: jaPago / base },
-        { rotulo: 'Comprometido', valor: totalComprometido, cor: 'var(--amarelo)', de: jaPago / base, ate: (jaPago + totalComprometido) / base },
+        /* Item 10 (15/09/2026): mesmo tom âmbar de `BarraIdeal`/`BarraMeta`
+           pro mesmo conceito de "comprometido, ainda não realizado" — antes
+           usava `--amarelo` (tom de alerta/atenção, semântica diferente). */
+        { rotulo: 'Comprometido', valor: totalComprometido, cor: 'var(--ideal-ambar)', de: jaPago / base, ate: (jaPago + totalComprometido) / base },
         { rotulo: 'Sobra real', valor: sobraPositiva, cor: 'var(--verde)', de: (jaPago + totalComprometido) / base, ate: 1 },
       ].filter((seg) => seg.valor > 0.005)
 

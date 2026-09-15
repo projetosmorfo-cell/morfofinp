@@ -89,6 +89,16 @@ export default function Hoje({ mes, aoMudarMes, aoAbrirLancamento, aoAbrirPlanej
   const [expandida, setExpandida] = useState<number | null>(null)
   const [grupoAberto, setGrupoAberto] = useState<string | null>(null)
   const [exportOpen, setExportOpen] = useState(false)
+  /* O detalhe de um par de caixas lado a lado (build 074, o ponto principal do
+     pedido do Rafael) nunca fica DENTRO da caixa clicada — isso a confinava à
+     metade da linha, virando "mais uma coluna" ao lado da outra caixa. O
+     estado mora aqui, um por par (`null | 'esquerda' | 'direita'`), e o corpo
+     do detalhe é renderizado como IRMÃO da linha de duas colunas, ocupando
+     100% da largura, com um balão apontando pra qual das duas foi clicada.
+     Caixa de hoje é única (já ocupa a linha inteira) e continua usando
+     `BlocoRecolhivel` normalmente — não precisa desse mecanismo. */
+  const [abertoTopo, setAbertoTopo] = useState<'passado' | 'este' | null>(null)
+  const [abertoBase, setAbertoBase] = useState<'livre' | 'reservado' | null>(null)
 
   const hojeISO = hojeEfetivoISO()
   const janelaDias = paramsGlobais(platform).janelaMediaDias
@@ -170,21 +180,19 @@ export default function Hoje({ mes, aoMudarMes, aoAbrirLancamento, aoAbrirPlanej
      três primeiras caixas é derivado desta e de `numeros.resultadoDoMes`. */
   const caixaAnterior = numeros.caixaAcumulado - numeros.resultadoDoMes
 
-  /* "O Rio", visual de funil (14/09/2026, build 070) — Rafael aprovou o
-   * protótipo com as caixas ligadas por setas e LARGURA proporcional ao valor
-   * real (Livre de tudo mais largo que Reservado, na mesma proporção dos
-   * dois valores) — não só as caixas soltas da build 069. As proporções são
-   * calculadas aqui; a caixa em si (conteúdo, expandir, InfoDot, frase de
-   * impacto) não muda nada, só a forma como as 5 caixas se organizam. Piso de
-   * 18%/82% pra nenhuma das duas ficar ilegível quando um dos valores é bem
-   * pequeno ou negativo. */
-  const baseRio = Math.abs(numeros.saldoLivre) + Math.abs(numeros.reservado)
-  const pctLivreRio = baseRio > 0.005
-    ? Math.max(18, Math.min(82, (Math.abs(numeros.saldoLivre) / baseRio) * 100))
-    : 50
-  const pctReservadoRio = 100 - pctLivreRio
-  const centroLivreRio = pctLivreRio / 2
-  const centroReservadoRio = pctLivreRio + pctReservadoRio / 2
+  /* "O Rio", visual de funil (14/09/2026, build 070) — a largura das duas
+   * caixas de baixo (Livre de tudo/Reservado) ERA proporcional ao valor real
+   * de cada uma (Math.abs(saldoLivre)/Math.abs(reservado), com piso de
+   * 18%/82%). Rafael pediu explicitamente pra REMOVER isso (build 075): os 2
+   * pares da mesma linha (Mês passado/Este mês E Livre de tudo/Reservado)
+   * agora dividem a largura sempre 50/50, simétrico, nunca por valor — mesmo
+   * comportamento que o par de cima (`.rio-linha .bloco-numero { flex: 1 1 0 }`,
+   * `index.css`) sempre teve. `centroLivreRio`/`centroReservadoRio` viram
+   * constantes fixas (25/75) só pra apontar a seta divergente e a ponta do
+   * balão pro CENTRO real de cada caixa agora que a largura é fixa — nunca
+   * mais derivadas do valor em R$. */
+  const centroLivreRio = 25
+  const centroReservadoRio = 75
 
   const frase = fraseVeredito(projecao)
   /* Mês já terminado muda o TEMPO VERBAL da tela inteira, não só da frase do
@@ -277,31 +285,33 @@ export default function Hoje({ mes, aoMudarMes, aoAbrirLancamento, aoAbrirPlanej
                 Mês passado
                 <InfoDot titulo="Mês passado" info={INFO_MES_PASSADO} />
               </div>
-              <div
-                className={`ideal-t1 ${caixaAnterior < 0 ? 'valor-neg' : 'valor-pos'}`}
-                data-testid="valor-mes-passado"
-              >
+              {/* Número "menos importante": sempre neutro, nunca colorido por
+                  sinal — pedido explícito do Rafael. */}
+              <div className="ideal-t1" data-testid="valor-mes-passado">
                 {fmtComSinal(caixaAnterior)}
               </div>
               <p className="ideal-t4 texto-quebra" style={{ margin: '2px 0 0' }}>
                 caixa acumulado até o mês anterior
               </p>
-              <BlocoRecolhivel testid="detalhe-mes-passado" rotulo="De onde vem o mês passado?">
-                <div className="linha-detalhe-cat">
-                  <span className="ideal-t4">Caixa de hoje (acumulado)</span>
-                  <span className="ideal-t3">{fmtComSinal(numeros.caixaAcumulado)}</span>
-                </div>
-                <div className="linha-detalhe-cat">
-                  <span className="ideal-t4">− resultado deste mês</span>
-                  <span className="ideal-t3">{fmtComSinal(numeros.resultadoDoMes)}</span>
-                </div>
-                <div className="linha-detalhe-cat total">
-                  <span className="ideal-t3">Mês passado</span>
-                  <span className={`ideal-t3 ${caixaAnterior < 0 ? 'valor-neg' : 'valor-pos'}`}>
-                    {fmtComSinal(caixaAnterior)}
+              {/* Só o CABEÇALHO/botão mora dentro da caixa — o corpo do
+                  detalhe é o balão logo abaixo da linha inteira. */}
+              <div className="bloco-recolhivel">
+                <button
+                  type="button"
+                  className="bloco-recolhivel-botao"
+                  onClick={() => setAbertoTopo(abertoTopo === 'passado' ? null : 'passado')}
+                  aria-expanded={abertoTopo === 'passado'}
+                  data-testid="detalhe-mes-passado"
+                >
+                  <span>{abertoTopo === 'passado' ? 'Recolher' : 'De onde vem o mês passado?'}</span>
+                  <span
+                    className={`bloco-recolhivel-seta ${abertoTopo === 'passado' ? 'aberta' : ''}`}
+                    aria-hidden="true"
+                  >
+                    ›
                   </span>
-                </div>
-              </BlocoRecolhivel>
+                </button>
+              </div>
             </div>
 
             {/* ---------- ESTE MÊS ---------- */}
@@ -310,40 +320,88 @@ export default function Hoje({ mes, aoMudarMes, aoAbrirLancamento, aoAbrirPlanej
                 Este mês
                 <InfoDot titulo="Este mês" info={INFO_ESTE_MES} />
               </div>
-              <div
-                className={`ideal-t1 ${numeros.resultadoDoMes < 0 ? 'valor-neg' : 'valor-pos'}`}
-                data-testid="valor-este-mes"
-              >
+              <div className="ideal-t1" data-testid="valor-este-mes">
                 {fmtComSinal(numeros.resultadoDoMes)}
               </div>
               <p className="ideal-t4 texto-quebra" style={{ margin: '2px 0 0' }}>
                 {numeros.resultadoDoMes < 0 ? 'faltou no mês' : 'sobrou no mês'}
               </p>
-              <BlocoRecolhivel testid="detalhe-este-mes" rotulo="De onde vem este mês?">
-                <div className="linha-detalhe-cat">
-                  <span className="ideal-t4">Entrou no mês</span>
-                  <span className="ideal-t3">{fmtComSinal(numeros.entradas)}</span>
-                </div>
-                <div className="linha-detalhe-cat">
-                  <span className="ideal-t4">− saiu no mês</span>
-                  <span className="ideal-t3">{fmt(Math.abs(numeros.saidas))}</span>
-                </div>
-                <div className="linha-detalhe-cat total">
-                  <span className="ideal-t3">Resultado do mês</span>
-                  <span className={`ideal-t3 ${numeros.resultadoDoMes < 0 ? 'valor-neg' : 'valor-pos'}`}>
-                    {fmtComSinal(numeros.resultadoDoMes)}
+              <div className="bloco-recolhivel">
+                <button
+                  type="button"
+                  className="bloco-recolhivel-botao"
+                  onClick={() => setAbertoTopo(abertoTopo === 'este' ? null : 'este')}
+                  aria-expanded={abertoTopo === 'este'}
+                  data-testid="detalhe-este-mes"
+                >
+                  <span>{abertoTopo === 'este' ? 'Recolher' : 'De onde vem este mês?'}</span>
+                  <span
+                    className={`bloco-recolhivel-seta ${abertoTopo === 'este' ? 'aberta' : ''}`}
+                    aria-hidden="true"
+                  >
+                    ›
                   </span>
-                </div>
-              </BlocoRecolhivel>
+                </button>
+              </div>
             </div>
 
           </div>
 
-          {/* seta convergindo: Mês passado + Este mês → Caixa de hoje */}
+          {/* O corpo do detalhe do par de cima — largura TOTAL da linha, nunca
+              confinado à metade de uma das duas caixas (build 074, o ponto
+              principal do pedido). O balão aponta pra qual das duas foi
+              clicada: ponta alinhada ao CENTRO da caixa esquerda ou da
+              direita, via a variável CSS `--balao-tip`. */}
+          {abertoTopo && (
+            <div
+              className="balao-detalhe"
+              data-testid="detalhe-topo-corpo"
+              style={{ '--balao-tip': abertoTopo === 'passado' ? '25%' : '75%' } as React.CSSProperties}
+            >
+              {abertoTopo === 'passado' ? (
+                <>
+                  <div className="linha-detalhe-cat">
+                    <span className="ideal-t4">Caixa de hoje (acumulado)</span>
+                    <span className="ideal-t3">{fmtComSinal(numeros.caixaAcumulado)}</span>
+                  </div>
+                  <div className="linha-detalhe-cat">
+                    <span className="ideal-t4">− resultado deste mês</span>
+                    <span className="ideal-t3">{fmtComSinal(numeros.resultadoDoMes)}</span>
+                  </div>
+                  <div className="linha-detalhe-cat total">
+                    <span className="ideal-t3">Mês passado</span>
+                    <span className={`ideal-t3 ${caixaAnterior < 0 ? 'valor-neg' : 'valor-pos'}`}>
+                      {fmtComSinal(caixaAnterior)}
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="linha-detalhe-cat">
+                    <span className="ideal-t4">Entrou no mês</span>
+                    <span className="ideal-t3">{fmtComSinal(numeros.entradas)}</span>
+                  </div>
+                  <div className="linha-detalhe-cat">
+                    <span className="ideal-t4">− saiu no mês</span>
+                    <span className="ideal-t3">{fmt(Math.abs(numeros.saidas))}</span>
+                  </div>
+                  <div className="linha-detalhe-cat total">
+                    <span className="ideal-t3">Resultado do mês</span>
+                    <span className={`ideal-t3 ${numeros.resultadoDoMes < 0 ? 'valor-neg' : 'valor-pos'}`}>
+                      {fmtComSinal(numeros.resultadoDoMes)}
+                    </span>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* seta convergindo: Mês passado + Este mês → Caixa de hoje. Forma
+              CHEIA (trapézio), não linha fina — o print mostra uma silhueta de
+              seta/funil, cor lisa e sutil, igual à borda dos cartões. */}
           <div className="rio-conector" aria-hidden="true">
             <svg viewBox="0 0 100 100" preserveAspectRatio="none">
-              <line x1="25" y1="0" x2="50" y2="100" className="rio-linha-svg" />
-              <line x1="75" y1="0" x2="50" y2="100" className="rio-linha-svg" />
+              <polygon points="15,0 85,0 58,100 42,100" className="rio-seta-svg" />
             </svg>
           </div>
 
@@ -354,10 +412,7 @@ export default function Hoje({ mes, aoMudarMes, aoAbrirLancamento, aoAbrirPlanej
                 Caixa de hoje (acumulado)
                 <InfoDot titulo="Caixa de hoje" info={INFO_CAIXA_HOJE} />
               </div>
-              <div
-                className={`ideal-t1 ${numeros.caixaAcumulado < 0 ? 'valor-neg' : 'valor-pos'}`}
-                data-testid="valor-caixa-hoje"
-              >
+              <div className="ideal-t1" data-testid="valor-caixa-hoje">
                 {fmtComSinal(numeros.caixaAcumulado)}
               </div>
               <p className="ideal-t4 texto-quebra" style={{ margin: '2px 0 0' }}>
@@ -383,114 +438,164 @@ export default function Hoje({ mes, aoMudarMes, aoAbrirLancamento, aoAbrirPlanej
 
           </div>
 
-          {/* seta divergindo: Caixa de hoje → Livre de tudo / Reservado, saindo
-              já nas posições proporcionais das duas caixas abaixo. */}
+          {/* seta divergindo: Caixa de hoje → Livre de tudo / Reservado. A base
+              do trapézio aponta pro CENTRO de cada caixa (25%/75%, build 075 —
+              as duas caixas abaixo são sempre 50/50, nunca proporcionais ao
+              valor). */}
           <div className="rio-conector" aria-hidden="true">
             <svg viewBox="0 0 100 100" preserveAspectRatio="none">
-              <line x1="50" y1="0" x2={centroLivreRio} y2="100" className="rio-linha-svg" />
-              <line x1="50" y1="0" x2={centroReservadoRio} y2="100" className="rio-linha-svg" />
+              <polygon
+                points={`42,0 58,0 ${Math.min(98, centroReservadoRio + 8)},100 ${Math.max(2, centroLivreRio - 8)},100`}
+                className="rio-seta-svg"
+              />
             </svg>
           </div>
 
           <div className="rio-linha rio-linha-base">
             {/* ---------- 1 · LIVRE DE TUDO ---------- */}
             <div
-              className="bloco-numero"
+              className={`bloco-numero ${numeros.saldoLivre < 0 ? 'rio-vermelho' : 'rio-verde'}`}
               data-testid="bloco-saldo-livre"
-              style={{ flex: `0 0 calc(${pctLivreRio}% - 5px)` }}
             >
               <div className="bloco-numero-rotulo">
                 1 · LIVRE DE TUDO
                 <InfoDot titulo="Livre de tudo" info={EXPLICACAO_SALDO_LIVRE} />
               </div>
-              <div
-                className={`ideal-t1 ${numeros.saldoLivre < 0 ? 'valor-neg' : 'valor-pos'}`}
-                data-testid="valor-saldo-livre"
-              >
+              {/* Rótulo E valor na MESMA cor (verde se positivo, vermelho se
+                  negativo) — a cor vem do modificador `.rio-verde`/
+                  `.rio-vermelho` no cartão, não de uma classe no próprio
+                  número. */}
+              <div className="ideal-t1" data-testid="valor-saldo-livre">
                 {fmtComSinal(numeros.saldoLivre)}
               </div>
               <p className="ideal-t4 texto-quebra" style={{ margin: '2px 0 0' }} data-testid="frase-livre">
                 {fraseSaldoLivre(numeros.saldoLivre, mesFechado)}
               </p>
-              <BlocoRecolhivel testid="detalhe-livre" rotulo="De onde vem o livre de tudo?">
-                <div className="linha-detalhe-cat">
-                  <span className="ideal-t4">Caixa de hoje (acumulado)</span>
-                  <span className="ideal-t3">{fmtComSinal(numeros.caixaAcumulado)}</span>
-                </div>
-                <div className="linha-detalhe-cat">
-                  <span className="ideal-t4">− reservado nas metas do mês</span>
-                  <span className="ideal-t3">{fmt(numeros.reservado)}</span>
-                </div>
-                <div className="linha-detalhe-cat total">
-                  <span className="ideal-t3">Livre de tudo</span>
-                  <span className={`ideal-t3 ${numeros.saldoLivre < 0 ? 'valor-neg' : 'valor-pos'}`}>
-                    {fmtComSinal(numeros.saldoLivre)}
+              <div className="bloco-recolhivel">
+                <button
+                  type="button"
+                  className="bloco-recolhivel-botao"
+                  onClick={() => setAbertoBase(abertoBase === 'livre' ? null : 'livre')}
+                  aria-expanded={abertoBase === 'livre'}
+                  data-testid="detalhe-livre"
+                >
+                  <span>{abertoBase === 'livre' ? 'Recolher' : 'De onde vem o livre de tudo?'}</span>
+                  <span
+                    className={`bloco-recolhivel-seta ${abertoBase === 'livre' ? 'aberta' : ''}`}
+                    aria-hidden="true"
+                  >
+                    ›
                   </span>
-                </div>
-                {/* O bloco "Entrou / Saiu / Sobrou no mês" saiu daqui na build
-                    067, a pedido do Rafael: *"esse valor não mostra em nenhum
-                    lugar ali visualmente então retirar o trecho inteiro"*. Esse
-                    número (resultado do mês) virou a própria caixa "Este mês"
-                    (O Rio, 14/09/2026) — repetir a conta aqui era um segundo
-                    caminho para o mesmo número, que é como a tela antiga
-                    virou confusa. */}
-              </BlocoRecolhivel>
+                </button>
+              </div>
             </div>
 
             {/* ---------- 2 · PODE SOBRAR DAS METAS ---------- */}
             <div
-              className="bloco-numero"
+              className={`bloco-numero ${numeros.podeSobrar < 0 ? 'rio-vermelho' : 'rio-ambar'}`}
               data-testid="bloco-pode-sobrar"
-              style={{ flex: `0 0 calc(${pctReservadoRio}% - 5px)` }}
             >
               <div className="bloco-numero-rotulo">
                 2 · {mesFechado ? 'SOBROU DAS METAS' : 'PODE SOBRAR DAS METAS'}
                 <InfoDot titulo="Pode sobrar das metas" info={EXPLICACAO_PODE_SOBRAR} />
               </div>
-              <div
-                className={`ideal-t1 ${numeros.podeSobrar < 0 ? 'valor-neg' : 'valor-pos'}`}
-                data-testid="valor-pode-sobrar"
-              >
+              {/* Mesma regra do Livre de tudo: rótulo e valor sempre na MESMA
+                  cor (âmbar se positivo — o caso normal —, vermelho se um dia
+                  o reservado vier negativo). Corrige o que o Rafael apontou:
+                  o rótulo já era âmbar, mas o valor ficava branco/neutro. */}
+              <div className="ideal-t1" data-testid="valor-pode-sobrar">
                 {fmtComSinal(numeros.podeSobrar)}
               </div>
               <p className="ideal-t4 texto-quebra" style={{ margin: '2px 0 0' }} data-testid="frase-pode-sobrar">
                 {frasePodeSobrar(numeros.podeSobrar, mesFechado)}
               </p>
-              <BlocoRecolhivel testid="detalhe-pode-sobrar" rotulo="De onde vem o reservado?">
-                {/* A barra da meta de GASTO do mês — o gráfico da tela, agora
-                    dentro do total a que pertence. */}
-                <BarraIdeal
-                  realizado={numeros.realizadoGasto}
-                  comprometido={0}
-                  meta={numeros.metaGasto}
-                  destaque
-                  mostrarValorDaMeta
-                  semValor
-                  data-testid="barra-topo"
-                />
-                {numeros.porGrupo.map((g) => (
-                  <LinhaGrupoHoje
-                    key={g.nome}
-                    linha={g}
-                    categorias={linhasPorGrupo.get(g.nome) ?? []}
-                    aberta={grupoAberto === g.nome}
-                    aoAlternar={() => setGrupoAberto(grupoAberto === g.nome ? null : g.nome)}
-                    icone={iconeDeGrupo(g.nome)}
-                    expandida={expandida}
-                    setExpandida={setExpandida}
-                    iconeDe={iconeDe}
-                    aoAbrirLancamento={aoAbrirLancamento}
-                  />
-                ))}
-                <div className="linha-detalhe-cat total" data-testid="total-pode-sobrar">
-                  <span className="ideal-t3">Total</span>
-                  <span className={`ideal-t3 ${numeros.podeSobrar < 0 ? 'valor-neg' : 'valor-pos'}`}>
-                    {fmtComSinal(numeros.podeSobrar)}
+              <div className="bloco-recolhivel">
+                <button
+                  type="button"
+                  className="bloco-recolhivel-botao"
+                  onClick={() => setAbertoBase(abertoBase === 'reservado' ? null : 'reservado')}
+                  aria-expanded={abertoBase === 'reservado'}
+                  data-testid="detalhe-pode-sobrar"
+                >
+                  <span>{abertoBase === 'reservado' ? 'Recolher' : 'De onde vem o reservado?'}</span>
+                  <span
+                    className={`bloco-recolhivel-seta ${abertoBase === 'reservado' ? 'aberta' : ''}`}
+                    aria-hidden="true"
+                  >
+                    ›
                   </span>
-                </div>
-              </BlocoRecolhivel>
+                </button>
+              </div>
             </div>
           </div>
+
+          {/* Corpo do detalhe do par de baixo — largura total, balão apontando
+              pra caixa clicada. As duas caixas são sempre 50/50 (build 075),
+              então a ponta fica fixa em 25%/75% — os mesmos
+              `centroLivreRio`/`centroReservadoRio` usados pra desenhar a seta
+              divergente acima. */}
+          {abertoBase && (
+            <div
+              className="balao-detalhe"
+              data-testid="detalhe-base-corpo"
+              style={{
+                '--balao-tip': `${abertoBase === 'livre' ? centroLivreRio : centroReservadoRio}%`,
+              } as React.CSSProperties}
+            >
+              {abertoBase === 'livre' ? (
+                <>
+                  <div className="linha-detalhe-cat">
+                    <span className="ideal-t4">Caixa de hoje (acumulado)</span>
+                    <span className="ideal-t3">{fmtComSinal(numeros.caixaAcumulado)}</span>
+                  </div>
+                  <div className="linha-detalhe-cat">
+                    <span className="ideal-t4">− reservado nas metas do mês</span>
+                    <span className="ideal-t3">{fmt(numeros.reservado)}</span>
+                  </div>
+                  <div className="linha-detalhe-cat total">
+                    <span className="ideal-t3">Livre de tudo</span>
+                    <span className={`ideal-t3 ${numeros.saldoLivre < 0 ? 'valor-neg' : 'valor-pos'}`}>
+                      {fmtComSinal(numeros.saldoLivre)}
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  {/* A barra da meta de GASTO do mês — o gráfico da tela, agora
+                      dentro do total a que pertence. */}
+                  <BarraIdeal
+                    realizado={numeros.realizadoGasto}
+                    comprometido={0}
+                    meta={numeros.metaGasto}
+                    destaque
+                    mostrarValorDaMeta
+                    semValor
+                    data-testid="barra-topo"
+                  />
+                  {numeros.porGrupo.map((g) => (
+                    <LinhaGrupoHoje
+                      key={g.nome}
+                      linha={g}
+                      categorias={linhasPorGrupo.get(g.nome) ?? []}
+                      aberta={grupoAberto === g.nome}
+                      aoAlternar={() => setGrupoAberto(grupoAberto === g.nome ? null : g.nome)}
+                      icone={iconeDeGrupo(g.nome)}
+                      expandida={expandida}
+                      setExpandida={setExpandida}
+                      iconeDe={iconeDe}
+                      aoAbrirLancamento={aoAbrirLancamento}
+                    />
+                  ))}
+                  <div className="linha-detalhe-cat total" data-testid="total-pode-sobrar">
+                    <span className="ideal-t3">Total</span>
+                    <span className={`ideal-t3 ${numeros.podeSobrar < 0 ? 'valor-neg' : 'valor-pos'}`}>
+                      {fmtComSinal(numeros.podeSobrar)}
+                    </span>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
           </div>
           </div>
 
@@ -591,18 +696,38 @@ function LinhaGrupoHoje({
   const guardar = linha.comportamento === 'guardar'
   const somaCategorias = categorias.reduce((s, c) => s + c.diferenca, 0)
   const descalibre = linha.metaCategorias - linha.meta
+  /* Lista de barras padronizada (build 074, "De onde vem o reservado — meta
+     por grupo"): uma barra sólida por grupo, cor por faixa de uso da meta,
+     percentual na frente na MESMA cor da barra — nunca o segmentado
+     azul/âmbar/verde/vermelho da barra principal, que responde outra
+     pergunta ("de onde vem cada real gasto"). Aqui a pergunta é só "que
+     fração da meta este grupo já usou": >100% estourou (vermelho); <70%
+     bem abaixo do ritmo (âmbar — o mesmo token do cartão Reservado);
+     entre os dois, dentro do esperado (azul). */
+  const pctUso = linha.meta > 0 ? (linha.realizado / linha.meta) * 100 : 0
+  const corBarra = pctUso > 100
+    ? 'var(--rio-barra-vermelho)'
+    : pctUso < 70
+      ? 'var(--rio-ambar-txt)'
+      : 'var(--rio-barra-azul)'
   return (
     <div className="grupo-hoje" data-testid={`grupo-hoje-${linha.nome}`}>
       <button type="button" className="linha-cat-ideal" onClick={aoAlternar} aria-expanded={aberta}>
-        <BarraIdeal
-          realizado={linha.realizado}
-          meta={linha.meta}
-          rotulo={linha.nome}
-          icone={icone}
-          valor={linha.diferenca}
-          valorNeutro={guardar}
-          compacta
-        />
+        <div className="rio-bar-row" data-testid={`rio-bar-${linha.nome}`}>
+          <span className="rio-bar-nome">
+            {icone}
+            {linha.nome}
+          </span>
+          <div className="rio-bar-trilho">
+            <div
+              className="rio-bar-fill"
+              style={{ width: `${Math.max(0, Math.min(100, pctUso))}%`, background: corBarra }}
+            />
+          </div>
+          <span className="rio-bar-pct" style={{ color: corBarra }}>
+            {Math.round(pctUso)}%
+          </span>
+        </div>
       </button>
       <p className="ideal-t4 texto-quebra linha-legenda-grupo">
         {guardar

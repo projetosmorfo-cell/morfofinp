@@ -22,10 +22,19 @@ export default function BarraMeta({
   icone,
   acao,
   mostrarDestaque = true,
+  comprometido = 0,
 }: {
   gasto: number
   previsto: number
   rotulo?: string
+  /* Item 10 (15/09/2026): a parcela de `gasto` que ainda não foi paga/
+     recebida — já lançada, mas sem saída/entrada de dinheiro confirmada
+     ("comprometido, ainda não realizado"). Pintada com o mesmo tom âmbar
+     que `BarraIdeal`/a régua do Planejamento já usam pro mesmo conceito
+     (`--ideal-ambar`) — antes esta barra só tinha uma cor sólida (azul/
+     vermelho), sem distinguir o que já saiu de verdade do que só tem
+     destino certo. Sempre um subconjunto de `gasto`, nunca somado a ele. */
+  comprometido?: number
   // Ação opcional (hoje: o lápis de editar) DENTRO da linha de título da
   // barra, depois do valor — 13/09/2026. Antes o botão vivia numa coluna
   // própria ao lado da barra inteira, e era essa coluna que espremia o nome
@@ -47,7 +56,10 @@ export default function BarraMeta({
   const temPrevisto = previsto > 0
   const estourou = temPrevisto ? gasto > previsto : gasto > 0
   const escala = Math.max(gasto, previsto, 0.01)
-  const preenchidoPct = Math.min(100, (gasto / escala) * 100)
+  const comprometidoClamp = Math.max(0, Math.min(comprometido, gasto))
+  const realizado = gasto - comprometidoClamp
+  const realizadoPct = Math.min(100, (realizado / escala) * 100)
+  const comprometidoPct = Math.min(100 - realizadoPct, (comprometidoClamp / escala) * 100)
   const marcadorPct = temPrevisto ? Math.min(100, (previsto / escala) * 100) : null
   const diferenca = previsto - gasto
   const pctUsado = temPrevisto ? (gasto / previsto) * 100 : null
@@ -73,7 +85,10 @@ export default function BarraMeta({
         </div>
       )}
       <div className={`barra-meta ${estourou ? 'estourou' : ''}`}>
-        <div className="fill" style={{ width: `${preenchidoPct}%` }} />
+        <div className="fill" style={{ width: `${realizadoPct}%` }} />
+        {comprometidoPct > 0 && (
+          <div className="fill fill-comprometido" style={{ width: `${comprometidoPct}%` }} data-testid="barra-meta-comprometido" />
+        )}
         {marcadorPct !== null && <div className="marcador" style={{ left: `${marcadorPct}%` }} />}
       </div>
       {mostrarDestaque && (

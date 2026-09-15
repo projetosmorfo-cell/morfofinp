@@ -16,10 +16,12 @@ import { SUBTITULO_SITUACAO, EXPLICACAO_SITUACAO } from '../subtitulosTelas'
 import { ExportSheet, type ExportRow } from '../kit/ExportSheet'
 import { lerDoAmbiente } from '../ambiente'
 import { jaAconteceu } from '../statusPagamento'
+import AvisoCalibragem from '../components/AvisoCalibragem'
 
 interface LinhaCategoria {
   cat: Categoria
   gasto: number
+  comprometido: number // parte de `gasto` ainda não paga (item 10, 15/09/2026)
   diferenca: number // aceitável - gasto: positivo = sobra, negativo = estourou
   proporcao: number
 }
@@ -28,7 +30,7 @@ interface LinhaCategoria {
 // grupo e quanto já foi usado disso este mês) — diferente do Resumo do Mês,
 // que é "o que entrou/saiu de verdade + o que ainda vai entrar/sair". As duas
 // telas de propósito não repetem a mesma pergunta.
-export default function Situacao({ mes, aoMudarMes, aoAbrirLancamento, aoAbrirPlanejamento }: TelaProps) {
+export default function Situacao({ mes, aoMudarMes, aoAbrirLancamento, aoAbrirPlanejamento, aoAbrirCalibragem }: TelaProps) {
   const categorias = useLiveQuery(() => lerDoAmbiente(db.categorias.toArray()), [])
   const grupos = useLiveQuery(() => lerDoAmbiente(db.grupos.toArray()), [])
   const lancamentosDoMes = useLiveQuery(
@@ -97,9 +99,10 @@ export default function Situacao({ mes, aoMudarMes, aoAbrirLancamento, aoAbrirPl
 
   const linhas: LinhaCategoria[] = categoriasDeGasto.map((cat) => {
     const gasto = gastoPorCategoria.get(cat.id!) ?? 0
+    const gastoPago = gastoPagoPorCategoria.get(cat.id!) ?? 0
     const diferenca = cat.aceitavelMensal - gasto
     const proporcao = cat.aceitavelMensal > 0 ? gasto / cat.aceitavelMensal : gasto > 0 ? Infinity : 0
-    return { cat, gasto, diferenca, proporcao }
+    return { cat, gasto, comprometido: gasto - gastoPago, diferenca, proporcao }
   })
 
   const totalAceitavel = linhas.reduce((s, l) => s + l.cat.aceitavelMensal, 0)
@@ -116,11 +119,13 @@ export default function Situacao({ mes, aoMudarMes, aoAbrirLancamento, aoAbrirPl
     const doGrupo = categorias.filter((c) => c.grupo === g.nome && categoriaConsomeMeta(c.natureza))
     const aceitavel = doGrupo.reduce((s, c) => s + c.aceitavelMensal, 0)
     const gasto = doGrupo.reduce((s, c) => s + (gastoPorCategoria.get(c.id!) ?? 0), 0)
-    return { grupo: g.nome, aceitavel, gasto, icone: g.icone, iconeEstilo: g.iconeEstilo, iconeCor: g.iconeCor }
+    const gastoPago = doGrupo.reduce((s, c) => s + (gastoPagoPorCategoria.get(c.id!) ?? 0), 0)
+    return { grupo: g.nome, aceitavel, gasto, comprometido: gasto - gastoPago, icone: g.icone, iconeEstilo: g.iconeEstilo, iconeCor: g.iconeCor }
   })
   const totalGeralGrupos = {
     aceitavel: porGrupo.reduce((s, g) => s + g.aceitavel, 0),
     gasto: porGrupo.reduce((s, g) => s + g.gasto, 0),
+    comprometido: porGrupo.reduce((s, g) => s + g.comprometido, 0),
   }
 
   const estourou = linhas
@@ -260,7 +265,7 @@ export default function Situacao({ mes, aoMudarMes, aoAbrirLancamento, aoAbrirPl
         </div>
         {/* mostrarDestaque=false: o valor total (margem/estourou) já está em
             destaque logo acima, repetir na barra seria redundante. */}
-        <BarraMeta gasto={totalGasto} previsto={totalAceitavel} mostrarDestaque={false} />
+        <BarraMeta gasto={totalGasto} previsto={totalAceitavel} comprometido={totalGastoPendente} mostrarDestaque={false} />
         {explicacoesAbertas && (
           <div className="texto-fraco" style={{ marginTop: 4 }}>
             (Fixo + Variável — soma dos tetos das categorias menos o que já foi gasto. Não é dinheiro
@@ -350,17 +355,20 @@ export default function Situacao({ mes, aoMudarMes, aoAbrirLancamento, aoAbrirPl
         {porGrupo.length === 0 ? (
           <p className="texto-fraco">Nenhum grupo cadastrado ainda.</p>
         ) : (
-          <BarraMeta rotulo="Total geral" gasto={totalGeralGrupos.gasto} previsto={totalGeralGrupos.aceitavel} />
+          <BarraMeta rotulo="Total geral" gasto={totalGeralGrupos.gasto} previsto={totalGeralGrupos.aceitavel} comprometido={totalGeralGrupos.comprometido} />
         )}
         <button type="button" className="botao-link-secao" onClick={aoAbrirPlanejamento}>
           Ver detalhamento por grupo em Planejamento →
         </button>
       </div>
 
+      {/* Item 9 (15/09/2026) — ver comentário em ResumoDoMes.tsx. */}
+      {aoAbrirCalibragem && <AvisoCalibragem mes={mes} aoAbrirCalibragem={aoAbrirCalibragem} />}
+
       <h2>Onde estourei ({estourou.length})</h2>
       <div className="cartao">
         {estourou.length === 0 && <p className="texto-fraco">Nenhuma categoria acima do aceitável. 🎉</p>}
-        {estourou.map(({ cat, gasto }) => (
+        {estourou.map(({ cat, gasto, comprometido }) => (
           <div key={cat.id} style={{ padding: '10px 0', borderBottom: '1px solid var(--borda)' }}>
             {cabecalhoExpansivel(
               cat.id!,
@@ -368,6 +376,7 @@ export default function Situacao({ mes, aoMudarMes, aoAbrirLancamento, aoAbrirPl
                 rotulo={cat.nome}
                 gasto={gasto}
                 previsto={cat.aceitavelMensal}
+                comprometido={comprometido}
                 icone={
                   cat.icone !== 'nenhum' && (
                     <Icone id={cat.icone} estilo={cat.iconeEstilo} cor={cat.iconeCor} tamanho={tamanhoIconePx('categoria', pctCategoria)} />
@@ -398,7 +407,7 @@ export default function Situacao({ mes, aoMudarMes, aoAbrirLancamento, aoAbrirPl
       <h2>Onde ainda sobra ({comSobra.length})</h2>
       <div className="cartao">
         {comSobra.length === 0 && <p className="texto-fraco">Nenhuma categoria com sobra no momento.</p>}
-        {comSobra.map(({ cat, gasto }) => (
+        {comSobra.map(({ cat, gasto, comprometido }) => (
           <div key={cat.id} style={{ padding: '10px 0', borderBottom: '1px solid var(--borda)' }}>
             {cabecalhoExpansivel(
               cat.id!,
@@ -406,6 +415,7 @@ export default function Situacao({ mes, aoMudarMes, aoAbrirLancamento, aoAbrirPl
                 rotulo={cat.nome}
                 gasto={gasto}
                 previsto={cat.aceitavelMensal}
+                comprometido={comprometido}
                 icone={
                   cat.icone !== 'nenhum' && (
                     <Icone id={cat.icone} estilo={cat.iconeEstilo} cor={cat.iconeCor} tamanho={tamanhoIconePx('categoria', pctCategoria)} />

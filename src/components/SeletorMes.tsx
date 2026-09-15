@@ -28,7 +28,19 @@ const MESES_A_FRENTE = 12
 // na própria rotina); é só pra não trabalhar à toa.
 const jaGerouNaSessao = new Set<string>()
 
-export default function SeletorMes({ mes, onMudar }: { mes: string; onMudar: (mes: string) => void }) {
+export default function SeletorMes({
+  mes,
+  onMudar,
+  aoClicarNome,
+}: {
+  mes: string
+  onMudar: (mes: string) => void
+  /* Item 6 da lista pendente (15/09/2026): quando presente, torna o NOME do
+     mês clicável — usado só em Lançamentos, pra alternar pro filtro por
+     período (data de/até). Opcional e sem efeito em quem não passa a prop —
+     as outras 4 telas que usam este seletor continuam exatamente iguais. */
+  aoClicarNome?: () => void
+}) {
   const mesAtual = mesAtualISO()
   const limiteFrente = somarMes(mesAtual, MESES_A_FRENTE)
   const podeAvancar = mes < limiteFrente
@@ -68,9 +80,21 @@ export default function SeletorMes({ mes, onMudar }: { mes: string; onMudar: (me
         <button type="button" onClick={() => onMudar(somarMes(mes, -1))} aria-label="Mês anterior">
           ‹
         </button>
-        <strong title={foraDoMesAtual ? 'Você não está no mês atual' : undefined}>
-          {formatarMes(mes)}
-        </strong>
+        {aoClicarNome ? (
+          <button
+            type="button"
+            className="seletor-mes-nome-botao"
+            onClick={aoClicarNome}
+            data-testid="seletor-mes-nome-clicavel"
+            title="Ver por período (data de/até)"
+          >
+            {formatarMes(mes)}
+          </button>
+        ) : (
+          <strong title={foraDoMesAtual ? 'Você não está no mês atual' : undefined}>
+            {formatarMes(mes)}
+          </strong>
+        )}
         {/* Volta pro mês corrente em um toque (build 063). Só existe quando há
             pra onde voltar — no mês atual ele não teria função e só ocuparia
             espaço na linha. Pequeno e sem destaque de propósito: o destaque

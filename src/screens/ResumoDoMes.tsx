@@ -18,13 +18,14 @@ import { baseMetaDoMes } from '../baseMeta'
 import { EXPLICACAO_RESUMO, SUBTITULO_RESUMO } from '../subtitulosTelas'
 import ExplicacaoDaTela from '../components/ExplicacaoDaTela'
 import AvisoBaseMetaZerada from '../components/AvisoBaseMetaZerada'
+import AvisoCalibragem from '../components/AvisoCalibragem'
 import { jaAconteceu } from '../statusPagamento'
 
 // Resumo do Mês = "o que já aconteceu de verdade este mês + o que ainda vai
 // acontecer antes dele fechar" (visão de caixa) — diferente da Situação, que
 // é teto × gasto por categoria/grupo. As duas telas de propósito não repetem
 // a mesma pergunta (ver nota em Situacao.tsx).
-export default function ResumoDoMes({ mes, aoMudarMes, aoAbrirLancamento, aoAbrirPlanejamento }: TelaProps) {
+export default function ResumoDoMes({ mes, aoMudarMes, aoAbrirLancamento, aoAbrirPlanejamento, aoAbrirCalibragem }: TelaProps) {
   const [exportOpen, setExportOpen] = useState(false) /* G44 regra 11b */
   const categorias = useLiveQuery(() => lerDoAmbiente(db.categorias.toArray()), [])
   const grupos = useLiveQuery(() => lerDoAmbiente(db.grupos.toArray()), [])
@@ -154,11 +155,15 @@ export default function ResumoDoMes({ mes, aoMudarMes, aoAbrirLancamento, aoAbri
   // é intencional, mesma lógica da planilha: aporte deles é acompanhado à
   // parte (ver Situação · "Aportes do mês"), não como % de teto de Consumo.
   const gastoPorGrupo = new Map<string, number>()
+  const gastoPagoPorGrupo = new Map<string, number>()
   for (const l of lancamentosDoMes) {
     const cat = categoriaPorId.get(l.categoriaId)
     if (!cat || cat.natureza !== 'Consumo') continue
     if (l.valor >= 0) continue
     gastoPorGrupo.set(cat.grupo, (gastoPorGrupo.get(cat.grupo) ?? 0) + -l.valor)
+    if (jaAconteceu(l)) {
+      gastoPagoPorGrupo.set(cat.grupo, (gastoPagoPorGrupo.get(cat.grupo) ?? 0) + -l.valor)
+    }
   }
 
   /* Base pra calcular a Meta R$ de cada grupo — ver `src/baseMeta.ts`. Cashback,
@@ -173,11 +178,13 @@ export default function ResumoDoMes({ mes, aoMudarMes, aoAbrirLancamento, aoAbri
     const percentual = meta?.percentual ?? 0
     const limite = (baseSalario * percentual) / 100
     const gasto = gastoPorGrupo.get(g.nome) ?? 0
-    return { grupo: g.nome, limite, gasto, icone: g.icone, iconeEstilo: g.iconeEstilo, iconeCor: g.iconeCor }
+    const gastoPago = gastoPagoPorGrupo.get(g.nome) ?? 0
+    return { grupo: g.nome, limite, gasto, comprometido: gasto - gastoPago, icone: g.icone, iconeEstilo: g.iconeEstilo, iconeCor: g.iconeCor }
   })
   const totalGeralGrupos = {
     limite: gruposComMeta.reduce((s, g) => s + g.limite, 0),
     gasto: gruposComMeta.reduce((s, g) => s + g.gasto, 0),
+    comprometido: gruposComMeta.reduce((s, g) => s + g.comprometido, 0),
   }
 
   const categoriasComMovimento = [...porCategoria.entries()]
@@ -321,12 +328,17 @@ export default function ResumoDoMes({ mes, aoMudarMes, aoAbrirLancamento, aoAbri
         {gruposComMeta.length === 0 ? (
           <p className="texto-fraco">Nenhum grupo cadastrado ainda.</p>
         ) : (
-          <BarraMeta rotulo="Total geral" gasto={totalGeralGrupos.gasto} previsto={totalGeralGrupos.limite} />
+          <BarraMeta rotulo="Total geral" gasto={totalGeralGrupos.gasto} previsto={totalGeralGrupos.limite} comprometido={totalGeralGrupos.comprometido} />
         )}
         <button type="button" className="botao-link-secao" onClick={aoAbrirPlanejamento}>
           Ver detalhamento por grupo em Planejamento →
         </button>
       </div>
+
+      {/* Item 9 da lista pendente (15/09/2026): o aviso de calibragem, que só
+          existia dentro da tela Hoje, passa a existir em qualquer tela que
+          mostre grupo/meta — mesmo cartão, mesmo silêncio quando calibrado. */}
+      {aoAbrirCalibragem && <AvisoCalibragem mes={mes} aoAbrirCalibragem={aoAbrirCalibragem} />}
 
       {/* F-02: agrupada por Grupo (Fixo/Variável/Objetivos/Receitas…),
           recolhida por padrão — mesmo padrão de árvore que Planejamento já

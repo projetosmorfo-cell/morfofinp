@@ -51,6 +51,38 @@
      virar mais uma cor com significado. */
   --ideal-trilho: #383f4d;
 
+  /* "O Rio" — cores exatas do protótipo aprovado (15/09/2026, build 074).
+     Amostradas por pixel do print de referência do Rafael, não estimadas.
+     As 3 caixas "menos importantes" (Mês passado/Este mês/Caixa de hoje)
+     usam fundo/borda próprios (levemente diferentes de `--bg-elevado`/
+     `--borda`, mais próximos do tom azulado do print) e texto SEMPRE
+     `--texto` — nunca colorido por sinal (ver Hoje.tsx). Livre de tudo e
+     Reservado usam fundo tingido + rótulo E valor na MESMA cor, weder
+     sinal (positivo = a cor própria da caixa; negativo = vermelho nos
+     dois, mesma lógica binária). */
+  --rio-caixa-bg: #182338;
+  --rio-caixa-borda: #262b35;
+  --rio-verde-bg: #122a1d;
+  --rio-verde-txt: #3ecb77;
+  --rio-ambar-bg: #332510;
+  --rio-ambar-txt: #e2a53d;
+  --rio-vermelho-bg: #352026;
+  --rio-vermelho-txt: #f87171;
+  --rio-seta: #262b35;
+  /* Sombra de elevação dos 5 cartões do funil — o Rafael sentiu falta de
+     profundidade ("tem o cone atrás, quero que coloque a cor de sombra").
+     Mais leve que `--sombra-popup` (pensada pra folha por cima de tela
+     inteira): aqui é cartão dentro de cartão, a diferença precisa ser
+     sutil, não uma folha flutuando. */
+  --sombra-rio: 0 3px 8px rgba(0, 0, 0, 0.4), 0 1px 2px rgba(0, 0, 0, 0.55);
+  /* A lista "De onde vem o reservado — meta por grupo": barra única por
+     grupo (não o segmentado azul/âmbar/verde da barra principal), cor por
+     faixa de uso da meta. O âmbar é o MESMO token do Reservado
+     (`--rio-ambar-txt`) — consistência pedida pelo Rafael ("é exatamente a
+     mesma coisa"). */
+  --rio-barra-azul: #5b8cf6;
+  --rio-barra-vermelho: #f0685e;
+
   /* Os 4 níveis de texto. Nível 4 é o único com opacidade — é a lista sem
      foco, que precisa recuar sem sumir. */
   --ideal-t1-tam: 28px;   --ideal-t1-peso: 700;   /* os dois números e o título de tela */
@@ -123,6 +155,21 @@
   --ideal-vermelho: #d64545;      /* 4,38 */
   --ideal-vermelho-txt: #a81f1f;  /* 7,29 */
   --ideal-trilho: #d6d0c6;   /* 1,53 sobre o cartão branco (era 1,27) */
+  /* "O Rio" no tema claro — sem amostra de print (a referência do Rafael é
+     escura); reaproveita os tons claros já calibrados para contraste em vez
+     de inventar hex novo. */
+  --rio-caixa-bg: var(--bg-elevado);
+  --rio-caixa-borda: var(--borda);
+  --rio-verde-bg: #e6f4ea;
+  --rio-verde-txt: var(--ideal-verde-txt);
+  --rio-ambar-bg: #fdf1e0;
+  --rio-ambar-txt: var(--ideal-ambar-txt);
+  --rio-vermelho-bg: var(--fundo-atrasado);
+  --rio-vermelho-txt: var(--ideal-vermelho-txt);
+  --rio-seta: var(--borda);
+  --sombra-rio: 0 2px 6px rgba(28, 27, 34, 0.14);
+  --rio-barra-azul: var(--azul);
+  --rio-barra-vermelho: var(--vermelho);
 }
 /* "Automático" só vale quando o Rafael ESCOLHE automático (atributo
    `auto` no <html>) — sem escolha nenhuma, o app continua escuro, como
@@ -482,16 +529,26 @@ nav.rodape {
   background: var(--borda);
   overflow: hidden;
   margin-top: 6px;
+  display: flex;
 }
 
 .barra-meta > .fill {
   height: 100%;
   background: var(--azul);
   transition: width 0.2s;
+  flex: 0 0 auto;
 }
 
-.barra-meta.estourou > .fill {
+.barra-meta.estourou > .fill:not(.fill-comprometido) {
   background: var(--vermelho);
+}
+
+/* Item 10 (15/09/2026): parcela de `gasto` ainda não realizada (lançada, mas
+   não paga/recebida) — mesmo tom âmbar de `BarraIdeal`/régua do Planejamento
+   (`--ideal-ambar`), nunca `--amarelo`/hex avulso. Vem sempre logo depois do
+   segmento realizado, dentro do mesmo trilho. */
+.barra-meta > .fill.fill-comprometido {
+  background: var(--ideal-ambar);
 }
 
 .barra-meta > .marcador {
@@ -563,6 +620,48 @@ nav.rodape {
 .seletor-mes strong {
   min-width: 128px;
   text-align: center;
+}
+
+/* Item 6 (15/09/2026): mesma aparência do <strong>, mas clicável — abre o
+   filtro por período em Lançamentos. Precisa do override de `width`/`height`
+   (regra da build 028): sem ele herdaria os 44×44 fixos de `.seletor-mes
+   button`. */
+.seletor-mes-nome-botao {
+  min-width: 128px;
+  width: auto;
+  height: auto;
+  text-align: center;
+  background: none;
+  border: none;
+  color: var(--texto);
+  font-weight: 700;
+  font-size: inherit;
+  padding: 0;
+  cursor: pointer;
+}
+.seletor-mes-fora .seletor-mes-nome-botao {
+  color: var(--amarelo, #eab308);
+}
+
+/* Item 6 (15/09/2026): a barra que substitui o SeletorMes em Lançamentos
+   quando o filtro é por período (data de/até) em vez de mês. */
+.periodo-filtro {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 8px 0;
+}
+.periodo-filtro input[type='date'] {
+  background: var(--bg-elevado);
+  border: 1px solid var(--borda);
+  color: var(--texto);
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 13px;
+}
+.periodo-filtro button {
+  margin-left: auto;
 }
 
 .seletor-mes button {
@@ -710,18 +809,47 @@ nav.rodape {
   transition: transform 0.15s;
 }
 
-.item-lancamento-acao {
+/* Item 11 (15/09/2026): o painel revelado ao arrastar a linha pra esquerda
+   passou de 1 ação (Excluir) pra 3 (Duplicar · Editar · Excluir), num
+   componente compartilhado (`ItemLancamentoAcoes.tsx`) usado por Lançamentos
+   e pelo drill-in de Carteira — antes só Lançamentos tinha o gesto, e só com
+   exclusão. `.item-lancamento-acoes` é o painel inteiro (a largura das 3
+   ações), `.item-lancamento-acao` é cada botão dentro dele (`flex: 1`, sem
+   posição própria — antes era o painel inteiro, com posição absoluta; a
+   posição agora é só do contêiner). */
+.item-lancamento-acoes {
   position: absolute;
   top: 0;
   bottom: 0;
   right: 0;
-  width: 80px;
-  background: var(--vermelho);
+  width: 210px;
+  display: flex;
+}
+
+.item-lancamento-acao {
+  flex: 1;
+  border: none;
   color: var(--texto);
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 13px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.item-lancamento-acao.acao-duplicar {
+  background: var(--azul);
+}
+
+.item-lancamento-acao.acao-editar {
+  background: var(--bg-elevado);
+  border-left: 1px solid var(--borda);
+  border-right: 1px solid var(--borda);
+}
+
+.item-lancamento-acao.acao-excluir {
+  background: var(--vermelho);
 }
 
 /* Listagem COMPLETA (duas linhas) — 31/08/2026, rodada seguinte: usada em
@@ -1703,15 +1831,11 @@ html[data-mloc-tema="escuro"] body {
   white-space: nowrap;
 }
 
-/* ---- Varredura de órfãos (G44 regra 11c: "toda classe usada em className tem
-   definição"). `.linha-completa-wrapper` era usada no drill-in da Carteira
-   (`Carteira.tsx`) e NÃO tinha nenhuma definição — a borda que ela tinha foi
-   removida numa rodada de 01/09, a regra ficou vazia e depois sumiu; a classe
-   seguiu no JSX sem fazer nada. Definida com o que ela precisa de fato ser: o
-   mesmo respiro vertical das outras linhas de lançamento. ---- */
-.linha-completa-wrapper {
-  padding: 5px 0;
-}
+/* `.linha-completa-wrapper` (definida acima até 14/09/2026) deixou de ter uso
+   no item 11 (15/09/2026): o drill-in de Carteira passou a usar
+   `ItemLancamentoAcoes`, cujo próprio wrapper (`.item-lancamento-conteudo`)
+   já dá o mesmo respiro — ver `Carteira.tsx`. Removida pra não virar órfã de
+   novo (G44 regra 11c, ver histórico que já mordeu esta mesma classe). */
 
 /* ---- Campo que parece input mas abre uma folha de escolha (10/09/2026) —
    usado pela categoria com ícone no formulário de lançamento
@@ -2144,6 +2268,29 @@ html[data-mloc-tema="escuro"] body {
   min-width: 0;
 }
 
+/* Item 12 (15/09/2026) — alça de arrastar-pra-reordenar (press-and-hold),
+   ver `GrupoReordenavel.tsx`. `touch-action: none` impede o navegador de
+   interpretar o toque contínuo como rolagem da página enquanto a pessoa
+   segura a alça. */
+.alca-arrastar {
+  flex-shrink: 0;
+  width: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--texto-fraco);
+  font-size: 16px;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.linha-reordenavel.em-arrasto {
+  opacity: 0.6;
+  background: var(--bg-elevado);
+  border-radius: 8px;
+}
+
 /* ---- Rodapé fixo com o totalizador da lista (10/09/2026, pedido do Rafael:
    "fica no rodapé o card de total que está no fim da lista"). Mesma técnica
    do `.chat-composer-fixo`: `position: sticky; bottom: 0` dentro de `<main>`,
@@ -2356,32 +2503,109 @@ html[data-mloc-tema='claro'] .tarja-inativa {
 .ideal-t3 { font-size: var(--ideal-t3-tam); font-weight: var(--ideal-t3-peso); }
 .ideal-t4 { font-size: var(--ideal-t4-tam); font-weight: var(--ideal-t4-peso); opacity: var(--ideal-t4-opac); }
 
-/* "O Rio", visual de funil (14/09/2026, build 070) — Mês passado + Este mês
-   convergem em Caixa de hoje, que diverge em Livre de tudo/Reservado, com a
-   LARGURA das duas últimas caixas proporcional ao valor real de cada uma
-   (calculado em Hoje.tsx). As caixas em si (`.bloco-numero`) não mudaram nada
-   — só a forma como elas se organizam aqui dentro. */
+/* "O Rio", visual de funil (14/09/2026, build 070; cores/sombra/alinhamento
+   revisados na build 074 contra o print aprovado). Mês passado + Este mês
+   convergem em Caixa de hoje, que diverge em Livre de tudo/Reservado. A
+   LARGURA das duas caixas de CADA par é sempre 50/50, simétrica — nunca
+   proporcional ao valor real (essa proporcionalidade existiu só no par de
+   baixo, build 070-074, e foi removida a pedido do Rafael na build 075:
+   `flex: 1 1 0` sem nenhum `flex-basis` calculado por valor, igual ao par de
+   cima sempre foi). */
 .rio-funil { display: flex; flex-direction: column; }
 .rio-linha { display: flex; gap: 10px; align-items: stretch; }
 .rio-linha .bloco-numero { flex: 1 1 0; min-width: 0; margin-top: 0; }
 .rio-linha-topo { margin-top: 14px; }
-.rio-caixa-hoje {
-  border: 1px solid var(--azul);
-  border-radius: 10px;
-  padding: 8px 10px;
-  background: var(--bg-elevado);
+/* Valor em R$ das 5 caixas do funil nunca quebra linha — com as caixas de
+   baixo indo pra 50/50 fixo (build 075), o box fica mais estreito que antes
+   pra valores grandes/negativos (ex.: "-R$ 15.404,84"), então o tamanho da
+   fonte reduz um pouco (28px → 20px, só dentro do funil) e o valor corta com
+   reticências em vez de quebrar — mesmo princípio de nunca deixar número
+   monetário partir em duas linhas já usado em `.linha-barra-topo`. */
+.bloco-numero .ideal-t1 {
+  font-size: 20px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
+.rio-caixa-hoje {
+  border-color: var(--azul);
+}
+/* Conectores — formas cheias (trapézio), não linhas finas: o print mostra um
+   silhueta de seta/funil, cor lisa e sutil (mesmo tom da borda dos cartões),
+   nunca com sombra própria — a profundidade é dos 5 cartões, não das setas. */
 .rio-conector { position: relative; height: 20px; margin: 2px 0; }
 .rio-conector svg { width: 100%; height: 100%; display: block; }
-.rio-linha-svg { stroke: var(--borda); stroke-width: 1.5; }
+.rio-seta-svg { fill: var(--rio-seta); stroke: none; }
 
-/* Versão Ideal — blocos da tela Hoje e o cartão de primeiros passos. */
-.bloco-numero { margin-top: 14px; }
+/* O balão de detalhe de um PAR de caixas lado a lado (build 074) — o ponto
+   principal do pedido do Rafael: nunca uma coluna ao lado da outra caixa,
+   sempre a largura TOTAL do par, com uma ponta de "balão de fala" apontando
+   pra qual das duas foi clicada. A ponta é um quadrado rotacionado 45°
+   (técnica clássica de CSS), posicionado por `--balao-tip` (uma % da
+   largura, a mesma que os conectores usam pra desenhar as setas). */
+.balao-detalhe {
+  position: relative;
+  width: 100%;
+  margin-top: 10px;
+  background: var(--rio-caixa-bg);
+  border: 1px solid var(--rio-caixa-borda);
+  border-radius: 10px;
+  padding: 12px;
+  box-shadow: var(--sombra-rio);
+}
+.balao-detalhe::before {
+  content: '';
+  position: absolute;
+  top: -7px;
+  left: var(--balao-tip, 50%);
+  transform: translateX(-50%) rotate(45deg);
+  width: 14px; height: 14px;
+  background: var(--rio-caixa-bg);
+  border-left: 1px solid var(--rio-caixa-borda);
+  border-top: 1px solid var(--rio-caixa-borda);
+  border-radius: 3px 0 0 0;
+}
+
+/* Versão Ideal — blocos da tela Hoje e o cartão de primeiros passos.
+   Os 5 cartões do funil ganham fundo/borda/sombra próprios (build 074) — as
+   3 caixas "neutras" (Mês passado/Este mês/Caixa de hoje) usam o par
+   `--rio-caixa-*`; Livre de tudo e Reservado recebem `.rio-verde`/
+   `.rio-ambar`/`.rio-vermelho` conforme o SINAL do valor (ver Hoje.tsx) —
+   rótulo e valor sempre na MESMA cor da caixa, nunca um branco e outro
+   colorido. */
+.bloco-numero {
+  margin-top: 14px;
+  background: var(--rio-caixa-bg);
+  border: 1px solid var(--rio-caixa-borda);
+  border-radius: 10px;
+  padding: 10px 12px;
+  box-shadow: var(--sombra-rio);
+}
+.bloco-numero.rio-verde { background: var(--rio-verde-bg); border-color: var(--rio-verde-bg); }
+.bloco-numero.rio-ambar { background: var(--rio-ambar-bg); border-color: var(--rio-ambar-bg); }
+.bloco-numero.rio-vermelho { background: var(--rio-vermelho-bg); border-color: var(--rio-vermelho-bg); }
+.bloco-numero.rio-verde .bloco-numero-rotulo,
+.bloco-numero.rio-verde .ideal-t1 { color: var(--rio-verde-txt); }
+.bloco-numero.rio-ambar .bloco-numero-rotulo,
+.bloco-numero.rio-ambar .ideal-t1 { color: var(--rio-ambar-txt); }
+.bloco-numero.rio-vermelho .bloco-numero-rotulo,
+.bloco-numero.rio-vermelho .ideal-t1 { color: var(--rio-vermelho-txt); }
+/* Números "menos importantes" (as 3 caixas neutras) são sempre `--texto`,
+   nunca coloridos por sinal — pedido explícito do Rafael. */
+.bloco-numero:not(.rio-verde):not(.rio-ambar):not(.rio-vermelho) .ideal-t1 { color: var(--texto); }
 .bloco-numero-rotulo {
-  display: flex; align-items: center; gap: 2px;
+  display: flex; align-items: center; gap: 2px; flex-wrap: nowrap;
   font-size: 10.5px; letter-spacing: 0.7px; text-transform: uppercase;
   color: var(--texto-fraco); margin-bottom: 1px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
+/* As duas caixas de topo (Mês passado/Este mês) e as duas de baixo (Livre de
+   tudo/Reservado) precisam ter a MESMA altura par a par, sem quebra de linha
+   no rótulo em nenhuma largura testada (390px é o alvo principal) — build
+   074. `.rio-linha` já estica os filhos (`align-items: stretch`); o texto de
+   apoio abaixo do valor nunca pode ser maior que o espaço disponível numa
+   coluna de ~half-width, por isso ele quebra (é frase, não rótulo) enquanto
+   o rótulo em CAIXA ALTA nunca quebra. */
 .linha-veredito {
   display: flex; align-items: center; gap: 2px;
   margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--borda);
@@ -2524,10 +2748,21 @@ html[data-mloc-tema='claro'] .tarja-inativa {
 .total-calibragem.erro strong { color: var(--ideal-vermelho-txt); }
 .total-calibragem.ok strong { color: var(--ideal-verde-txt); }
 .linha-cat-calibragem {
-  display: flex; align-items: center; gap: 6px; width: 100%;
+  display: flex; align-items: center; gap: 4px; width: 100%;
   padding: 6px 0; border-top: 1px solid var(--borda);
-  background: none; border-left: none; border-right: none; border-bottom: none;
-  color: var(--texto); font: inherit; cursor: pointer; margin: 0;
+}
+/* Item 7 (15/09/2026): a linha virou `<div>` com DOIS botões dentro — editar
+   (nome/referência/meta) e ver lançamentos (ícone à parte) — porque um botão
+   dentro de outro botão não é HTML válido. */
+.botao-linha-cat-calibragem {
+  display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0;
+  background: none; border: none; padding: 0; margin: 0;
+  color: var(--texto); font: inherit; cursor: pointer; text-align: left;
+}
+.botao-ver-lancamentos-calibragem {
+  flex: 0 0 auto; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;
+  background: none; border: none; padding: 0; margin: 0; cursor: pointer;
+  color: var(--texto-fraco);
 }
 
 /* Cabeçalho do card × lista de categorias (build 063) — o Rafael, olhando a
@@ -2828,6 +3063,35 @@ html[data-mloc-tema='claro'] .tarja-inativa {
 .linha-legenda-grupo {
   margin: 0 0 2px;
   padding-left: 2px;
+}
+
+/* "De onde vem o reservado — meta por grupo" (build 074): lista de barras
+   padronizada, igual ao print aprovado — nome à esquerda, UMA barra sólida
+   (não o segmentado azul/âmbar/verde/vermelho da barra principal — aqui a
+   pergunta é só "que fração da meta este grupo já usou"), percentual à
+   direita NA MESMA COR da barra. Cor por faixa de uso: >100% da meta
+   (estourou) = vermelho; <70% (bem abaixo do ritmo do mês) = âmbar — o MESMO
+   token do cartão Reservado, pedido explícito de consistência; entre os
+   dois = azul (dentro do esperado). A legenda com os valores em R$
+   (`.linha-legenda-grupo`, já existente) continua abaixo, então a barra não
+   é o único jeito de ler o número — só o mais rápido de bater o olho. */
+.rio-bar-row {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+}
+.rio-bar-nome {
+  display: flex; align-items: center; gap: 6px; flex: 0 0 auto;
+  max-width: 40%; min-width: 0;
+  font-size: var(--ideal-t3-tam); font-weight: 600; color: var(--texto);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.rio-bar-trilho {
+  flex: 1 1 auto; height: 8px; min-width: 24px;
+  background: var(--ideal-trilho); border-radius: 4px; overflow: hidden;
+}
+.rio-bar-fill { height: 100%; border-radius: 4px; }
+.rio-bar-pct {
+  flex: 0 0 auto; width: 44px; text-align: right;
+  font-size: var(--ideal-t3-tam); font-weight: 700; font-variant-numeric: tabular-nums;
 }
 
 .detalhe-grupo-hoje {

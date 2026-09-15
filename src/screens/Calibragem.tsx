@@ -33,7 +33,8 @@ import { categoriaConsomeMeta } from '../orcamento'
 import { fmtBRL } from '../formatoMoeda'
 import { Icone } from '../icones'
 import { useConfiguracaoIcones, tamanhoIconePx } from '../configuracaoIcones'
-import { ArrowsRightLeftIcon, PencilSquareIcon } from '@heroicons/react/24/outline'
+import { ArrowsRightLeftIcon, PencilSquareIcon, ListBulletIcon } from '@heroicons/react/24/outline'
+import ListaLancamentosCategoria from '../components/ListaLancamentosCategoria'
 import { idsDeCofre } from '../orcamento'
 import { mesAtualISO, formatarMes } from '../mes'
 import {
@@ -55,9 +56,14 @@ const TOLERANCIA_PCT = 0.5
 export interface CalibragemProps {
   mes: string
   aoVoltar: () => void
+  /* Item 7 da lista pendente (15/09/2026): clicar no ícone de "ver
+     lançamentos" de uma categoria abre o formulário de lançamento (mesmo
+     modal do resto do app) a partir da lista filtrada — opcional pra não
+     quebrar quem ainda chame esta tela sem passar a prop. */
+  aoAbrirLancamento?: (opcoes?: { id?: number; categoriaIdSugerida?: number }) => void
 }
 
-export default function Calibragem({ mes, aoVoltar }: CalibragemProps) {
+export default function Calibragem({ mes, aoVoltar, aoAbrirLancamento }: CalibragemProps) {
   const categorias = useLiveQuery(() => lerDoAmbiente(db.categorias.toArray()), [])
   const grupos = useLiveQuery(() => lerDoAmbiente(db.grupos.toArray()), [])
   const metas = useLiveQuery(() => lerDoAmbiente(db.metas.toArray()), [])
@@ -73,6 +79,9 @@ export default function Calibragem({ mes, aoVoltar }: CalibragemProps) {
   const [editandoGrupo, setEditandoGrupo] = useState<GrupoRegistro | null>(null)
   const [editandoCat, setEditandoCat] = useState<Categoria | null>(null)
   const [baseAberta, setBaseAberta] = useState(false)
+  // Item 7 (15/09/2026): categoria cujos lançamentos do PERÍODO DE REFERÊNCIA
+  // (o mesmo mês fechado ou média de 6 já escolhido acima) estão abertos.
+  const [verLancamentosCat, setVerLancamentosCat] = useState<Categoria | null>(null)
   /* Uma escolha só para a tela inteira: a coluna de referência responde "quanto
      isso costuma custar", e comparar dois grupos com bases diferentes na mesma
      tela não teria sentido. O botão aparece no cabeçalho de cada card (é ali
@@ -333,42 +342,56 @@ export default function Calibragem({ mes, aoVoltar }: CalibragemProps) {
               {doGrupo.map((c) => {
                 const ref = c.id == null ? undefined : referencia.valores.get(c.id)
                 return (
-                  <button
-                    type="button"
-                    key={c.id}
-                    className="linha-cat-calibragem"
-                    onClick={() => setEditandoCat(c)}
-                    data-testid={`editar-cat-calibragem-${c.id}`}
-                  >
-                    <span className="ideal-t3" style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
-                      {c.nome}
-                    </span>
-                    <span
-                      /* A referência ganha COR comparada à meta ao lado (build
-                         067): vermelha quando o histórico é MAIOR que a meta
-                         (a meta não cabe no que você costuma gastar) e verde
-                         quando é menor. Sem meta cadastrada não há comparação,
-                         então fica neutra — colorir contra zero acusaria toda
-                         categoria ainda não calibrada.
-                         Sem movimento no período é "—", nunca R$ 0,00: zero
-                         afirma que não gastou; o traço diz que não há de onde
-                         tirar referência. */
-                      className={`col-ref-calibragem ${
-                        ref == null || !(c.aceitavelMensal > 0)
-                          ? ''
-                          : ref > c.aceitavelMensal + 0.005
-                            ? 'valor-neg'
-                            : ref < c.aceitavelMensal - 0.005
-                              ? 'valor-pos'
-                              : ''
-                      }`}
-                      data-testid={`ref-cat-${c.id}`}
+                  <div className="linha-cat-calibragem" key={c.id} data-testid={`linha-cat-calibragem-${c.id}`}>
+                    <button
+                      type="button"
+                      className="botao-linha-cat-calibragem"
+                      onClick={() => setEditandoCat(c)}
+                      data-testid={`editar-cat-calibragem-${c.id}`}
                     >
-                      {ref ? fmtBRL(ref) : '—'}
-                    </span>
-                    <span className="ideal-t3 col-meta-calibragem">{fmtBRL(c.aceitavelMensal || 0)}</span>
-                    <PencilSquareIcon width={14} height={14} className="icone-editar-inline col-lapis-calibragem" />
-                  </button>
+                      <span className="ideal-t3" style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
+                        {c.nome}
+                      </span>
+                      <span
+                        /* A referência ganha COR comparada à meta ao lado (build
+                           067): vermelha quando o histórico é MAIOR que a meta
+                           (a meta não cabe no que você costuma gastar) e verde
+                           quando é menor. Sem meta cadastrada não há comparação,
+                           então fica neutra — colorir contra zero acusaria toda
+                           categoria ainda não calibrada.
+                           Sem movimento no período é "—", nunca R$ 0,00: zero
+                           afirma que não gastou; o traço diz que não há de onde
+                           tirar referência. */
+                        className={`col-ref-calibragem ${
+                          ref == null || !(c.aceitavelMensal > 0)
+                            ? ''
+                            : ref > c.aceitavelMensal + 0.005
+                              ? 'valor-neg'
+                              : ref < c.aceitavelMensal - 0.005
+                                ? 'valor-pos'
+                                : ''
+                        }`}
+                        data-testid={`ref-cat-${c.id}`}
+                      >
+                        {ref ? fmtBRL(ref) : '—'}
+                      </span>
+                      <span className="ideal-t3 col-meta-calibragem">{fmtBRL(c.aceitavelMensal || 0)}</span>
+                      <PencilSquareIcon width={14} height={14} className="icone-editar-inline col-lapis-calibragem" />
+                    </button>
+                    {/* Item 7 (15/09/2026): abre os lançamentos desta categoria
+                        no MESMO período de referência escolhido acima (último
+                        mês fechado, ou a média de 6) — não o mês da tela. */}
+                    <button
+                      type="button"
+                      className="botao-ver-lancamentos-calibragem"
+                      onClick={() => setVerLancamentosCat(c)}
+                      data-testid={`ver-lancamentos-cat-${c.id}`}
+                      aria-label={`Ver lançamentos de ${c.nome} no período de referência`}
+                      title="Ver lançamentos no período de referência"
+                    >
+                      <ListBulletIcon width={16} height={16} />
+                    </button>
+                  </div>
                 )
               })}
               {doGrupo.length === 0 && (
@@ -405,6 +428,36 @@ export default function Calibragem({ mes, aoVoltar }: CalibragemProps) {
           baseEmReais={base}
           onFechar={() => setEditandoCat(null)}
         />
+      )}
+      {verLancamentosCat && (
+        <div className="modal-fundo" onClick={() => setVerLancamentosCat(null)}>
+          <div className="modal-conteudo" onClick={(e) => e.stopPropagation()}>
+            <h2 style={{ margin: '0 0 4px' }}>{verLancamentosCat.nome}</h2>
+            <p className="texto-fraco" style={{ margin: '0 0 12px', fontSize: 12.5 }} data-testid="periodo-ver-lancamentos">
+              {referencia.temHistorico
+                ? `${ROTULO_REFERENCIA[baseRef]} (${periodoRef})`
+                : 'Sem histórico neste período.'}
+            </p>
+            <ListaLancamentosCategoria
+              lancamentos={lancamentos.filter(
+                (l) =>
+                  l.categoriaId === verLancamentosCat.id &&
+                  referencia.meses.includes(l.dataCompetencia.slice(0, 7)),
+              )}
+              aoAbrirLancamento={(opcoes) => {
+                if (aoAbrirLancamento) {
+                  setVerLancamentosCat(null)
+                  aoAbrirLancamento(opcoes)
+                }
+              }}
+            />
+            <div className="acoes-modal" style={{ marginTop: 12 }}>
+              <button type="button" className="secundario" onClick={() => setVerLancamentosCat(null)} data-testid="fechar-ver-lancamentos">
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </>
   )
