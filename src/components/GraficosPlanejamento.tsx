@@ -32,9 +32,11 @@
  * então cada chip só apagava parte dela.
  */
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
-import { fmtComSinal } from '../formatoMoeda'
+import { fmtBRL, fmtComSinal, fmtSinalExplicito } from '../formatoMoeda'
+import { LEGENDA_BARRAS, corDoToken } from '../legendaBarras'
 import BarraIdeal from './BarraIdeal'
 import ListaLancamentosCategoria from './ListaLancamentosCategoria'
+import Legenda from './Legenda'
 import type { Categoria, GrupoRegistro, Lancamento } from '../db'
 
 export interface TotaisGrafico {
@@ -59,12 +61,24 @@ export interface ItemGrupoGrafico {
   totalGrupo: TotaisGrafico
 }
 
-export type ModeloGrafico = 'linhas' | 'colunas'
+export type ModeloGrafico = 'linhas' | 'colunas' | 'medidor'
 
-/* COLUNAS primeiro, e é o padrão ao abrir (build 067, pedido do Rafael). */
+/* ORDEM DAS TRÊS ABAS, e o porquê (build 088):
+ *
+ *   COLUNAS  primeiro, e é o padrão ao abrir. Fixado na build 067 por pedido
+ *            do Rafael ("Gráficos abre em Colunas") — a 088 NÃO mexe nisso.
+ *   LINHAS   segundo, onde já estava. Mover uma aba existente de lugar troca
+ *            o alvo do dedo de quem já usa a tela, sem nada em troca.
+ *   MEDIDOR  terceiro, porque é o que entrou agora E porque é o mais
+ *            AGREGADO dos três: Colunas e Linhas abrem o mês por grupo e por
+ *            categoria; o Medidor mostra UM arco com o mês inteiro e só então
+ *            deixa descer. Aba nova no fim é também o menor risco de alguém
+ *            abrir a tela num lugar diferente do de ontem.
+ */
 export const MODELOS: { m: ModeloGrafico; rotulo: string }[] = [
   { m: 'colunas', rotulo: 'Colunas' },
   { m: 'linhas', rotulo: 'Linhas' },
+  { m: 'medidor', rotulo: 'Medidor' },
 ]
 
 /** O que cada barra recebe — sempre a leitura cheia, sem vertente. */
@@ -263,6 +277,8 @@ export default function GraficosPlanejamento(props: Props) {
             Nenhum grupo com meta cadastrada neste mês.
           </p>
         </div>
+      ) : modelo === 'medidor' ? (
+        <ModeloMedidor {...props} grupos={gruposDeSaida} />
       ) : modelo === 'linhas' ? (
         <ModeloLinhas {...props} grupos={gruposDeSaida} />
       ) : (
@@ -378,6 +394,7 @@ function ModeloLinhas({
                 })
               )}
             </div>
+            <Legenda familias={['regua']} testid={`legenda-linhas-${g.grupo}`} />
           </div>
         )
       })}
@@ -535,6 +552,7 @@ function ModeloColunas({
             )
           })}
         </div>
+        <Legenda familias={['colunas']} testid="legenda-colunas" />
       </div>
   )
 
@@ -568,6 +586,7 @@ function ModeloColunas({
             meta={catEmFoco.x.totais.planejado}
             testid="zoom-meta"
           />
+          <Legenda familias={['ideal']} testid="legenda-zoom-categoria" />
         </div>
       ) : grupoEmFoco ? (
         <div className="cartao zoom-grafico" data-testid="zoom-grupo">
@@ -618,6 +637,9 @@ function ModeloColunas({
               )
             })}
           </div>
+          {/* Duas famílias neste card: a barra de destaque do grupo
+              (`BarraIdeal`) e a lista de réguas das categorias. */}
+          <Legenda familias={['ideal', 'regua']} testid="legenda-zoom-grupo" />
         </div>
       ) : null
 
@@ -662,6 +684,400 @@ function ModeloColunas({
           })()}
         </span>
       </div>
+    </>
+  )
+}
+
+/* ============================ MEDIDOR (build 088) ============================
+ *
+ * Pedido do Rafael: *"inclua esse medidor em arco numa nova aba dentro do
+ * planejamento dentro da aba Gráficos com efeitos dinamicos de clicar nas
+ * fatias e ele abrir o card abaico respectivamente."*
+ *
+ * DE ONDE ELE VEIO. O medidor é o `GraficoMargem` da antiga tela Situação
+ * (build 085), que a build 086 apagou junto com a tela — a única perda
+ * assumida daquela rodada, registrada no CLAUDE.md e na RETOMADA.md. A
+ * GEOMETRIA voltou IGUAL, de propósito: meio arco de 180°→360°, `L=210 A=124
+ * cx=105 cy=108 R=82 ESP=16 GAP=0.035`, ponta arredondada só nas duas
+ * extremidades do arco, o traço marcando o fim do comprometido e o número-
+ * manchete no meio. Aquele desenho já tinha sido calibrado numa coluna de
+ * 430px que precisa funcionar a 360px; redesenhar seria refazer a calibragem
+ * sem motivo.
+ *
+ * O QUE MUDOU, e por quê:
+ *
+ * 1. O ARCO INTEIRO É A META DO MÊS (soma do `planejado` dos grupos de saída),
+ *    não o teto de consumo da Situação. É o número que esta tela inteira usa
+ *    como denominador — as colunas, as réguas e a árvore. Os segmentos são
+ *    percorridos na ordem em que o dinheiro sai: realizado → comprometido →
+ *    margem.
+ *
+ * 2. AS CORES SÃO AS DO PLANEJAMENTO (azul/âmbar/verde/vermelho), não as do
+ *    original (que pintava o "já pago" de VERMELHO). O motivo está escrito na
+ *    família `medidorTeto` de `src/legendaBarras.ts`, que é de onde elas saem
+ *    — aqui não há nenhuma cor escrita à mão, nem no arco, nem na legenda.
+ *
+ * 3. O NÚMERO-MANCHETE É O "JÁ DESTINADO" (realizado + comprometido), não o
+ *    comprometido sozinho como no original. Aqui isso ganhou uma coerência que
+ *    lá não existia: o traço no arco marca exatamente o FIM desse número, então
+ *    o ponteiro e a manchete falam da mesma coisa. No original o traço ficava
+ *    no fim do comprometido e a manchete mostrava só a parte dele que ainda não
+ *    tinha saído — dois números, um marcador.
+ *
+ * 4. AS FATIAS SÃO CLICÁVEIS e abrem UM card logo abaixo (o pedido). O card
+ *    lista os GRUPOS que formam aquele número, do maior pro menor, e fecha com
+ *    o próprio número do segmento. Uma fatia por vez: tocar noutra troca, tocar
+ *    na mesma fecha.
+ *
+ * 5. O CARD DE DETALHE NÃO TEM BARRA COLORIDA — só nome e valor. Ele responde
+ *    "de quem é este número", que é aritmética, não comparação. Uma segunda
+ *    linguagem de cor logo abaixo do arco seria o defeito que a build 084
+ *    fechou. Por isso a `Legenda` (família `medidorTeto`, recolhida) mora no
+ *    card DO MEDIDOR, que é onde a cor está.
+ *
+ * 6. A ÁRVORE É A JÁ ESTABELECIDA. Tocar num grupo dentro do card usa
+ *    `aoFiltrarGrupo`; tocar numa categoria usa `aoAbrirCategoria` e a lista é
+ *    sempre `ListaLancamentosCategoria` — nunca uma segunda implementação.
+ *
+ * A margem de cada grupo entra COM SINAL (`fmtSinalExplicito`): grupo que
+ * estourou contribui negativo, e é isso que faz a soma do card fechar
+ * exatamente com o número do segmento em vez de "fechar quase".
+ */
+
+type SegmentoMedidor = 'realizado' | 'comprometido' | 'margem' | 'estouro'
+
+const ROTULO_SEGMENTO: Record<SegmentoMedidor, string> = {
+  realizado: 'Realizado',
+  comprometido: 'Comprometido',
+  margem: 'Margem',
+  estouro: 'Estourou a meta',
+}
+
+/* A cor de cada papel sai de `legendaBarras.ts` — a MESMA entrada que a
+   amostra da legenda desenha. Nenhum hex, nenhuma `var(--…)` digitada aqui. */
+const TOKEN_SEGMENTO: Record<SegmentoMedidor, string> = {
+  realizado: LEGENDA_BARRAS.medidorTeto.entradas[0].token,
+  comprometido: LEGENDA_BARRAS.medidorTeto.entradas[1].token,
+  margem: LEGENDA_BARRAS.medidorTeto.entradas[2].token,
+  estouro: LEGENDA_BARRAS.medidorTeto.entradas[3].token,
+}
+const TOKEN_TRILHO_MEDIDOR = LEGENDA_BARRAS.medidorTeto.entradas[4].token
+
+/** O valor de UM grupo dentro de UM segmento. Com sinal na margem/estouro. */
+function valorDoGrupoNoSegmento(t: TotaisGrafico, seg: SegmentoMedidor): number {
+  if (seg === 'realizado') return t.realizado
+  if (seg === 'comprometido') return t.previsto
+  if (seg === 'margem') return t.planejado - t.realizado - t.previsto
+  return t.realizado + t.previsto - t.planejado
+}
+
+function ModeloMedidor({
+  grupos,
+  grupoFiltro,
+  aoFiltrarGrupo,
+  categoriaAberta,
+  aoAbrirCategoria,
+  lancamentosPorCategoria,
+  aoAbrirLancamento,
+}: Props & { grupos: ItemGrupoGrafico[] }) {
+  const [segmentoAberto, setSegmentoAberto] = useState<SegmentoMedidor | null>(null)
+
+  const total = soma(grupos.map((g) => g.totalGrupo))
+  const meta = total.planejado
+  const realizado = total.realizado
+  const comprometido = total.previsto
+  const margem = meta - realizado - comprometido
+  const jaDestinado = realizado + comprometido
+  const estourou = margem < -0.005
+
+  /* GEOMETRIA — resgatada sem retoque da build 085 (`GraficoMargem`). */
+  const L = 210
+  const A = 124
+  const cx = L / 2
+  const cy = 108
+  const R = 82
+  const ESP = 16
+  const GAP = 0.035 // ~2px de respiro entre segmentos vizinhos
+
+  // Meio arco: da esquerda (180°) até a direita (360°).
+  const ang = (fracao: number) => Math.PI + Math.PI * Math.min(1, Math.max(0, fracao))
+  const ponto = (a: number, raio = R) => [cx + raio * Math.cos(a), cy + raio * Math.sin(a)]
+  const arcoDe = (f1: number, f2: number) => {
+    const a1 = ang(f1)
+    const a2 = ang(f2)
+    const [x1, y1] = ponto(a1)
+    const [x2, y2] = ponto(a2)
+    return `M ${x1} ${y1} A ${R} ${R} 0 0 1 ${x2} ${y2}`
+  }
+
+  const base = meta > 0.005 ? meta : 1
+  const fim1 = realizado / base
+  const fim2 = (realizado + comprometido) / base
+
+  const segmentos: { seg: SegmentoMedidor; valor: number; de: number; ate: number }[] = estourou
+    ? [{ seg: 'estouro', valor: -margem, de: 0, ate: 1 }]
+    : ([
+        { seg: 'realizado', valor: realizado, de: 0, ate: fim1 },
+        { seg: 'comprometido', valor: comprometido, de: fim1, ate: fim2 },
+        { seg: 'margem', valor: margem, de: fim2, ate: 1 },
+      ] as { seg: SegmentoMedidor; valor: number; de: number; ate: number }[]).filter((s) => s.valor > 0.005)
+
+  /* Tocar numa fatia que já não existe mais (mudou o mês, zerou o valor) não
+     pode deixar um card órfão aberto. */
+  const abertoValido = segmentos.some((s) => s.seg === segmentoAberto) ? segmentoAberto : null
+
+  const alternar = (seg: SegmentoMedidor) => {
+    setSegmentoAberto((atual) => (atual === seg ? null : seg))
+    aoFiltrarGrupo(null)
+    aoAbrirCategoria(null)
+  }
+
+  const fimDoComprometido = Math.min(1, fim2)
+  const [ax, ay] = ponto(ang(fimDoComprometido), R - ESP / 2 - 9)
+  const [bx, by] = ponto(ang(fimDoComprometido), R + ESP / 2 + 3)
+
+  /* Os grupos daquele segmento, do maior pro menor. Grupo que não contribui
+     nada (0) fica de fora — linha de zero não explica número nenhum. */
+  const linhasDoCard = abertoValido
+    ? grupos
+        .map((g) => ({ g, valor: valorDoGrupoNoSegmento(g.totalGrupo, abertoValido) }))
+        .filter((x) => Math.abs(x.valor) > 0.005)
+        .sort((a, b) => b.valor - a.valor)
+    : []
+  const totalDoCard = linhasDoCard.reduce((s, x) => s + x.valor, 0)
+  /* SINAL EXPLÍCITO na margem E no estouro. Nos dois, a contribuição de um
+     grupo pode ser NEGATIVA (grupo que estourou puxa a margem pra baixo; grupo
+     que sobrou puxa o estouro pra baixo) — e `fmtBRL` não escreve sinal
+     nenhum, então a linha apareceria como se somasse quando na verdade
+     subtrai, e a soma do card não fecharia aos olhos de quem lê. Achado pelo
+     roteiro t088 em Julho/2026, o mês que estourou. */
+  const comSinal = abertoValido === 'margem' || abertoValido === 'estouro'
+
+  const grupoEmFoco = grupos.find((g) => g.grupo === grupoFiltro)
+  const catsDoGrupo = (g: ItemGrupoGrafico) =>
+    g.itens
+      .filter((x) => x.classe === 'saida' && (x.totais.planejado > 0 || x.totais.realizado > 0))
+      .sort((a, b) => b.totais.realizado - a.totais.realizado)
+
+  return (
+    <>
+      <div className="cartao bloco-medidor" data-testid="medidor-cartao">
+        <div className="titulo-bloco-ideal" style={{ marginTop: 0 }}>
+          QUANTO DA META JÁ TEM DESTINO
+        </div>
+        <div className="medidor-area">
+          <svg
+            width={L}
+            height={A}
+            viewBox={`0 0 ${L} ${A}`}
+            className="medidor-svg"
+            data-testid="medidor-svg"
+            aria-label="Medidor da meta do mês: realizado, comprometido e margem"
+          >
+            <path
+              d={arcoDe(0, 1)}
+              fill="none"
+              stroke={corDoToken(TOKEN_TRILHO_MEDIDOR)}
+              strokeWidth={ESP}
+              strokeLinecap="round"
+              data-testid="medidor-trilho"
+            />
+            {/* ALVO DE TOQUE, invisível e mais largo que o arco (build 088).
+                O traço visível tem 16px — abaixo do mínimo confortável num
+                celular. Este irmão transparente repete a mesma curva com
+                ESP+16 e leva o clique junto, então o dedo acerta a fatia sem
+                o arco precisar engordar. `aria-hidden` porque quem responde
+                por acessibilidade é o traço visível, que tem o `role` e o
+                `aria-label`. */}
+            {segmentos.map((s, i) => (
+              <path
+                key={`alvo-${s.seg}`}
+                d={arcoDe(i === 0 ? s.de : s.de + GAP / 2, s.ate)}
+                fill="none"
+                stroke="transparent"
+                strokeWidth={ESP + 16}
+                className="medidor-alvo"
+                aria-hidden="true"
+                data-testid={`medidor-alvo-${s.seg}`}
+                onClick={() => alternar(s.seg)}
+              />
+            ))}
+            {segmentos.map((s, i) => {
+              const sel = abertoValido === s.seg
+              return (
+                <path
+                  key={s.seg}
+                  d={arcoDe(i === 0 ? s.de : s.de + GAP / 2, s.ate)}
+                  fill="none"
+                  stroke={corDoToken(TOKEN_SEGMENTO[s.seg])}
+                  strokeWidth={sel ? ESP + 5 : ESP}
+                  strokeLinecap={i === 0 || i === segmentos.length - 1 ? 'round' : 'butt'}
+                  /* O feedback do que está aberto é DUPLO: a fatia escolhida
+                     engorda e as outras perdem opacidade. Só a espessura some
+                     no arco de uma fatia só; só a opacidade some pra quem não
+                     distingue bem tom de tom. */
+                  opacity={abertoValido && !sel ? 0.4 : 1}
+                  className={`medidor-fatia ${sel ? 'aberta' : ''}`}
+                  role="button"
+                  tabIndex={0}
+                  aria-pressed={sel}
+                  aria-label={`${ROTULO_SEGMENTO[s.seg]}: ${fmtBRL(Math.abs(s.valor))}. Toque para ver os grupos.`}
+                  data-testid={`medidor-fatia-${s.seg}`}
+                  onClick={() => alternar(s.seg)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') {
+                      e.preventDefault()
+                      alternar(s.seg)
+                    }
+                  }}
+                />
+              )
+            })}
+            {!estourou && fimDoComprometido > 0.001 && fimDoComprometido < 0.999 && (
+              <line
+                x1={ax}
+                y1={ay}
+                x2={bx}
+                y2={by}
+                stroke="var(--texto)"
+                strokeWidth={2.5}
+                strokeLinecap="round"
+                data-testid="medidor-agulha"
+              />
+            )}
+            <text x={cx} y={cy - 30} textAnchor="middle" className="medidor-rotulo">
+              já destinado
+            </text>
+            <text x={cx} y={cy - 10} textAnchor="middle" className="medidor-manchete" data-testid="medidor-manchete">
+              {fmtBRL(jaDestinado)}
+            </text>
+          </svg>
+        </div>
+
+        {estourou && (
+          <p className="valor-neg texto-quebra" style={{ margin: '0 0 8px', fontSize: 12.5, fontWeight: 700 }}>
+            Estourou a meta em {fmtBRL(Math.abs(margem))} — o mês inteiro já está comprometido.
+          </p>
+        )}
+
+        <div className="medidor-fechamento" data-testid="medidor-fechamento">
+          <span className="ideal-t4">Meta do mês</span>
+          <strong>{fmtBRL(meta)}</strong>
+        </div>
+
+        <p className="ideal-t4 texto-quebra dica-grafico" style={{ marginBottom: 0 }}>
+          {abertoValido
+            ? 'Toque na mesma fatia pra fechar o card, ou noutra pra trocar.'
+            : 'Toque numa fatia do arco pra ver, no card abaixo, quais grupos formam aquele número.'}
+        </p>
+
+        <Legenda familias={['medidorTeto']} testid="legenda-medidor" />
+      </div>
+
+      {abertoValido && (
+        <div className="cartao medidor-card" data-testid={`medidor-card-${abertoValido}`}>
+          <div className="titulo-bloco-ideal" style={{ marginTop: 0 }} data-testid="medidor-card-titulo">
+            {ROTULO_SEGMENTO[abertoValido]} · por grupo
+          </div>
+
+          {linhasDoCard.length === 0 ? (
+            <p className="ideal-t4 texto-quebra" style={{ margin: 0 }}>
+              Nenhum grupo contribui para este número neste mês.
+            </p>
+          ) : (
+            <div className="medidor-lista">
+              {linhasDoCard.map(({ g, valor }) => {
+                const emFoco = grupoFiltro === g.grupo
+                return (
+                  <div key={g.grupo}>
+                    <button
+                      type="button"
+                      className={`medidor-linha-grupo ${emFoco ? 'selecionado' : ''}`}
+                      aria-pressed={emFoco}
+                      onClick={() => {
+                        aoAbrirCategoria(null)
+                        aoFiltrarGrupo(emFoco ? null : g.grupo)
+                      }}
+                      data-testid={`medidor-grupo-${g.grupo}`}
+                    >
+                      <span className="texto-quebra">{g.grupo}</span>
+                      <span className="medidor-linha-valor">
+                        {comSinal ? fmtSinalExplicito(valor) : fmtBRL(valor)}
+                      </span>
+                    </button>
+
+                    {emFoco && (
+                      <div className="medidor-categorias" data-testid={`medidor-categorias-${g.grupo}`}>
+                        {catsDoGrupo(g).length === 0 ? (
+                          <p className="ideal-t4 texto-quebra" style={{ margin: '4px 0 0' }}>
+                            Nenhuma categoria com meta ou movimento neste grupo.
+                          </p>
+                        ) : (
+                          catsDoGrupo(g).map((x) => {
+                            const aberta = categoriaAberta === x.cat.id
+                            const v = valorDoGrupoNoSegmento(x.totais, abertoValido)
+                            return (
+                              <div key={x.cat.id}>
+                                <button
+                                  type="button"
+                                  className={`medidor-linha-categoria ${aberta ? 'selecionado' : ''}`}
+                                  aria-pressed={aberta}
+                                  onClick={() => aoAbrirCategoria(aberta ? null : x.cat.id!)}
+                                  data-testid={`medidor-categoria-${x.cat.id}`}
+                                >
+                                  <span className="texto-quebra">{x.cat.nome}</span>
+                                  <span className="medidor-linha-valor">
+                                    {comSinal ? fmtSinalExplicito(v) : fmtBRL(v)}
+                                  </span>
+                                </button>
+                                {aberta && (
+                                  <div className="painel-lanc-grafico" data-testid="painel-lancamentos">
+                                    <UsadoDaMeta
+                                      realizado={x.totais.realizado}
+                                      previsto={x.totais.previsto}
+                                      meta={x.totais.planejado}
+                                      testid={`medidor-meta-categoria-${x.cat.id}`}
+                                    />
+                                    <ListaLancamentosCategoria
+                                      lancamentos={lancamentosPorCategoria.get(x.cat.id!) ?? []}
+                                      categoriaIdSugerida={x.cat.id!}
+                                      aoAbrirLancamento={aoAbrirLancamento}
+                                    />
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          {/* O fechamento: a soma das linhas acima É o número da fatia. */}
+          <div className="medidor-total" data-testid={`medidor-card-total-${abertoValido}`}>
+            <span className="ideal-t3">{ROTULO_SEGMENTO[abertoValido]}</span>
+            <span className="ideal-t3">{comSinal ? fmtSinalExplicito(totalDoCard) : fmtBRL(totalDoCard)}</span>
+          </div>
+
+          {grupoEmFoco && (
+            <button
+              type="button"
+              className="botao-voltar-grafico"
+              onClick={() => {
+                aoAbrirCategoria(null)
+                aoFiltrarGrupo(null)
+              }}
+              data-testid="medidor-voltar-grupos"
+            >
+              ‹ Ver todos os grupos
+            </button>
+          )}
+        </div>
+      )}
     </>
   )
 }

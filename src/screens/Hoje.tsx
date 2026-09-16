@@ -32,7 +32,10 @@ import TituloTelaN1 from '../kit/CabecalhoN1'
 import { InfoDot } from '../kit/PadraoUI'
 import { fmtBRL as fmt, fmtComSinal } from '../formatoMoeda'
 import { categoriaConsomeMeta, idsDeCofre, lancamentoConsomeMeta } from '../orcamento'
+import { comportamentoDoGrupo } from '../gruposUtil'
 import BlocoRecolhivel from '../components/BlocoRecolhivel'
+import Legenda from '../components/Legenda'
+import { corFaixaGrupoRio } from '../legendaBarras'
 import {
   calcularDoisNumeros,
   fraseSaldoLivre,
@@ -55,6 +58,12 @@ interface LinhaCategoria {
   comprometido: number
   lancamentos: Lancamento[]
 }
+
+/* O rótulo do recolhível dos TRÊS cards do fim da tela Hoje — "ONDE ESTOUREI",
+   "ONDE POSSO ECONOMIZAR" e "APORTES DO MÊS" (build 087). Constante única de
+   propósito: o pedido do Rafael foi justamente que os três se comportassem
+   igual, e três strings soltas voltariam a divergir na primeira edição. */
+const ROTULO_NUMEROS = 'Ver os números'
 
 /* "O Rio" (14/09/2026) — as 5 caixas da tela Hoje, todas individualmente
  * expansíveis, cada uma com um título "De onde vem X?" no botão que abre o
@@ -139,6 +148,49 @@ export default function Hoje({ mes, aoMudarMes, aoAbrirLancamento, aoAbrirPlanej
         (l) => l.categoriaId === cat.id && l.dataCompetencia.startsWith(mes),
       ),
     }))
+
+  /* ===== "ONDE ESTOUREI" / "ONDE POSSO ECONOMIZAR" (build 083) =====
+     Os dois cards do fim da tela existiam até a build 065 e foram removidos na
+     066; o Rafael pediu de volta, com os nomes melhorados que já tinham ficado
+     ("ONDE ESTOUREI" / "ONDE POSSO ECONOMIZAR"), abaixo de tudo que a tela já
+     mostra hoje.
+
+     PONTO DELICADO: `linhas` mudou de sentido na 066 — passou a incluir TODA
+     categoria que consome meta (inclusive as de Aporte), porque o detalhe por
+     GRUPO precisa disso pra um grupo de guardar não abrir vazio. Restaurar os
+     cards em cima dessa lista larga colocaria Aporte dentro de "estourei"/
+     "posso economizar", o que NÃO era o comportamento da 065 (lá os cards eram
+     só de gasto). Por isso os cards saem de uma VISTA FILTRADA (`linhasDeGasto`)
+     e `linhas` continua larga: o detalhe por grupo não muda um pixel.
+     Fora ficam as categorias de natureza Aporte e qualquer categoria de grupo
+     com comportamento 'guardar' — deixar de guardar não é estouro nem
+     economia (mesma regra que `doisNumeros.ts` aplica ao 2º total). */
+  /* `ehDeGuardar` é o critério ÚNICO dos dois recortes abaixo — e ele nunca
+     olha o NOME do grupo (regra da build 061): o que define "guardar" é a
+     natureza da categoria e o COMPORTAMENTO do grupo dela. */
+  const ehDeGuardar = (l: LinhaCategoria) => {
+    if (l.cat.natureza === 'Aporte') return true
+    const g = l.cat.grupo ? grupos.find((x) => x.nome === l.cat.grupo) : undefined
+    return !!(g && comportamentoDoGrupo(g) === 'guardar')
+  }
+  const linhasDeGasto = linhas.filter((l) => !ehDeGuardar(l))
+  /* ===== APORTES DO MÊS (build 086) =====
+     O card que vivia só na tela Premium "Situação" ("Aportes do mês
+     (Objetivos/Segurança)") mudou de casa: ele é o complemento exato de
+     `linhasDeGasto` — tudo que a tela Hoje tira dos dois cards de gasto por
+     ser dinheiro que se GUARDA. Categoria sem meta e sem movimento fica fora:
+     não explica nada. */
+  const linhasDeAporte = linhas.filter(
+    (l) => ehDeGuardar(l) && (l.cat.aceitavelMensal > 0.005 || l.gasto > 0.005),
+  )
+  const metaAportes = linhasDeAporte.reduce((s, l) => s + (l.cat.aceitavelMensal || 0), 0)
+  const totalAportado = linhasDeAporte.reduce((s, l) => s + l.gasto, 0)
+  const estourou = linhasDeGasto
+    .filter((l) => l.diferenca < -0.005)
+    .sort((a, b) => a.diferenca - b.diferenca)
+  const comSobra = linhasDeGasto
+    .filter((l) => l.diferenca > 0.005 && l.cat.aceitavelMensal > 0)
+    .sort((a, b) => b.diferenca - a.diferenca)
 
   /* Categorias por grupo, ESTOURADAS PRIMEIRO — dentro do grupo, o que precisa
      de ação vem antes do que está em ordem. Categoria sem meta e sem movimento
@@ -592,6 +644,20 @@ export default function Hoje({ mes, aoMudarMes, aoAbrirLancamento, aoAbrirPlanej
                       {fmtComSinal(numeros.podeSobrar)}
                     </span>
                   </div>
+                  {/* A legenda deste balão passou a ser RECOLHIDA (build 086,
+                      pedido do Rafael): aberta, ela era a maior parte do
+                      conteúdo do balão, empurrando as barras por grupo — que
+                      são o assunto — para fora da tela.
+                      Isto NÃO fere a regra da 084 ("um card, um recolhível"):
+                      o balão só existe depois de a pessoa abrir "De onde vem o
+                      reservado?", então nunca há dois botões de abrir
+                      concorrendo no card fechado. O que a 084 proíbe é a
+                      escolha dobrada no mesmo nível, não um detalhe dentro de
+                      um detalhe já aberto.
+                      São duas famílias de barra aqui — a barra da meta do mês
+                      (`BarraIdeal`) e as barras por grupo (`.rio-bar-row`) —,
+                      então as duas aparecem, cada uma com o próprio título. */}
+                  <Legenda familias={['ideal', 'rioGrupo']} testid="legenda-funil" />
                 </>
               )}
             </div>
@@ -654,6 +720,133 @@ export default function Hoje({ mes, aoMudarMes, aoAbrirLancamento, aoAbrirPlanej
             </div>
           )}
 
+          {/* Os dois cards restaurados na build 083 ficam ABAIXO de tudo que já
+              existia na tela (funil, veredito e calibragem), por pedido
+              explícito do Rafael. Ficam abaixo da dobra e se alcança rolando —
+              isso é esperado e não desfaz a build 082, que garante a linha de
+              baixo do funil visível com `scrollTop === 0`.
+
+              BUILD 087 — os três cards do fim da tela ficaram IGUAIS. Rafael:
+              *"os card na tela 'Hoje' ficaram fora do padrão… esses devem ser
+              recolhíveis igual é o ultimo card 'Aportes do Mês' sob nome 'Ver
+              Números' e quando expandir, mostra os números e a legenda"*. Até
+              aqui estes dois mostravam o fechamento (soma das metas, soma do
+              gasto, total) solto no pé do card MAIS uma Legenda com botão
+              próprio — dois blocos, um deles sempre aberto. Agora seguem o
+              desenho que a 086 deu ao card de aportes: UM recolhível, o mesmo
+              rótulo (`ROTULO_NUMEROS`, constante única pros três), com os
+              números E a legenda dentro dele (`comoConteudo`, sem botão
+              próprio — a regra da 084). */}
+          {estourou.length > 0 && (
+            <>
+              <div className="titulo-bloco-ideal">ONDE ESTOUREI</div>
+              <div className="cartao" data-testid="onde-estourei">
+                {estourou.map((l) => (
+                  <LinhaCat
+                    key={l.cat.id}
+                    linha={l}
+                    icone={iconeDe(l.cat)}
+                    aberta={expandida === l.cat.id}
+                    aoAlternar={() => setExpandida(expandida === l.cat.id ? null : l.cat.id!)}
+                    aoAbrirLancamento={aoAbrirLancamento}
+                  />
+                ))}
+                <BlocoRecolhivel rotulo={ROTULO_NUMEROS} testid="detalhe-onde-estourei">
+                  <TotalDoCartao linhas={estourou} rotulo="Total estourado" testid="total-estourei" />
+                  <Legenda familias={['ideal']} comoConteudo testid="legenda-onde-estourei" />
+                </BlocoRecolhivel>
+              </div>
+            </>
+          )}
+
+          {comSobra.length > 0 && (
+            <>
+              <div className="titulo-bloco-ideal">ONDE POSSO ECONOMIZAR</div>
+              <div className="cartao" data-testid="onde-posso-economizar">
+                {comSobra.map((l) => (
+                  <LinhaCat
+                    key={l.cat.id}
+                    linha={l}
+                    icone={iconeDe(l.cat)}
+                    aberta={expandida === l.cat.id}
+                    aoAlternar={() => setExpandida(expandida === l.cat.id ? null : l.cat.id!)}
+                    aoAbrirLancamento={aoAbrirLancamento}
+                  />
+                ))}
+                <BlocoRecolhivel rotulo={ROTULO_NUMEROS} testid="detalhe-onde-economizar">
+                  <TotalDoCartao
+                    linhas={comSobra}
+                    rotulo="Total que posso economizar"
+                    testid="total-economizar"
+                  />
+                  <Legenda familias={['ideal']} comoConteudo testid="legenda-onde-economizar" />
+                </BlocoRecolhivel>
+              </div>
+            </>
+          )}
+
+          {/* APORTES DO MÊS (build 086) — o último card da tela, abaixo dos dois
+              restaurados na 083. Enxuto no padrão Ideal, do jeito que o Rafael
+              descreveu: poucos textos, barra estreita (`compacta`), SÓ o número
+              no fim da barra, e os demais números recolhidos num único bloco
+              (regra da 084: um card, um recolhível — por isso a Legenda entra
+              como conteúdo dele, sem botão próprio). As linhas não expandem: o
+              detalhe por lançamento já existe no 2º total, por grupo. */}
+          {linhasDeAporte.length > 0 && (
+            <>
+              <div className="titulo-bloco-ideal">APORTES DO MÊS</div>
+              <div className="cartao" data-testid="aportes-do-mes">
+                {linhasDeAporte.map((l) => (
+                  <div key={l.cat.id} data-testid={`aporte-cat-${l.cat.id}`}>
+                    <BarraIdeal
+                      realizado={l.gasto - l.comprometido}
+                      comprometido={l.comprometido}
+                      meta={l.cat.aceitavelMensal}
+                      rotulo={l.cat.nome}
+                      icone={iconeDe(l.cat)}
+                      /* O número do fim da barra é o APORTADO — a resposta
+                         direta do card. Neutro de propósito: aportar não é
+                         "positivo/negativo", e o quanto ainda cabe está no
+                         recolhível logo abaixo. */
+                      valor={l.gasto}
+                      valorNeutro
+                      compacta
+                    />
+                  </div>
+                ))}
+                <BlocoRecolhivel rotulo={ROTULO_NUMEROS} testid="detalhe-aportes">
+                  {linhasDeAporte.map((l) => (
+                    <div className="linha-detalhe-cat" key={l.cat.id}>
+                      <span className="ideal-t4">{l.cat.nome}</span>
+                      <span className="ideal-t3">
+                        {fmt(l.gasto)} de {fmt(l.cat.aceitavelMensal)}
+                      </span>
+                    </div>
+                  ))}
+                  <div className="linha-detalhe-cat total" data-testid="total-aportes">
+                    <span className="ideal-t3">Aportado</span>
+                    <span className="ideal-t2">
+                      {fmt(totalAportado)} de {fmt(metaAportes)}
+                    </span>
+                  </div>
+                  {metaAportes - totalAportado > 0.005 && (
+                    <div className="linha-detalhe-cat" data-testid="falta-aportar">
+                      <span className="ideal-t4">Falta aportar</span>
+                      <span className="ideal-t3 valor-neg">{fmt(metaAportes - totalAportado)}</span>
+                    </div>
+                  )}
+                  {totalAportado - metaAportes > 0.005 && (
+                    <div className="linha-detalhe-cat" data-testid="aportou-a-mais">
+                      <span className="ideal-t4">Aportou a mais que a meta</span>
+                      <span className="ideal-t3 valor-pos">{fmt(totalAportado - metaAportes)}</span>
+                    </div>
+                  )}
+                  <Legenda familias={['ideal']} comoConteudo testid="legenda-aportes" />
+                </BlocoRecolhivel>
+              </div>
+            </>
+          )}
+
         </>
       )}
 
@@ -705,11 +898,25 @@ function LinhaGrupoHoje({
      bem abaixo do ritmo (âmbar — o mesmo token do cartão Reservado);
      entre os dois, dentro do esperado (azul). */
   const pctUso = linha.meta > 0 ? (linha.realizado / linha.meta) * 100 : 0
-  const corBarra = pctUso > 100
-    ? 'var(--rio-barra-vermelho)'
-    : pctUso < 70
-      ? 'var(--rio-ambar-txt)'
-      : 'var(--rio-barra-azul)'
+  /* Os limiares e as 3 cores vivem em `src/legendaBarras.ts` — a MESMA fonte
+     que a Legenda deste card lê (build 084). Antes estavam escritos aqui, e a
+     legenda teria que repetir os hex à mão pra concordar com a barra. */
+  const corBarra = corFaixaGrupoRio(pctUso)
+  /* `linha.diferenca` num grupo de guardar já vem com piso em zero
+     (`doisNumeros.ts`), então o excedente aportado se lê pela conta crua. */
+  const sobraGuardar = linha.meta - linha.realizado
+  const textoGuardar =
+    sobraGuardar > 0.005
+      ? `falta aportar ${fmt(sobraGuardar)}`
+      : sobraGuardar < -0.005
+        ? `aportou ${fmt(-sobraGuardar)} a mais`
+        : 'meta cumprida'
+  const textoGasto =
+    linha.diferenca < -0.005
+      ? `estourou ${fmt(-linha.diferenca)}`
+      : linha.diferenca > 0.005
+        ? `margem ${fmt(linha.diferenca)}`
+        : 'bateu a meta'
   return (
     <div className="grupo-hoje" data-testid={`grupo-hoje-${linha.nome}`}>
       <button type="button" className="linha-cat-ideal" onClick={aoAlternar} aria-expanded={aberta}>
@@ -729,12 +936,17 @@ function LinhaGrupoHoje({
           </span>
         </div>
       </button>
+      {/* O texto abaixo da barra ficou COMPLETO na build 086: antes terminava
+          num rótulo sem número ("· falta aportar", "· passou da meta") e a
+          pessoa tinha de abrir o grupo para saber de quanto. Agora diz quanto
+          passou, quanto falta ou quanto ainda cabe.
+          Vocabulário já estabelecido no projeto: "estourou" quando passou do
+          teto, "margem" para o que ainda cabe dentro dele — "faltam" segue
+          proibido (a forma "falta aportar", de `doisNumeros.ts`, é outra
+          coisa: é o nome da conta de guardar, não o plural banido). */}
       <p className="ideal-t4 texto-quebra linha-legenda-grupo">
-        {guardar
-          ? `aportou ${fmt(linha.realizado)} de ${fmt(linha.meta)} · falta aportar`
-          : `gastou ${fmt(linha.realizado)} de ${fmt(linha.meta)} · ${
-              linha.diferenca < 0 ? 'passou da meta' : 'sobrou da meta'
-            }`}
+        {guardar ? `aportou ${fmt(linha.realizado)} de ${fmt(linha.meta)} · ${textoGuardar}` : null}
+        {!guardar ? `gastou ${fmt(linha.realizado)} de ${fmt(linha.meta)} · ${textoGasto}` : null}
       </p>
       {aberta && (
         <div className="detalhe-grupo-hoje">
@@ -780,6 +992,40 @@ function LinhaGrupoHoje({
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+/* Fechamento de um dos dois cards do fim da tela (restaurado da build 065 na
+   083): a soma das metas das categorias listadas, a soma do gasto delas e a
+   diferença entre as duas — pra que o total do card seja conferível a olho a
+   partir das linhas logo acima. */
+function TotalDoCartao({
+  linhas,
+  rotulo,
+  testid,
+}: {
+  linhas: LinhaCategoria[]
+  rotulo: string
+  testid: string
+}) {
+  const meta = linhas.reduce((s, l) => s + (l.cat.aceitavelMensal || 0), 0)
+  const gasto = linhas.reduce((s, l) => s + l.gasto, 0)
+  const dif = meta - gasto
+  return (
+    <div className="detalhe-cat-ideal fechamento-cartao" data-testid={testid}>
+      <div className="linha-detalhe-cat">
+        <span className="ideal-t4">Soma das metas destas categorias</span>
+        <span className="ideal-t3">{fmt(meta)}</span>
+      </div>
+      <div className="linha-detalhe-cat">
+        <span className="ideal-t4">Soma do gasto</span>
+        <span className="ideal-t3">{fmt(gasto)}</span>
+      </div>
+      <div className="linha-detalhe-cat total">
+        <span className="ideal-t3">{rotulo}</span>
+        <span className={`ideal-t2 ${dif < 0 ? 'valor-neg' : 'valor-pos'}`}>{fmt(Math.abs(dif))}</span>
+      </div>
     </div>
   )
 }

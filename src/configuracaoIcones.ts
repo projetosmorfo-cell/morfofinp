@@ -125,6 +125,21 @@ export function useConfiguracaoIcones(): Required<
     | 'boasVindasVistas'
     | 'tourConviteFeito'
     | 'padraoCatVersaoPorAmbiente'
+    /* 16/09/2026 (build 080): os parâmetros da notificação bancária moram no
+       mesmo singleton, mas quem lê é `notificacaoParametros.ts` (que compõe as
+       3 camadas) — este hook devolve só os 4 campos de ícone/visão. */
+    | 'notifParamsPorAmbiente'
+    | 'notifVersaoPorAmbiente'
+    /* 16/09/2026 (build 086): marca da criação da conta cofrinho padrão — ver
+       `garantirContaCofrinho()` em `src/contasCofrinho.ts`. É marca de
+       migração, não configuração de ícone/visão. */
+    | 'contaCofrinhoRevisado'
+    /* 16/09/2026 (build 087): marca da migração que garante o cofrinho PADRÃO
+       — ver `garantirContaCofrinho()` em `src/contasCofrinho.ts`. */
+    | 'contaCofrinhoPadraoRevisado'
+    /* 16/09/2026 (build 087): marca da migração que ENCERRA o conceito de
+       versão — ver `migrarFimDasVersoes()` logo abaixo. */
+    | 'versaoUnicaRevisado'
   >
 > {
   const config = useLiveQuery(() => db.configuracoes.get(1), [])
@@ -133,7 +148,6 @@ export function useConfiguracaoIcones(): Required<
     pctCategoria: config?.pctCategoria ?? legado?.pctSimples ?? CONFIG_ICONES_PADRAO.pctCategoria,
     pctCompleta: config?.pctCompleta ?? CONFIG_ICONES_PADRAO.pctCompleta,
     pctGrupo: config?.pctGrupo ?? CONFIG_ICONES_PADRAO.pctGrupo,
-    modoVisao: config?.modoVisao ?? MODO_VISAO_PADRAO,
   }
 }
 
@@ -141,7 +155,7 @@ export function useConfiguracaoIcones(): Required<
 //
 // CORREÇÃO (05/09/2026, Roteiro de Parametrização Morfo, Etapa 8): a versão
 // anterior desta função montava o objeto do `.put()` listando só os 4 campos
-// "de ícone" (pctCategoria/pctCompleta/pctGrupo/modoVisao) mais `...patch` —
+// "de ícone" (pctCategoria/pctCompleta/pctGrupo) mais `...patch` —
 // nunca espalhava `...atual` por completo. Como `db.configuracoes` é uma
 // tabela singleton com VÁRIOS campos aditivos de etapas diferentes
 // (`ordemAbas` da Etapa 4, `planoId` da Etapa 5, `hojeSimuladoISO` da Etapa
@@ -166,7 +180,6 @@ export async function salvarConfiguracaoIcones(patch: Partial<Omit<ConfiguracaoI
     pctCategoria: atual?.pctCategoria ?? legado?.pctSimples ?? CONFIG_ICONES_PADRAO.pctCategoria,
     pctCompleta: atual?.pctCompleta ?? CONFIG_ICONES_PADRAO.pctCompleta,
     pctGrupo: atual?.pctGrupo ?? CONFIG_ICONES_PADRAO.pctGrupo,
-    modoVisao: atual?.modoVisao ?? MODO_VISAO_PADRAO,
     ...patch,
   })
 }
@@ -193,51 +206,69 @@ export async function migrarPctGrupo() {
   })
 }
 
-// Modo de visão (04/09/2026) — hook fino separado do de ícones por
-// semântica (nada a ver com tamanho de ícone), mas mesmo singleton por
-// baixo: evita reinventar leitura/escrita do registro `configuracoes`.
-//
-// 13/09/2026: passaram a ser TRÊS. A 'ideal' é a versão nova e é o PADRÃO —
-// um banco que não tem o campo gravado abre nela. Light e Premium continuam
-// exatamente como estavam; nenhuma tela foi removida do código, a troca é só
-// em Configurações → Aparência e volta na hora.
-export type ModoVisao = 'light' | 'ideal' | 'premium'
+/* ================= FIM DO CONCEITO DE "VERSÃO" (build 087, 16/09/2026) =====
+ *
+ * Rafael, depois de testar a 086: *"não to achando que a light tenha que ficar
+ * sem o planejamento, pois os valores das metas não podem ficar fixo e sem
+ * permitir edição, então esse modelo entre as versões não está atendendo
+ * atualmente, vamos eliminar de vez a light tbm, ficaremos só com uma então
+ * nem precisa mais ter o menu na configuração pra mudar layout."*
+ *
+ * O RACIOCÍNIO, preservado porque é ele que impede a reintrodução: a Light
+ * escondia a aba Planejamento, mas é DENTRO dela que os valores de meta são
+ * editados. Uma versão que mostra o RESULTADO das metas (tela Hoje, barras,
+ * "estourou"/"margem") e esconde o único lugar onde esses valores se editam
+ * não é uma versão simplificada — é uma versão incoerente. Não existe corte de
+ * aba que resolva isso, porque o problema não é a densidade da tela, é a
+ * dependência: o número que todas as outras telas exibem nasce ali.
+ *
+ * DIFERENÇA DE ACESSO É ASSUNTO COMERCIAL, NÃO DE LAYOUT. Quando o app for
+ * comercializado, pacotes diferentes de acesso se montam no PERMISSIONAMENTO
+ * (`podeVerFuncN1` em `App.tsx`, os perfis do Kit), nunca voltando a ramificar
+ * o layout por um campo `modoVisao`. Quem for tentado a recriar esse campo:
+ * ele já existiu duas vezes (3 versões em 13/09, 2 versões em 16/09) e as
+ * duas morreram pelo mesmo motivo — versão que muda a COMPOSIÇÃO do app não é
+ * simplificação, é outro app.
+ *
+ * O que sobra: UM conjunto de abas para todo mundo — Hoje · Lançamentos ·
+ * Carteira · Planejamento.
+ */
 
-/** O que um banco sem o campo gravado usa. Mudou de 'premium' para 'ideal'. */
-export const MODO_VISAO_PADRAO: ModoVisao = 'ideal'
-
-export const ROTULO_MODO_VISAO: Record<ModoVisao, string> = {
-  light: 'Light',
-  ideal: 'Ideal',
-  premium: 'Premium',
-}
-
-export function useModoVisao(): ModoVisao {
-  return useModoVisaoComEstado().modo
-}
-
-/* `useLiveQuery` devolve `undefined` tanto para "ainda carregando" quanto para
-   "não existe registro" — e os dois casos precisam de tratamento diferente
-   aqui: enquanto carrega, o app assume o PADRÃO ('ideal'), e quem usa isso
-   para trocar de aba acabaria trocando com base num palpite, de forma
-   irreversível (foi exatamente o que fez o Premium abrir fora do Resumo).
-   O sentinela distingue os dois, mesmo mecanismo já usado em `LoginView`. */
-const CARREGANDO = Symbol('carregando')
-
-export function useModoVisaoComEstado(): { modo: ModoVisao; pronto: boolean } {
-  const config = useLiveQuery(() => db.configuracoes.get(1), [], CARREGANDO as never)
-  const pronto = (config as unknown) !== CARREGANDO
-  const modo = pronto ? ((config as { modoVisao?: ModoVisao } | undefined)?.modoVisao ?? MODO_VISAO_PADRAO) : MODO_VISAO_PADRAO
-  return { modo, pronto }
-}
-
-export async function salvarModoVisao(modo: ModoVisao) {
-  await salvarConfiguracaoIcones({ modoVisao: modo })
+/* A MIGRAÇÃO (build 087) — marca própria, na disciplina da build 062.
+ *
+ * Não basta parar de LER o campo: enquanto ele existir gravado, qualquer
+ * código futuro que o encontre no banco pode ser tentado a ramificar por ele
+ * de novo. Esta migração APAGA `modoVisao` (e a marca da migração anterior,
+ * `modoVisaoCompletaRevisado`, que também não tem mais assunto) de uma vez, em
+ * qualquer instalação — em 'light', 'premium', 'ideal' ou 'completa', o
+ * resultado é o mesmo app.
+ *
+ * `Dexie.update()` com `undefined` APAGA a propriedade (regra documentada no
+ * CLAUDE.md) — é exatamente o que se quer aqui, e é por isso que a limpeza não
+ * passa por `salvarConfiguracaoIcones()`, que usa `put` espalhando `...atual`
+ * e portanto preservaria o campo.
+ *
+ * NENHUMA TELA PRECISA ESPERAR POR ELA. Diferente da migração da build 086 —
+ * que tinha de correr contra o primeiro render, porque um modo morto ainda
+ * escolhia abas —, aqui não existe leitura do campo em lugar nenhum: o
+ * conjunto de abas é constante desde o primeiro quadro. A janela entre o mount
+ * e o fim da migração deixou de existir por construção, não por cuidado.
+ */
+export async function migrarFimDasVersoes(): Promise<boolean> {
+  const atual = await db.configuracoes.get(1)
+  if (!atual || atual.versaoUnicaRevisado) return false
+  const tinha = (atual as { modoVisao?: string }).modoVisao !== undefined
+  await db.configuracoes.update(1, {
+    modoVisao: undefined,
+    modoVisaoCompletaRevisado: undefined,
+  } as never)
+  await salvarConfiguracaoIcones({ versaoUnicaRevisado: true })
+  return tinha
 }
 
 // Ordem das abas do rodapé (04/09/2026, Roteiro de Parametrização Morfo,
 // Etapa 4 — Kit de Estrutura Mínima, "Layout"). Mesmo padrão fino de
-// `useModoVisao`/`salvarModoVisao` acima: singleton `configuracoes`, sem
+// `salvarConfiguracaoIcones` acima: singleton `configuracoes`, sem
 // bump de schema (campo aditivo opcional). Retorna `undefined` quando não há
 // personalização salva — quem usa decide o fallback (ordem padrão do
 // código), pra não duplicar a lista de chaves aqui.
@@ -252,7 +283,7 @@ export async function salvarOrdemAbas(ordem: string[]) {
 
 // "Marca do site institucional" (08/09/2026, G59 — item aprovado pro N0,
 // editável em `DevApp` → Parâmetros → Marca). Hook fino de leitura, mesmo
-// padrão de `useModoVisao`/`useOrdemAbas` acima — os 3 campos são
+// padrão de `useOrdemAbas` acima — os 3 campos são
 // opcionais de propósito: quem consome (`LoginView.tsx`/`suporte.ts`) já
 // tem o próprio valor padrão/fallback, então este hook nunca inventa um
 // aqui, só repassa o que está gravado (ou `undefined`).

@@ -197,14 +197,22 @@ async function gerarSeriesFixasInterno(limiteISO: string, _hojeISO: string): Pro
   /* Guarda de duplicata: uma ocorrência é identificada por série + data de
      competência. Sem isso, rodar a rotina duas vezes (virada do mês + ícone
      manual, por exemplo) criaria a mesma conta duas vezes. */
-  const jaExiste = new Set(fixos.map((l) => `${l.serieId}|${l.dataCompetencia}`))
+  /* RITMO × FATO (build 081). Vincular uma notificação move o lançamento para a
+     data em que o banco de fato cobrou — e isso pode atravessar o mês (planejado
+     30/09, debitado 02/10). O RITMO da série, porém, continua sendo o do plano:
+     se a ocorrência movida virasse a âncora, a próxima sairia de outubro e o mês
+     de outubro ficaria SEM a conta. Por isso o ritmo lê a competência ANTERIOR
+     guardada pelo vínculo, quando ela existe. */
+  const dataDeRitmo = (l: Lancamento) => l.vinculoOrigem?.dataCompetenciaAnterior ?? l.dataCompetencia
+
+  const jaExiste = new Set(fixos.map((l) => `${l.serieId}|${dataDeRitmo(l)}`))
 
   for (const [serieId, ocorrencias] of porSerie) {
-    ocorrencias.sort((a, b) => a.dataCompetencia.localeCompare(b.dataCompetencia))
+    ocorrencias.sort((a, b) => dataDeRitmo(a).localeCompare(dataDeRitmo(b)))
     const ultima = ocorrencias[ocorrencias.length - 1]
     if (!ultima.periodicidade) continue
 
-    let dataAtual = ultima.dataCompetencia
+    let dataAtual = dataDeRitmo(ultima)
     let protecao = 0
     while (protecao < 24) {
       const proxima = proximaDataRecorrencia(dataAtual, ultima.periodicidade, ultima.regraRecorrencia)

@@ -14,7 +14,7 @@ import { CampoBusca, FolhaFiltros, FILTROS_VAZIOS, aplicarFiltros, contarFiltros
 import { obterOuCriarCategoriaPagamentoFatura } from '../categoriasSistema'
 import { janelaFatura } from '../faturaCiclo'
 import { formatarCabecalhoData } from '../formatoData'
-import SaldoDoCofrinho from '../components/SaldoDoCofrinho'
+import SaldoDoCofrinho, { LinhaInformeSaldo } from '../components/SaldoDoCofrinho'
 import { fmtBRL, formatarMoeda, aplicarMascaraValor, paraNumero } from '../formatoMoeda'
 import { useHojeSimuladoISO, hojeEfetivoISO } from '../hojeSimulado'
 import TituloTelaN1 from '../kit/CabecalhoN1'
@@ -83,7 +83,15 @@ export default function Carteira({ mes, aoMudarMes, aoAbrirLancamento }: TelaPro
 
   if (!todasContas || !categorias || !grupos || !todosLancamentos) return null
 
-  const contas = todasContas.filter((c) => c.ativa)
+  /* O COFRINHO PADRÃO (build 087) é o registro do card virtual desenhado
+     abaixo — ele NÃO entra na lista de cards de conta, senão o mesmo cofrinho
+     apareceria duas vezes na tela (foi o que o Rafael viu: "aparece o meu e o
+     outro padrão"). O que ele dá ao card virtual é nome e ícone; o saldo
+     continua vindo da soma por natureza, que é o número certo para o dinheiro
+     que nunca passou por uma conta de cofre. */
+  const cofrinhoPadrao = todasContas.find((c) => c.cofrinhoPadrao)
+  const contas = todasContas.filter((c) => c.ativa && !c.cofrinhoPadrao)
+  const nomeCofrinho = cofrinhoPadrao?.nome?.trim() || 'Cofrinho'
   const categoriaPorId = new Map(categorias.map((c) => [c.id!, c]))
   const contaPorId = new Map(todasContas.map((c) => [c.id!, c]))
   const naturezaDoLancamento = (l: Lancamento) => categoriaPorId.get(l.categoriaId)?.natureza
@@ -123,7 +131,7 @@ export default function Carteira({ mes, aoMudarMes, aoAbrirLancamento }: TelaPro
 
     return (
       <DetalheConta
-        titulo={conta ? conta.nome : 'Cofrinho'}
+        titulo={conta ? conta.nome : nomeCofrinho}
         conta={conta}
         saldoCofrinho={conta ? undefined : saldoCofrinho}
         mes={mes}
@@ -179,7 +187,7 @@ export default function Carteira({ mes, aoMudarMes, aoAbrirLancamento }: TelaPro
       const v = valorDoCard(c)
       return { nome: c.nome, tipo: c.tipo, rotulo: v.rotulo, valor: fmtBRL(v.valor), lancamentos: todosLancamentos.filter((l) => l.contaId === c.id).length }
     }),
-    { nome: 'Cofrinho', tipo: 'cofrinho (virtual)', rotulo: 'Saldo acumulado', valor: fmtBRL(saldoCofrinho), lancamentos: '' },
+    { nome: nomeCofrinho, tipo: 'cofrinho (padrão)', rotulo: 'Saldo acumulado', valor: fmtBRL(saldoCofrinho), lancamentos: '' },
   ]
 
   return (
@@ -267,6 +275,14 @@ export default function Carteira({ mes, aoMudarMes, aoAbrirLancamento }: TelaPro
               </strong>
             </div>
             <span className="texto-fraco">{rotuloValor}</span>
+            {/* TODA conta de tipo cofrinho ganha o "informar o saldo real"
+                (build 086, pedido do Rafael) — antes ele existia só no card
+                VIRTUAL. O número grande do card continua sendo o acumulado
+                pelos lançamentos; o informe aparece como a linha de contexto
+                logo abaixo, exatamente como no card virtual. */}
+            {conta.tipo === 'cofre' && (
+              <LinhaInformeSaldo contaId={conta.id!} calculado={valorNumero} />
+            )}
             {recentesDaConta.length > 0 && (
               <div className="card-conta-preview">
                 {/* Pedido do Rafael (04/09/2026, mesmo dia): a prévia não
@@ -288,8 +304,22 @@ export default function Carteira({ mes, aoMudarMes, aoAbrirLancamento }: TelaPro
         )
       })}
 
-      <button type="button" className="card-conta" onClick={() => setSelecionado('cofrinho')}>
-        <SaldoDoCofrinho calculado={saldoCofrinho} />
+      <button type="button" className="card-conta" data-testid="card-cofrinho-padrao" onClick={() => setSelecionado('cofrinho')}>
+        <SaldoDoCofrinho
+          calculado={saldoCofrinho}
+          nome={nomeCofrinho}
+          selo={
+            cofrinhoPadrao ? (
+              <SeloInstituicao
+                instituicao={cofrinhoPadrao.iconeInstituicao}
+                cor={cofrinhoPadrao.iconeCor}
+                imagemUri={cofrinhoPadrao.iconeImagemUri}
+                nome={cofrinhoPadrao.nome}
+                tamanho={24}
+              />
+            ) : undefined
+          }
+        />
         {(() => {
           const recentesCofrinho = todosLancamentos
             .filter((l) => naturezaDoLancamento(l) === 'Aporte' || naturezaDoLancamento(l) === 'Gasto de cofrinho')
@@ -699,6 +729,19 @@ function DetalheConta({
       {saldoCofrinho != null && (
         <div className="cartao" style={{ marginBottom: 12 }}>
           <SaldoDoCofrinho calculado={saldoCofrinho} />
+        </div>
+      )}
+
+      {/* Mesmo botão no DRILL-IN de uma conta de cofrinho real (build 086) —
+          o card virtual já tinha isso desde a 059 pelo mesmo motivo: quem
+          tocou no card veio ver o cofrinho. O calculado aqui é o acumulado da
+          conta, a MESMA conta do card (`valorDoCard`). */}
+      {conta?.tipo === 'cofre' && (
+        <div className="cartao" style={{ marginBottom: 12 }}>
+          <LinhaInformeSaldo
+            contaId={conta.id!}
+            calculado={lancamentosDoLugar.reduce((s, l) => s + l.valor, 0)}
+          />
         </div>
       )}
 

@@ -58,7 +58,7 @@ import { GroupLabelCompact, MenuGroup } from './PadraoUI'
 import type { ItemMenuCompacto } from './PadraoUI'
 import {
   User, LifeBuoy, Bell, Building2, CreditCard, List, Tag, Wallet,
-  Wrench,
+  Wrench, SlidersHorizontal,
 } from 'lucide-react'
 import { useTemaEfetivo } from '../configuracaoIcones'
 import { emTituloCaso } from '../tituloCaso'
@@ -66,7 +66,7 @@ import { emTituloCaso } from '../tituloCaso'
 /* As chaves são exatamente as de `ItemMenuEngrenagem` em `App.tsx` — a tela
    não inventa destino nenhum, só reorganiza os que já existiam. */
 export type ChaveConfigN1 =
-  | 'meusDados' | 'categorias' | 'contas' | 'notificacoes'
+  | 'meusDados' | 'categorias' | 'contas' | 'notificacoes' | 'notificacoesRegras'
   | 'meuAmbiente' | 'assinatura' | 'ajuda' | 'layout'
   | 'manutencao'
 
@@ -84,13 +84,17 @@ const SESSAO_1: DefItem[] = [
   { key: 'categorias', icon: Tag, titulo: 'Categorias, Grupos e Metas', resumo: 'Como seus lançamentos são classificados' },
   { key: 'contas', icon: Wallet, titulo: 'Contas e carteiras', resumo: 'Onde o dinheiro entra e sai — bancos, cartões e dinheiro' },
   { key: 'notificacoes', icon: Bell, titulo: 'Notificações bancárias', resumo: 'Avisos do banco lidos e transformados em lançamento' },
+  /* Build 080: as REGRAS da leitura ficam ao lado da tela que elas governam,
+     na sessão "Do dia a dia" — é parâmetro que a pessoa mexe de vez em quando,
+     não ajuste de sistema. O que é interno mora só no N0. */
+  { key: 'notificacoesRegras', icon: SlidersHorizontal, titulo: 'Regras de Notificação Bancária', resumo: 'Repetição, tolerância de valor, filtro de propaganda e o de/para aprendido' },
   { key: 'ajuda', icon: LifeBuoy, titulo: 'Ajuda', resumo: 'Suporte por chat e tour guiado do sistema' },
 ]
 
 const SESSAO_2: DefItem[] = [
   { key: 'meuAmbiente', icon: Building2, titulo: 'Meu Ambiente', resumo: 'Logotipos, recursos e preferências do ambiente' },
   { key: 'assinatura', icon: CreditCard, titulo: 'Minha Assinatura', resumo: 'Plano, pagamentos e histórico de cobrança' },
-  { key: 'layout', icon: List, titulo: 'Layout e Menus', resumo: 'Visão Light × Premium, ordem do rodapé e destes itens' },
+  { key: 'layout', icon: List, titulo: 'Layout e Menus', resumo: 'Ordem das abas do rodapé e destes itens' },
 ]
 
 /* 12/09/2026 (pedido do Rafael): "Limpar Dados" e "Sair" saíram da tela

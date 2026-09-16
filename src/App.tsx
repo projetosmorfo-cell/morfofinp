@@ -1,6 +1,4 @@
 import { useEffect, useRef, useState } from 'react'
-import ResumoDoMes from './screens/ResumoDoMes'
-import Situacao from './screens/Situacao'
 import Hoje from './screens/Hoje'
 import Lancamentos from './screens/Lancamentos'
 import Carteira from './screens/Carteira'
@@ -10,22 +8,24 @@ import Contas from './screens/Contas'
 import Calibragem from './screens/Calibragem'
 import Manutencao from './screens/Manutencao'
 import NotificacoesBancarias from './screens/NotificacoesBancarias'
+import ParametrosNotificacao from './screens/ParametrosNotificacao'
 import MinhaAssinatura from './kit/MinhaAssinatura'
 import GuidedTour, { passosTourN1, ONDE_REABRIR_TOUR, type PassoTour } from './kit/GuidedTour'
 import BoasVindas, { ConviteTour, useEstadoOnboarding, usePlanoPronto } from './components/BoasVindas'
 import SimularData, { BannerDataSimulada } from './kit/SimularData'
 import RodapeAbas from './kit/RodapeAbas'
-import { ArrowPathIcon, ArrowRightOnRectangleIcon, CalendarDaysIcon, ChartPieIcon, ChatBubbleLeftRightIcon, Cog6ToothIcon, EllipsisVerticalIcon, ListBulletIcon, ScaleIcon, WalletIcon } from '@heroicons/react/24/outline'
+import { ArrowPathIcon, ArrowRightOnRectangleIcon, CalendarDaysIcon, ChatBubbleLeftRightIcon, Cog6ToothIcon, EllipsisVerticalIcon, ListBulletIcon, ScaleIcon, WalletIcon } from '@heroicons/react/24/outline'
 import DetalheLancamento from './components/DetalheLancamento'
 import { mesInicial, formatarMes } from './mes'
 import { mesesComPendencia } from './pendencias'
 import { avancarSeriesFixasPendentes } from './recorrencia'
 import { migrarComportamentoDosGrupos, migrarGruposAntigosParaInvestimento, migrarTipoDosGrupos } from './gruposUtil'
 import { aplicarPadraoSeNaoEditado } from './kit/padraoCategorias'
+import { garantirContaCofrinho } from './contasCofrinho'
 import { migrarReceitaFixa } from './baseMeta'
 import { usarBotaoVoltar } from './voltarAndroid'
 import { PopupPermissoesNotificacao, usarAvisoPermissoes } from './components/PermissoesNotificacao'
-import { migrarPctGrupo, salvarConfiguracaoIcones, useModoVisaoComEstado, useOrdemAbas, useOrdemMenuEngrenagem, useTemaEfetivo } from './configuracaoIcones'
+import { migrarFimDasVersoes, migrarPctGrupo, salvarConfiguracaoIcones, useOrdemAbas, useOrdemMenuEngrenagem, useTemaEfetivo } from './configuracaoIcones'
 import { TopIconMenu, UserHoverIcon, ThemeToggleIcon } from './kit/TopoIcones'
 import { Settings, MessageCircle, RefreshCw, LogOut } from 'lucide-react'
 import SuporteChat from './kit/SuporteChat'
@@ -42,10 +42,12 @@ import { sair } from './kit/auth'
 import { MeusDadosN1, MeuAmbienteN1, AparenciaN1, AjudaN1 } from './kit/ConfigN1'
 import ConfiguracoesN1, { type ChaveConfigN1 } from './kit/ConfiguracoesN1'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { db, type NotificacaoPendente } from './db'
-import { sincronizarPendentesNativas, ouvirNotificacoesAoVivo, marcarConfirmada } from './notificacaoBancaria'
-import { contarDoAmbiente, lerDoAmbiente } from './ambiente'
-import { MODO_VISAO_PADRAO } from './configuracaoIcones'
+import { db, type Conta, type NotificacaoPendente } from './db'
+import { sincronizarPendentesNativas, ouvirNotificacoesAoVivo, marcarConfirmada, separarPendentes } from './notificacaoBancaria'
+import { aplicarParametrosN0, paramsNotificacaoAtuais } from './notificacaoParametros'
+import { acharDePara, ensinarDePara } from './vinculoNotificacao'
+import { analisarNotificacao, casarContaDaNotificacao } from './parseNotificacao'
+import { lerDoAmbiente } from './ambiente'
 
 // Categorias saiu daqui em 30/08/2026 (rodada seguinte) — deixou de ser aba
 // do rodapé e virou item do menu de configurações (engrenagem, ver
@@ -55,32 +57,39 @@ import { MODO_VISAO_PADRAO } from './configuracaoIcones'
 // grudada no navegador sem apagar os lançamentos do Rafael).
 // Ícones (Heroicons outline, mesma biblioteca do rodapé do N0 — Decisão 50):
 // o rodapé do N1 passou a ser a MESMA peça do N0 (`RodapeAbas`), ícone + texto.
+/* AS ABAS DO APP (build 087 — as VERSÕES acabaram; estas quatro são as de
+ * todo mundo).
+ *
+ * A chave `situacao` sobreviveu ao fim da tela `Situacao.tsx` DE PROPÓSITO:
+ * ela é a chave persistida em `ordemAbas` (Layout e Menus), em `data-tour`
+ * (`nav-tab-situacao`) e em `LayoutConfig.posicaoN1` publicada pelo N0.
+ * Renomeá-la para 'hoje' quebraria a ordem que o Rafael já salvou e a posição
+ * de menu já publicada pela plataforma, sem ganho nenhum — o RÓTULO é o que a
+ * pessoa lê, e ele já é "Hoje".
+ *
+ * A chave `resumo` FOI REMOVIDA: a tela Resumo do Mês saiu junto com a
+ * Premium. Uma `ordemAbas` gravada que ainda a cite é ignorada sozinha — a
+ * ordem só reordena abas que existem. */
 const TELAS = {
-  resumo: { rotulo: 'Resumo', Componente: ResumoDoMes, Icone: ChartPieIcon },
-  situacao: { rotulo: 'Situação', Componente: Situacao, Icone: ScaleIcon },
+  situacao: { rotulo: 'Hoje', Componente: Hoje, Icone: ScaleIcon },
   lancamentos: { rotulo: 'Lançamentos', Componente: Lancamentos, Icone: ListBulletIcon },
   carteira: { rotulo: 'Carteira', Componente: Carteira, Icone: WalletIcon },
   planejamento: { rotulo: 'Planejamento', Componente: Planejamento, Icone: CalendarDaysIcon },
 } as const
 
-// Visão "Light" (04/09/2026, pedido do Rafael) — rodapé reduzido, escondendo
-// só "Situação" (a tela de margem comprometida/sobra real — a mais técnica
-// das 5). Planejamento (Planejado × Realizado × Previsto) FICA em Light —
-// correção no mesmo dia: Rafael apontou que é "pra isso que existe esse
-// app", então não faz sentido escondê-lo atrás do modo avançado. Nada foi
-// removido do app: Situação continua existindo no código e reaparece assim
-// que a visão volta pra "Premium" — é só o rodapé que filtra, mesmo
-// `tela`/mês selecionado por baixo.
-const TELAS_LIGHT: Tela[] = ['resumo', 'lancamentos', 'carteira', 'planejamento']
-
-/* Versão IDEAL (13/09/2026) — a versão nova, entre a Light e a Premium.
-   "Hoje" vem primeiro e é a que abre: ela responde as duas perguntas que o
-   app existe pra responder (quanto dá pra gastar sem se preocupar, e quanto
-   dá pra tentar economizar). O Resumo SAI — todo número dele ou já está na
-   Hoje ou está no Planejamento, e manter as duas leituras do mesmo mês em
-   telas diferentes era o que fazia o app parecer maior do que é.
-   Nada foi removido do código: em Premium o Resumo continua inteiro. */
-const TELAS_IDEAL: Tela[] = ['situacao', 'lancamentos', 'carteira', 'planejamento']
+/* A LIGHT FOI ELIMINADA na build 087, e com ela o conceito de versão.
+ * Rafael: *"não to achando que a light tenha que ficar sem o planejamento,
+ * pois os valores das metas não podem ficar fixo e sem permitir edição… vamos
+ * eliminar de vez a light tbm, ficaremos só com uma"*.
+ *
+ * O motivo, que é o que impede a volta: a Light cortava justamente a aba onde
+ * as metas se EDITAM, enquanto todas as outras telas mostram o RESULTADO
+ * dessas metas. Não havia corte de aba que salvasse esse desenho.
+ *
+ * Diferença de acesso, quando o app for comercializado, se monta em
+ * PERMISSIONAMENTO (`podeVerFuncN1` logo abaixo, os perfis do Kit) — nunca
+ * ramificando o layout de novo. Ver `migrarFimDasVersoes()` em
+ * `src/configuracaoIcones.ts`. */
 
 // 'assinatura' (05/09/2026, Etapa 5) ficou de propósito FORA de
 // `ROTULO_CONFIG` até a Etapa 8 existir — só era alcançável por dentro de
@@ -106,15 +115,18 @@ const TELAS_IDEAL: Tela[] = ['situacao', 'lancamentos', 'carteira', 'planejament
 // `src/kit/ConfiguracoesN1.tsx`. 'layout' e 'limpar' são as duas metades
 // de `Manutencao` reaproveitadas como destinos separados (prop `secao`),
 // pra cada parâmetro cair na sessão do Kit que lhe cabe.
-type Config = 'calibragem' | 'configuracoes' | 'categorias' | 'contas' | 'notificacoes' | 'notificacoesPendentes' | 'manutencao' | 'layout' | 'limpar' | 'assinatura' | 'ferramentasTeste' | 'suporte' | 'meusDados' | 'meuAmbiente' | 'aparencia' | 'ajuda'
+type Config = 'calibragem' | 'configuracoes' | 'categorias' | 'contas' | 'notificacoes' | 'notificacoesPendentes' | 'notificacoesRegras' | 'manutencao' | 'layout' | 'limpar' | 'assinatura' | 'ferramentasTeste' | 'suporte' | 'meusDados' | 'meuAmbiente' | 'aparencia' | 'ajuda'
 
 // 'notificacoes' (09/09/2026): tela "Notificações bancárias" — ver
 // `src/screens/NotificacoesBancarias.tsx` e `src/notificacaoBancaria.ts`.
-const ROTULO_CONFIG: Record<'meusDados' | 'categorias' | 'contas' | 'notificacoes' | 'meuAmbiente' | 'assinatura' | 'aparencia' | 'ajuda' | 'manutencao' | 'suporte', string> = {
+const ROTULO_CONFIG: Record<'meusDados' | 'categorias' | 'contas' | 'notificacoes' | 'notificacoesRegras' | 'meuAmbiente' | 'assinatura' | 'aparencia' | 'ajuda' | 'manutencao' | 'suporte', string> = {
   meusDados: 'Meus Dados',
   categorias: 'Categorias, Grupos e Metas',
   contas: 'Contas e carteiras',
   notificacoes: 'Notificações bancárias',
+  /* Build 080: as REGRAS da leitura de notificação, de nível usuário —
+     tela própria, na mesma sessão "Do dia a dia" das notificações. */
+  notificacoesRegras: 'Regras de Notificação Bancária',
   meuAmbiente: 'Meu Ambiente',
   assinatura: 'Minha Assinatura',
   aparencia: 'Aparência',
@@ -148,13 +160,14 @@ const ROTULO_CONFIG: Record<'meusDados' | 'categorias' | 'contas' | 'notificacoe
 // duas ações continuam existindo DENTRO de "Manutenção e Saída", e "Sair"
 // segue fixo no "⋮" (e agora protegido contra "Ocultar", ver
 // ITEM_PROTEGIDO_N1 em kitPlatform.ts).
-const ITENS_MENU_ENGRENAGEM_PADRAO = ['meusDados', 'categorias', 'contas', 'notificacoes', 'ajuda', 'meuAmbiente', 'assinatura', 'layout', 'manutencao'] as const
+const ITENS_MENU_ENGRENAGEM_PADRAO = ['meusDados', 'categorias', 'contas', 'notificacoes', 'notificacoesRegras', 'ajuda', 'meuAmbiente', 'assinatura', 'layout', 'manutencao'] as const
 type ItemMenuEngrenagem = (typeof ITENS_MENU_ENGRENAGEM_PADRAO)[number]
 export const ROTULO_MENU_ENGRENAGEM: Record<ItemMenuEngrenagem, string> = {
   meusDados: ROTULO_CONFIG.meusDados,
   categorias: ROTULO_CONFIG.categorias,
   contas: ROTULO_CONFIG.contas,
   notificacoes: ROTULO_CONFIG.notificacoes,
+  notificacoesRegras: ROTULO_CONFIG.notificacoesRegras,
   ajuda: ROTULO_CONFIG.ajuda,
   meuAmbiente: ROTULO_CONFIG.meuAmbiente,
   assinatura: ROTULO_CONFIG.assinatura,
@@ -217,6 +230,51 @@ function Rodape({
       }}
     />
   )
+}
+
+/* Notificação bancária → campos já preenchidos do formulário (16/09/2026).
+ *
+ * O que muda em relação à build 078: a descrição deixa de ser o TÍTULO da
+ * notificação ("Compra aprovada", "BRADESCO" — que é o assunto, não o que
+ * aconteceu) e passa a ser o NOME DA CONTRAPARTE lido do texto ("Padaria
+ * Central", "Flavia de Oliveira Barros Passaro"); a conta vem casada com a
+ * carteira quando dá pra ter certeza, e EM BRANCO quando não dá; e o
+ * "já foi pago" nasce false quando o banco disse que a transação só está
+ * agendada.
+ *
+ * `descricaoOriginal` continua sendo o TEXTO CRU da notificação, nunca o nome
+ * limpo — é o ponto inteiro daquele campo (Decisão 24): guardar o que o banco
+ * de fato escreveu, pra conciliação futura.
+ */
+function sugestaoDaNotificacao(
+  n: NotificacaoPendente,
+  contas: Conta[],
+  aprendizados: import('./db').AprendizadoNotificacao[] = [],
+) {
+  const params = paramsNotificacaoAtuais()
+  const a = analisarNotificacao(n, params)
+  /* Build 080 — o DE/PARA aprendido entra ANTES da leitura automática: se o
+     Rafael já disse uma vez que "PJBANK" é "PJ Bank", na categoria X, é isso
+     que o formulário abre preenchido. É o "corrigi uma vez e ficou" do pedido.
+     A leitura do texto continua valendo pra tudo que ele ainda não ensinou. */
+  const dePara = params.aplicarDeParaAutomaticamente ? acharDePara(a.contraparte, aprendizados) : undefined
+  // "está agendada pra amanhã" → a data sugerida anda 1 dia. Só quando o
+  // texto diz "amanhã" com todas as letras (ver `deslocamentoDias`).
+  const contaId = dePara?.contaId ?? casarContaDaNotificacao(a, n, contas)
+  const base = new Date(n.recebidoEm.slice(0, 10) + 'T12:00:00')
+  base.setDate(base.getDate() + a.deslocamentoDias)
+  const data = `${base.getFullYear()}-${String(base.getMonth() + 1).padStart(2, '0')}-${String(base.getDate()).padStart(2, '0')}`
+  return {
+    data,
+    descricao: dePara?.descricao ?? a.descricaoSugerida ?? n.titulo ?? n.app,
+    categoriaId: dePara?.categoriaId,
+    valor: a.valor,
+    tipo: a.tipo,
+    pago: a.pagoSugerido,
+    contaId,
+    contaEmBranco: contaId == null,
+    descricaoOriginal: [n.titulo, n.texto].filter(Boolean).join(' — '),
+  }
 }
 
 interface AlvoLancamento {
@@ -361,14 +419,14 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: ModoConsultaN
   // Navegação por estado do React, sem router e sem depender da URL —
   // funciona igual em qualquer lugar, inclusive abrindo o arquivo direto
   // (file://), onde bibliotecas baseadas em window.location/URL quebram.
-  /* Nasce em 'resumo' SEMPRE. Na versão Ideal o Resumo não está no rodapé,
-     então o efeito que corrige a aba ativa (mais abaixo) reposiciona sozinho
-     para a 1ª aba visível — que é a tela Hoje. Cravar 'situacao' aqui pelo
-     padrão fazia o Premium também abrir fora do Resumo. */
-  const [tela, setTela] = useState<Tela>('resumo')
+  /* Nasce em 'situacao' — a tela Hoje, 1ª aba para todo mundo. Enquanto
+     existiam versões, cravar isto aqui abria a versão errada fora da tela
+     dela; sem versões o conflito não existe, e a derivação de `telaAtiva`
+     continua cobrindo uma aba ocultada no layout. */
+  const [tela, setTela] = useState<Tela>('situacao')
 
   // Mês selecionado — vive aqui (não em cada tela) pra ficar fixo ao trocar
-  // de aba: as abas "de mês" (Resumo, Situação, Lançamentos) obedecem esse
+  // de aba: as abas "de mês" (Hoje, Lançamentos, Carteira, Planejamento) obedecem esse
   // mesmo mês.
   const [mes, setMes] = useState(mesInicial)
 
@@ -470,7 +528,6 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: ModoConsultaN
      o app abre, até a pessoa escolher "Não exibir novamente". `abertoAuto`
      distingue os dois caminhos: só no automático o botão de desligar aparece
      (abrir à mão pela Ajuda e oferecer "não exibir" seria contraditório). */
-  const [tourAbertoAuto, setTourAbertoAuto] = useState(false)
   const [avisoTour, setAvisoTour] = useState('')
   const onIrParaPassoTour = (passo: PassoTour) => {
     /* Passo dentro de Configuração (`tela: 'config:...'`) abre a tela de
@@ -498,20 +555,20 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: ModoConsultaN
   const usuarioTenantLogado = tenantN1?.users.find((u) => u.id === configN1?.loggedUserIdN1)
   const podeVerFuncN1 = (_k: string) => true
 
-  // Visão Light × Premium (04/09/2026) — configuração persistida em
-  // `db.configuracoes` (ver `useModoVisao`), trocada pela tela Manutenção.
-  const { modo: modoVisao, pronto: modoPronto } = useModoVisaoComEstado()
-  const telasBase = (
-    modoVisao === 'light' ? TELAS_LIGHT : modoVisao === 'ideal' ? TELAS_IDEAL : (Object.keys(TELAS) as Tela[])
-  ).filter((t) => podeVerFuncN1(t))
+  /* Build 087: as quatro abas são as mesmas para todo mundo — não existe mais
+     um modo gravado escolhendo o conjunto, e portanto não existe mais a janela
+     entre o mount e o fim da migração em que uma tela poderia receber um modo
+     morto (o cuidado que a build 086 precisou tomar). O único filtro que
+     sobra é o permissionamento, que hoje libera tudo. */
+  const telasBase = (Object.keys(TELAS) as Tela[]).filter((t) => podeVerFuncN1(t))
 
   // Ordem do rodapé personalizável (04/09/2026, Roteiro de Parametrização
   // Morfo, Etapa 4 — Kit de Estrutura Mínima, "Layout": adaptação da seção
   // "Ordem dos menus" de `LayoutTenantScreen` do Kit, ver Manutencao.tsx).
-  // Aplica só REORDENAÇÃO sobre as abas já visíveis por `modoVisao`/perfil
-  // acima — nunca esconde/mostra aba além do que os dois já decidiram. Uma
-  // aba salva na ordem que não está mais visível (ex.: salvou a ordem em
-  // Premium, depois trocou pra Light, ou o perfil perdeu acesso) é ignorada;
+  // Aplica só REORDENAÇÃO sobre as abas já visíveis acima — nunca esconde nem
+  // mostra aba. Uma aba salva na ordem que não está mais visível (ordem antiga
+  // citando uma aba que deixou de existir, ou um menu posto em "Ocultar" pelo
+  // Layout do Sistema) é ignorada;
   // uma aba nova nunca prevista na ordem salva vai pro final, na ordem
   // padrão.
   /* Ordem das abas: a do PRÓPRIO ambiente manda; sem ela, vale o padrão que
@@ -556,15 +613,12 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: ModoConsultaN
   const menuPosN1 = normalizarMenuPosModo(menuPosProprio?.modo ?? layoutCfg?.menuPosN1?.modo)
   // Telas que ainda EXISTEM pra navegação (barra ou "⋮"); só 'oculto' some.
   const telasVisiveis = telasOrdenadas.filter((t) => posDeMenu(t) !== 'oculto')
-  /* O rename "Situação → Hoje" vale onde a tela Hoje existe, que é a versão
-     Ideal. Em Light e Premium a aba continua "Situação" — é outra tela por
-     baixo (margem comprometida, sobra real), e chamar as duas de "Hoje"
-     confundiria justamente quem trocasse de versão. */
-  const rotuloDaTela = (t: Tela) =>
-    t === 'situacao' && modoVisao === 'ideal' ? 'Hoje' : TELAS[t].rotulo
+  /* Desde a build 086 a aba `situacao` É a tela Hoje nas duas versões, então
+     o rótulo vem direto de `TELAS` e não depende mais do modo. */
+  const rotuloDaTela = (t: Tela) => TELAS[t].rotulo
 
   /* ver a nota logo abaixo: a aba MOSTRADA é derivada, não corrigida por efeito */
-  const telaAtiva: Tela = telasVisiveis.includes(tela) ? tela : (telasVisiveis[0] ?? 'resumo')
+  const telaAtiva: Tela = telasVisiveis.includes(tela) ? tela : (telasVisiveis[0] ?? 'situacao')
 
   /* Item 3 (16/09/2026): toda troca de TELA abre no topo.
      BUG REAL que isso corrige: `<main>` é o ÚNICO contêiner com rolagem do app
@@ -607,22 +661,20 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: ModoConsultaN
     : [...ITENS_MENU_ENGRENAGEM_PADRAO]
   ).filter((item) => podeVerFuncN1(`config.${item}`))
 
-  // Se a visão virar Light enquanto a pessoa está numa aba que só existe na
-  // Premium (Situação/Planejamento), volta pro Resumo sozinho — nunca deixa
-  // a tela aberta sem nenhuma aba correspondente marcada como ativa no
-  // rodapé reduzido.
-  // Vale também pra "Ocultar" do parâmetro de posição dos menus: se a tela
-  // aberta foi ocultada, cai na 1ª que sobrou (e não num 'resumo' fixo, que
-  // também pode estar oculto).
-  /* A aba mostrada é DERIVADA, nunca corrigida por efeito.
-     Antes isso era um `useEffect` + `setTela`, e ele trocava a aba com base
-     na lista de abas do primeiro render — que é um palpite enquanto a
-     configuração não chegou do banco. O palpite (o modo padrão, 'ideal') não
-     tem Resumo, então o Premium abria fora do Resumo e não voltava mais:
-     `setTela` é irreversível, a escolha original se perde.
+  /* Se uma aba sair da navegação ("Ocultar" no parâmetro de posição dos
+     menus) enquanto a pessoa está nela, a tela cai sozinha na 1ª que sobrou —
+     nunca fica aberta sem nenhuma aba correspondente marcada no rodapé. (Até a
+     build 086 o outro gatilho era trocar para a Light, que tirava o
+     Planejamento; a Light não existe mais.)
+
+     A aba mostrada é DERIVADA, nunca corrigida por efeito. Antes isso era um
+     `useEffect` + `setTela`, e ele trocava a aba com base na lista do
+     primeiro render — um palpite enquanto a configuração não chegou do banco.
+     `setTela` é irreversível, então a escolha original se perdia (foi assim
+     que a antiga Premium passou a abrir fora do Resumo e não voltava mais).
      Derivando, `tela` continua guardando a escolha da pessoa; se ela não
-     estiver visível agora, mostramos a 1ª que está — e ao voltar pra Premium
-     a escolha original reaparece sozinha. */
+     estiver visível agora, mostramos a 1ª que está — e quando ela voltar a
+     escolha original reaparece sozinha. */
 
   // No carregamento, avança toda série de lançamento "fixo" que já deveria
   // ter gerado uma nova ocorrência até hoje — é a "geração dinâmica por
@@ -659,28 +711,47 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: ModoConsultaN
          manda é o cadastro — a regra deixou de viver no código-fonte. Ver
          `migrarComportamentoDosGrupos()` em `src/gruposUtil.ts`. */
       await migrarComportamentoDosGrupos()
+      /* O app passou a exigir PELO MENOS UM cofrinho cadastrado (build 086,
+         pergunta do Rafael: "na carteira o cofrinho aparece mas no cadastro de
+         contas ele não aparece"). Instalação antiga podia não ter nenhuma
+         conta de tipo 'cofre', porque o cofrinho da Carteira sempre foi um
+         card VIRTUAL somado por natureza. Aditiva: cria a conta e nada mais —
+         nenhum lançamento é tocado. Ver `src/contasCofrinho.ts`. */
+      await garantirContaCofrinho()
+      /* FIM DAS VERSÕES (build 087): o campo `modoVisao` é APAGADO do banco,
+         venha ele com 'light', 'premium', 'ideal' ou 'completa'. Nenhum caminho
+         de código ramifica mais por ele — o conjunto de abas é constante —,
+         então esta migração é só limpeza: ninguém pode "estar" numa versão.
+         Ver `migrarFimDasVersoes()`. */
+      await migrarFimDasVersoes()
       // Padrão de Categorias/Grupos/ícones definido pela Morfo no N0
       // (12/09/2026, item 7): só é aplicado enquanto ESTE ambiente não tiver
       // sido editado pelo próprio dono, e nunca apaga nada — ver
       // `src/kit/padraoCategorias.ts`.
       await aplicarPadraoSeNaoEditado()
+      /* Parâmetros da notificação bancária publicados pelo N0 (build 080).
+         Mesma mecânica do padrão de categorias logo acima, aplicada a
+         PARÂMETRO: no escopo "só quem nunca mexeu" a composição das camadas já
+         entrega o valor novo sozinha, e no escopo "para todos" esta chamada é
+         que APAGA a personalização deste ambiente. Ver
+         `src/notificacaoParametros.ts`. */
+      await aplicarParametrosN0()
     })()
     /* Base das metas: marca a receita fixa numa base que veio de antes da
        build 051 e nunca recebeu a flag (bug real de 12/09/2026 — ver
        `migrarReceitaFixa` em `src/baseMeta.ts`). Roda uma vez só. */
     void migrarReceitaFixa()
-    /* Item 6: o passo a passo abre sozinho a cada abertura do app, até a
-       pessoa desligar. A leitura é direta do banco (não do hook) porque isto
-       roda uma vez no mount, antes de qualquer interação.
-       ONBOARDING INVERTIDO (13/09/2026): na versão Ideal o tour NÃO abre
-       sozinho — explicar telas vazias não ensina nada. Lá ele é oferecido uma
-       única vez, quando o plano fica pronto (ver `mostrarConviteTour` abaixo e
-       o cabeçalho de `src/components/BoasVindas.tsx`). Light e Premium
-       continuam como antes. */
-    void db.configuracoes.get(1).then((cfg) => {
-      if ((cfg?.modoVisao ?? MODO_VISAO_PADRAO) === 'ideal') return
-      if (!cfg?.tourNaoExibir) { setTourAberto(true); setTourAbertoAuto(true) }
-    })
+    /* A ABERTURA AUTOMÁTICA DO TOUR SAIU NA BUILD 087, junto com a Light.
+       Ela só existia lá: desde 13/09/2026 vale o "onboarding invertido" —
+       explicar telas vazias não ensina nada, então na versão completa o tour é
+       OFERECIDO uma única vez, quando o plano fica pronto (`mostrarConviteTour`
+       abaixo, e o cabeçalho de `src/components/BoasVindas.tsx`). Com uma versão
+       só, o convite é o único caminho automático, e o manual continua em
+       Configuração → Ajuda → Tour guiado.
+       Órfãos que saíram junto, por consequência: o estado `tourAbertoAuto` e o
+       botão "Não exibir novamente" do próprio tour, que só aparecia na abertura
+       automática. `tourNaoExibir` CONTINUA — é ele que "Agora não" grava ao
+       recusar o convite. */
   }, [])
 
   // Notificação bancária (09/09/2026): ao abrir o app, puxa o que o serviço
@@ -704,7 +775,23 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: ModoConsultaN
      "Lembrar mais tarde" (volta no dia seguinte) e "Não mostrar novamente".
      Ver `src/components/PermissoesNotificacao.tsx`. */
   const avisoPermissoes = usarAvisoPermissoes(configN1)
-  const qtdNotificacoesPendentes = useLiveQuery(() => contarDoAmbiente(db.notificacoesPendentes.where('status').equals('pendente').toArray()), []) ?? 0
+  /* 16/09/2026: o aviso do topo conta só o que PARECE movimentação de
+     dinheiro. Propaganda do banco que passou pelo filtro nativo (genérico de
+     propósito) não infla mais o contador — ela fica na seção "Ignoradas" da
+     tela, não é apagada. Ver `separarPendentes()`. */
+  const qtdNotificacoesPendentes = useLiveQuery(
+    async () => separarPendentes(await lerDoAmbiente(db.notificacoesPendentes.where('status').equals('pendente').toArray())).transacionais.length,
+    [],
+  ) ?? 0
+  /* Contas da carteira, só pra casar o banco da notificação com uma conta já
+     cadastrada (16/09/2026). Se não casar, o formulário abre com a conta EM
+     BRANCO — pedido literal do Rafael; nunca chutar uma conta. */
+  const contasParaNotificacao = useLiveQuery(() => lerDoAmbiente(db.contas.toArray()), []) ?? []
+  /* De/para aprendido (build 080) — alimenta a sugestão do formulário. */
+  const aprendizadosNotificacao = useLiveQuery(() => lerDoAmbiente(db.aprendizadosNotificacao.toArray()), []) ?? []
+  const sugestaoNotificacao = lancamentoAberto?.notificacao
+    ? sugestaoDaNotificacao(lancamentoAberto.notificacao, contasParaNotificacao, aprendizadosNotificacao)
+    : undefined
   /* Meses já virados com pagamento/recebimento ainda em aberto (item 11,
      12/09/2026). `useLiveQuery` sobre a tabela inteira: assim que a pessoa
      marca a tarja de um lançamento como paga, a tarja se recalcula sozinha —
@@ -740,10 +827,10 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: ModoConsultaN
   // engrenagem (ver `MenuEngrenagem` acima).
   const chatNaoLida = tenantN1 ? hasUnreadTenant(tenantN1) : false
 
-  /* Na versão Ideal a aba "situacao" mostra a tela HOJE — a tela nova, com os
-     dois números. Light e Premium continuam com a Situação de sempre, intacta:
-     é o mesmo slot do rodapé, com um componente diferente por dentro. */
-  const Componente = telaAtiva === 'situacao' && modoVisao === 'ideal' ? Hoje : TELAS[telaAtiva].Componente
+  /* Desde a build 086 a aba "situacao" mostra a tela HOJE nas duas versões —
+     a tela `Situacao.tsx` foi apagada junto com a Premium, então o slot não
+     troca mais de componente por modo. */
+  const Componente = TELAS[telaAtiva].Componente
   const aoAbrirLancamento = (opcoes?: AlvoLancamento) => setLancamentoAberto(opcoes ?? {})
 
   /* Botão voltar do Android (12/09/2026, pedido do Rafael) — desempilha o
@@ -798,7 +885,10 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: ModoConsultaN
       // data-tour (05/09/2026, Etapa 6 — Tour guiado): ver
       // `src/kit/GuidedTour.tsx`/`TOUR_STEPS_N1`.
       dataTour: `nav-tab-${chave}`,
-      extra: chave === 'lancamentos' ? <span className="rodape-destaque-principal" /> : undefined,
+      /* A marca verde permanente sob "Lançamentos" SAIU na build 085, a pedido
+         do Rafael: *"retire a barrinha verde destaque no menu Lançamentos, não
+         precisa mais destacar ele"*. O destaque que ficou é o do item ATIVO
+         (cor mais forte + peso + pílula de fundo, ver `RodapeAbas.tsx`). */
     }))
   const entradasAcoes: EntradaRodapeN1[] = Object.entries(ACOES_N1)
     .filter(([k]) => posDeMenu(k) === 'rodape')
@@ -841,9 +931,8 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: ModoConsultaN
      (b) cobriria o "‹ Voltar ao painel N0", que é o único caminho de saída —
      bug real pego pelo t050b, não relatado. */
   const mostrarBoasVindas =
-    modoVisao === 'ideal' && !modoConsultaN0 && onboarding.pronto && !onboarding.boasVindasVistas
+    !modoConsultaN0 && onboarding.pronto && !onboarding.boasVindasVistas
   const mostrarConviteTour =
-    modoVisao === 'ideal' &&
     !modoConsultaN0 &&
     onboarding.pronto &&
     onboarding.boasVindasVistas &&
@@ -854,27 +943,23 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: ModoConsultaN
   const aceitarConviteTour = () => {
     void salvarConfiguracaoIcones({ tourConviteFeito: true })
     setTourAberto(true)
-    setTourAbertoAuto(false)
   }
   /* Recusou: some e não volta a perguntar. `tourNaoExibir` junto porque a
      resposta é sobre o tour, não sobre esta tela — quem disse "agora não" aqui
-     não deveria receber o tour automático ao trocar pra Premium depois. Fica
+     não deveria receber o tour automático ao trocar de versão depois. Fica
      em Configuração → Ajuda, e a mensagem diz exatamente isso. */
   const recusarConviteTour = () => {
     void salvarConfiguracaoIcones({ tourConviteFeito: true, tourNaoExibir: true })
     setAvisoTour(ONDE_REABRIR_TOUR)
   }
 
-  /* Nada é montado antes de a configuração chegar do banco.
-     Por que isso importa: até chegar, o modo de visão é um PALPITE (o padrão),
-     e várias coisas se decidem por ele — quais abas existem, qual é a
-     primeira, e quais passos o tour guiado tem. O tour, ao montar, troca de
-     aba; um palpite errado aqui trocava a aba de forma irreversível e o
-     Premium abria fora do Resumo. Um frame de espera resolve a classe inteira
-     do problema, em vez de remendar caso a caso.
-     O guard fica DEPOIS de todos os hooks — retornar antes deles quebraria a
-     ordem de hooks entre renders (já foi bug real neste projeto). */
-  if (!modoPronto) return null
+  /* O GUARD DE "CONFIGURAÇÃO AINDA NÃO CHEGOU" SAIU NA BUILD 087.
+     Ele existia por UMA razão: até a configuração chegar do banco, o modo de
+     visão era um PALPITE, e o palpite escolhia quais abas existiam e qual era a
+     primeira — trocar de aba com base nele era irreversível. Sem modo, não há
+     palpite: as quatro abas são constantes desde o primeiro quadro. O que ainda
+     chega depois (ordem das abas, menus ocultos) só REORDENA o que já está na
+     tela, e reordenar num quadro não perde nada. */
 
   /* A tela de abertura ocupa o app inteiro: nada por trás dela tem conteúdo
      ainda, e mostrar rodapé/telas vazias por baixo só dilui a única coisa que
@@ -1127,11 +1212,18 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: ModoConsultaN
                AVISO do topo vem só a lista de pendentes — 11/09/2026, pedido
                do Rafael: o aviso promete "confirmar movimentação", então é só
                isso que a tela dele mostra. */
+            /* Build 080: UMA tela só, com abas. O aviso do topo continua
+               entrando por 'notificacoesPendentes' — a diferença agora é só
+               qual ABA abre primeiro, nunca o que a tela mostra. */
             <NotificacoesBancarias
-              somentePendentes={configAberta === 'notificacoesPendentes'}
+              abaInicial="pendentes"
               aoVoltar={fecharConfig}
               aoConfirmar={(n) => setLancamentoAberto({ notificacao: n })}
+              aoAbrirLancamento={(id) => setLancamentoAberto({ id })}
+              aoAbrirParametros={() => setConfigAberta('notificacoesRegras')}
             />
+          ) : configAberta === 'notificacoesRegras' ? (
+            <ParametrosNotificacao aoVoltar={fecharConfig} />
           ) : configAberta === 'ferramentasTeste' ? (
             <SimularData aoVoltar={fecharConfig} />
           ) : configAberta === 'suporte' ? (
@@ -1186,24 +1278,30 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: ModoConsultaN
       {lancamentoAberto && (
         <DetalheLancamento
           alvoId={lancamentoAberto.id}
-          categoriaIdSugerida={lancamentoAberto.categoriaIdSugerida}
-          contaIdSugerida={lancamentoAberto.contaIdSugerida}
+          categoriaIdSugerida={sugestaoNotificacao?.categoriaId ?? lancamentoAberto.categoriaIdSugerida}
+          contaIdSugerida={sugestaoNotificacao?.contaId ?? lancamentoAberto.contaIdSugerida}
           abrirClonando={lancamentoAberto.abrirClonando}
           aoMudarMes={setMes}
-          sugestao={
-            lancamentoAberto.notificacao
-              ? {
-                  data: lancamentoAberto.notificacao.recebidoEm.slice(0, 10),
-                  descricao: lancamentoAberto.notificacao.titulo || lancamentoAberto.notificacao.app,
-                  valor: lancamentoAberto.notificacao.valor,
-                  tipo: lancamentoAberto.notificacao.tipo,
-                  descricaoOriginal: [lancamentoAberto.notificacao.titulo, lancamentoAberto.notificacao.texto].filter(Boolean).join(' — '),
-                }
-              : undefined
-          }
+          sugestao={sugestaoNotificacao}
           aoSalvarComSucesso={
             lancamentoAberto.notificacao?.id != null
-              ? () => { marcarConfirmada(lancamentoAberto.notificacao!.id!) }
+              ? (escolha) => {
+                  const notif = lancamentoAberto.notificacao!
+                  marcarConfirmada(notif.id!)
+                  /* Build 080: toda confirmação ENSINA. É o mesmo aprendizado
+                     do caminho de vínculo (`vinculoNotificacao.ts`) — os dois
+                     casos são a pessoa dizendo o que aquele texto significa. */
+                  if (paramsNotificacaoAtuais().aprenderDePara) {
+                    const a = analisarNotificacao(notif, paramsNotificacaoAtuais())
+                    void ensinarDePara({
+                      contraparte: a.contraparte,
+                      rotulo: a.contraparteBruta ?? a.contraparte,
+                      descricao: escolha.descricao,
+                      categoriaId: escolha.categoriaId,
+                      contaId: escolha.contaId,
+                    })
+                  }
+                }
               : undefined
           }
           onFechar={() => setLancamentoAberto(null)}
@@ -1223,15 +1321,13 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: ModoConsultaN
           recorte `position: fixed`). O app não tem nenhum wrapper com
           transform hoje, mas isso evita o problema por construção. */}
       {tourAberto && (
-        /* Só explica tela que a pessoa REALMENTE tem no rodapé agora
-           (10/09/2026, pedido do Rafael: "o tour não deve mostrar a
-           explicação do menu Situação quando o modo é Light"). Vale pra
-           qualquer tela ausente, não só a Situação: em Light e também quando
-           um menu é posto em "Ocultar" no Layout do Sistema (N0), o passo
-           correspondente sai do roteiro em vez de descrever algo que não
-           existe na tela. */
+        /* Só explica tela que a pessoa REALMENTE tem na navegação agora
+           (10/09/2026, pedido do Rafael). Com o fim das versões (build 087) a
+           única coisa que ainda tira uma aba da navegação é o "Ocultar" do
+           Layout do Sistema (N0) — nesse caso o passo sai do roteiro em vez de
+           descrever algo que não existe na tela. */
         <GuidedTour
-          passos={passosTourN1(modoVisao).filter((p) => !p.tela || p.tela.startsWith('config:') || (telasVisiveis as string[]).includes(p.tela))}
+          passos={passosTourN1().filter((p) => !p.tela || p.tela.startsWith('config:') || (telasVisiveis as string[]).includes(p.tela))}
           onIrPara={onIrParaPassoTour}
           /* Terminar o tour VOLTA PRA TELA INICIAL. Os últimos passos abrem a
              tela de Configuração pra apontar Contas e Categorias — sem isso o
@@ -1239,19 +1335,10 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: ModoConsultaN
              exatamente o que aconteceu na build 058. */
           onFinalizar={() => {
             setTourAberto(false)
-            setTourAbertoAuto(false)
             setConfigAberta(null)
             const inicial = telasVisiveis[0]
             if (inicial) setTela(inicial)
           }}
-          onNaoExibirNovamente={tourAbertoAuto ? () => {
-            void salvarConfiguracaoIcones({ tourNaoExibir: true })
-            setTourAberto(false); setTourAbertoAuto(false)
-            setConfigAberta(null)
-            const inicial = telasVisiveis[0]
-            if (inicial) setTela(inicial)
-            setAvisoTour(ONDE_REABRIR_TOUR)
-          } : undefined}
         />
       )}
       {/* Convite do tour — uma vez só, no fim do passo 2 (ver o cabeçalho de

@@ -90,10 +90,26 @@
   --ideal-t3-tam: 13.5px; --ideal-t3-peso: 500;   /* lista completa, com detalhe */
   --ideal-t4-tam: 12.5px; --ideal-t4-peso: 400;   /* lista simples / sem foco */
   --ideal-t4-opac: 0.8;
+  /* O ITEM ATIVO DO RODAPÉ (build 085, 16/09/2026). Rafael: *"só preciso que
+     destaque um tom a mais na cor o menu que está selecionando no momento,
+     está muito discreto quase imperceptível"*.
+
+     O problema medido era de CONTRASTE ENTRE OS DOIS ESTADOS, não de cor
+     bonita: o roxo ativo `#8b7cf6` e o cinza inativo `#9aa1b1` têm quase a
+     mesma luminância — 1,06 de razão entre eles. Duas cores distintas que o
+     olho lê como o mesmo peso.
+
+     Três mudanças somadas, porque nenhuma sozinha resolve:
+       • o ativo sobe (roxo mais claro e saturado),
+       • o inativo desce (cinza mais fundo — é ele que estava alto demais),
+       • e o ativo ganha uma pílula de fundo, que dá o "um tom a mais" sem
+         precisar de uma cor nova com significado próprio.
+     Peso do rótulo vai junto (800 contra 600). */
   --rodape-fundo: var(--bg-elevado);
   --rodape-borda: var(--borda);
-  --rodape-acento: #8b7cf6;
-  --rodape-inativo: var(--texto-fraco);
+  --rodape-acento: #b5a1ff;
+  --rodape-inativo: #6d7484;
+  --rodape-ativo-pilula: rgba(181, 161, 255, 0.16);
   /* Elevação de popup (12/09/2026, build 053). O Rafael: "todas telas de popup
      deve ter alguma diferença dela pra tela de trás, alguma sombra ou borda,
      pois hoje ela está se misturando tanto no claro quanto no escuro".
@@ -137,8 +153,12 @@
   --fundo-feito: #f1eee8;
   --fundo-pendente: #fdf6e3;
   --fundo-atrasado: #fdecec;
-  /* Roxo mais fechado no claro: o #8b7cf6 do tema escuro some sobre branco. */
-  --rodape-acento: #6c3fff;
+  /* Roxo mais fechado no claro: o #8b7cf6 do tema escuro some sobre branco.
+     Build 085: fecha mais um passo (#5521d6) e o inativo clareia, pelo mesmo
+     motivo do tema escuro — o par precisava de distância, não de tom novo. */
+  --rodape-acento: #5521d6;
+  --rodape-inativo: #8d8677;
+  --rodape-ativo-pilula: rgba(85, 33, 214, 0.1);
   /* No claro quem separa o popup é a BORDA (branco sobre branco não tem
      contraste nenhum); a sombra fica suave, só pra dar profundidade. */
   --borda-popup: #cfc8bd;
@@ -190,7 +210,9 @@
     --fundo-feito: #f1eee8;
     --fundo-pendente: #fdf6e3;
     --fundo-atrasado: #fdecec;
-    --rodape-acento: #6c3fff;
+    --rodape-acento: #5521d6;
+    --rodape-inativo: #8d8677;
+    --rodape-ativo-pilula: rgba(85, 33, 214, 0.1);
     --borda-popup: #cfc8bd;
     --sombra-popup: 0 18px 44px rgba(28, 27, 34, 0.22), 0 2px 8px rgba(28, 27, 34, 0.1);
     --veu-popup: rgba(28, 27, 34, 0.42);
@@ -537,18 +559,106 @@ nav.rodape {
   display: none;
 }
 
-/* 04/09/2026, mesmo dia (pedido do Rafael): "Lançamentos" fica no meio das 5
-   abas por ordem de fluxo (Resumo → Situação → Lançamentos → Carteira →
-   Planejamento), mas é a tela principal — ganha uma linha verde permanente
-   abaixo do rótulo (independente de estar ativa ou não) pra marcar isso sem
-   mudar sua posição na ordem. */
-.rodape-destaque-principal {
+/* A marca verde permanente sob "Lançamentos" (`.rodape-destaque-principal`,
+   04/09/2026) SAIU na build 085, a pedido do Rafael: *"retire a barrinha verde
+   destaque no menu Lançamentos, não precisa mais destacar ele"*. O que passou
+   a valer no lugar é o destaque do item ATIVO — ver `--rodape-ativo-*` no
+   `:root` e `RodapeAbas.tsx`. */
+
+/* ==========================================================================
+   PARÂMETRO COM EXPLICAÇÃO (build 085, 16/09/2026)
+
+   Rafael: *"quero que pra todos os parâmetros criados tanto visíveis no N1
+   como no N0, tenha uma breve e rápido texto de explicação, com exemplos, mas
+   sem extender muito"*.
+
+   UMA GRADE SÓ: a linha é rótulo+explicação à esquerda e o CONTROLE numa
+   coluna de largura FIXA à direita. Como todo controle ocupa 100% dessa
+   coluna, todos os campos da tela nascem com a MESMA borda esquerda, seja
+   número, escolha ou sim/não — é a mesma ideia da coluna de sufixo fixa do
+   `LinhaParam` do N0 (build 056), aplicada ao campo inteiro.
+   ========================================================================== */
+.param-linha {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--borda);
+}
+.param-linha:last-child {
+  border-bottom: none;
+}
+.param-texto {
+  flex: 1;
+  min-width: 0;
+}
+.param-rotulo {
   display: block;
-  width: 20px;
-  height: 3px;
-  border-radius: 2px;
-  background: var(--verde);
-  margin: 4px auto 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--texto);
+  margin: 0;
+}
+.param-ajuda,
+.param-exemplo {
+  margin: 3px 0 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--texto-fraco);
+}
+.param-exemplo {
+  font-style: italic;
+  opacity: 0.92;
+}
+.param-marca {
+  font-weight: 400;
+  color: var(--texto-fraco);
+}
+/* A COLUNA DO CONTROLE: fixa, pra todos os campos alinharem pela mesma borda. */
+.param-controle {
+  flex: 0 0 132px;
+  width: 132px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 2px;
+}
+.param-controle input,
+.param-controle select {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 9px 10px;
+  font-size: 13.5px;
+}
+.param-controle input[type='number'] {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+/* Sim/Não: dois BOTÕES de verdade ocupando a coluna inteira, no lugar da
+   caixinha solta que a build 080 usava — o pedido do Rafael foi literalmente
+   "com botões, alinhados". Um `checkbox` nunca alinharia com os campos de
+   número e de escolha da mesma tela. */
+.param-simnao {
+  display: flex;
+  gap: 4px;
+}
+.param-simnao button {
+  flex: 1;
+  margin-top: 0;
+  padding: 9px 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  border-radius: 8px;
+  border: 1px solid var(--borda);
+  background: var(--bg);
+  color: var(--texto-fraco);
+  cursor: pointer;
+}
+.param-simnao button.ativo {
+  background: var(--azul);
+  border-color: var(--azul);
+  color: #fff;
 }
 
 .barra {
@@ -581,6 +691,21 @@ nav.rodape {
   display: flex;
 }
 
+/* A barra com o VALOR RESULTANTE na frente (build 086) — mesma forma que
+   `.barra-ideal-linha` já usava: a barra encolhe, o número nunca. O
+   `margin-top` migra da barra para a linha, senão o número ficaria 6px acima
+   do centro da barra. */
+.barra-meta-linha { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+.barra-meta-linha > .barra-meta { flex: 1 1 auto; min-width: 0; margin-top: 0; }
+.barra-meta-resultado {
+  flex: 0 0 auto;
+  font-size: var(--ideal-t3-tam);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.barra-meta-resultado.positivo { color: var(--ideal-verde-txt); }
+.barra-meta-resultado.negativo { color: var(--ideal-vermelho-txt); }
+
 .barra-meta > .fill {
   height: 100%;
   background: var(--azul);
@@ -600,18 +725,41 @@ nav.rodape {
   background: var(--ideal-ambar);
 }
 
-/* Item 10 (16/09/2026): legenda de cor no lugar do card de 3 linhas
-   "planejada/até agora/projetada" no Planejamento — explica as cores das
-   barras de Entradas/Saídas logo acima. */
-.legenda-cores-planejamento {
-  display: flex; flex-wrap: wrap; gap: 10px 16px; padding: 10px 2px;
+/* A "Legenda" de cor de um card (build 084, 16/09/2026). Nasceu na build 083
+   como bloco fixo só do Planejamento (`.legenda-cores-planejamento`); virou a
+   peça única de `src/components/Legenda.tsx`, recolhida, usada em todo card que
+   desenha barra colorida. As ENTRADAS vêm de `src/legendaBarras.ts` — aqui só
+   mora a forma. */
+.legenda-cores {
+  display: flex; flex-wrap: wrap; gap: 8px 16px; padding: 4px 2px 2px;
 }
 .legenda-cores-item {
   display: flex; align-items: center; gap: 6px;
-  font-size: 12px; color: var(--texto-fraco);
+  font-size: 12px; line-height: 1.3; color: var(--texto-fraco);
 }
+/* A amostra cita o token que a barra usa. O contorno existe porque duas
+   entradas legítimas são a própria cor do trilho (`--ideal-trilho`) e a borda
+   do cartão (`--borda`): sem uma linha em volta, essas duas amostras somem
+   contra o fundo do card — no claro E no escuro. */
 .legenda-cores-bolinha {
-  width: 10px; height: 10px; border-radius: 999px; flex: 0 0 auto;
+  width: 11px; height: 11px; border-radius: 999px; flex: 0 0 auto;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--texto-fraco) 55%, transparent);
+}
+/* Título da família — só aparece quando o card tem mais de uma linguagem de
+   barra (o balão "De onde vem o reservado?" da tela Hoje). */
+.legenda-familia + .legenda-familia { margin-top: 8px; }
+.legenda-familia-titulo {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.04em;
+  text-transform: uppercase; color: var(--texto-fraco); opacity: 0.85;
+}
+/* Complemento: a legenda entra no fim de um recolhível que o card JÁ tem,
+   nunca como um segundo botão de abrir/recolher. */
+.legenda-complemento {
+  margin-top: 10px; padding-top: 6px; border-top: 1px solid var(--borda);
+}
+.legenda-complemento-titulo {
+  font-size: 12.5px; font-weight: 600; color: var(--texto-fraco);
+  margin-bottom: 4px;
 }
 
 .barra-meta > .marcador {
@@ -1309,8 +1457,6 @@ nav.rodape {
 
 
 
-
-
 /* Botão "voltar" — antes era só texto sem fundo/borda (var(--texto) puro),
    quase imperceptível no topo da tela (feedback do Rafael, 31/08/2026,
    mesmo dia). Ganhou fundo, borda e formato de pílula, pro mesmo peso
@@ -1620,42 +1766,10 @@ nav.rodape {
 /* Linhas que pertencem ao rótulo de agrupamento logo acima (build 055).
    O filete à esquerda é o que faz o rótulo "englobar" as duas — sem ele, o
    recuo sozinho parece desalinhamento. */
-.linhas-agrupadas {
-  padding-left: 12px;
-  border-left: 2px solid var(--borda);
-  margin-left: 2px;
-}
-.linhas-agrupadas .linha:last-child {
-  border-bottom: none;
-}
 
-.subtitulo-agrupador {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--texto-fraco);
-  padding: 8px 0 2px;
-}
 
-.botao-link-secao {
-  display: block;
-  width: 100%;
-  text-align: center;
-  background: none;
-  border: 1px solid var(--borda);
-  border-radius: 8px;
-  color: var(--azul);
-  font: inherit;
-  font-size: 13px;
-  font-weight: 600;
-  padding: 10px;
-  margin-top: 10px;
-  cursor: pointer;
-}
-.botao-link-secao:active {
-  opacity: 0.8;
-}
+
+
 
 /* F-02b: atalho "+" dentro de uma listagem Simples (categoria expandida em
    Resumo/Situação/Planejamento) — abre um lançamento novo já com aquela
@@ -2639,9 +2753,58 @@ html[data-mloc-tema='claro'] .tarja-inativa {
    monetário partir em duas linhas já usado em `.linha-barra-topo`. */
 .bloco-numero .ideal-t1 {
   font-size: 20px;
+  /* `normal` dava 23,44px de caixa pra uma fonte de 20px; 1.1 = 22px, sem
+     encostar no desenho do número (build 082). NÃO reduzir o `font-size`:
+     os 20px são o que a build 075 calibrou pra "-R$ 123.456,78" caber inteiro
+     numa caixa de 157px sem cortar. */
+  line-height: 1.1;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+/* ===== Build 082 — o funil cabe na tela do celular sem rolar =====
+   Pedido do Rafael: "Livre de tudo" e "Pode sobrar das metas" (a linha de
+   baixo) precisam aparecer sem rolagem. Os pixels saíram SÓ do espaço VAZIO
+   DENTRO de cada caixa — padding, área de toque do "i", respiro do divisor e
+   padding do botão. Três coisas ficaram intocadas de propósito:
+   - o espaço ENTRE as caixas (`.rio-linha` gap 10px, `.rio-conector` 20px + 2px
+     de margem = 24px entre linhas) — o Rafael disse explicitamente que está bom;
+   - o `font-size` de nenhum texto (nada passou a quebrar linha que não quebrava);
+   - a simetria 50/50 e a altura igual do par (build 075) — todas as regras aqui
+     valem para as 5 caixas de uma vez, então o alinhamento entre elas é o mesmo.
+   Medido a 390×844 e 360×800: 26px por linha do funil, 78px no total. */
+/* O "i" (`InfoDot`, `PadraoUI.tsx`) tem 24×24 de área de toque pra um círculo
+   desenhado de 16px — e num flex com `align-items:center` era ELE que ditava a
+   altura da linha do rótulo (24px pra um texto de 12,6px): 8px de espaço vazio
+   por caixa, só pra sustentar um alvo de toque.
+   Aqui o alvo de 24×24 é MANTIDO (nada de toque foi reduzido), mas deixa de
+   custar altura: a caixa do "i" volta pros 16px do desenho, os 4px de folga de
+   cada lado viram um `::after` absoluto, e o rótulo ganha o MESMO padding de
+   4px — assim a folga do alvo cai DENTRO da caixa de padding do rótulo e
+   `scrollHeight`/`scrollWidth` continuam iguais a `clientHeight`/`clientWidth`
+   (é esse par que o projeto usa pra detectar quebra de linha; margem negativa
+   solta, sem o padding, daria falso positivo em todo teste futuro).
+   As margens negativas devolvem os 8px de padding ao fluxo — a linha volta a
+   custar 16px + o 1px de respiro de sempre. `!important` porque o `InfoDot` é
+   peça do Kit e traz 24×24 em estilo inline. */
+.bloco-numero-rotulo > [role='button'] {
+  position: relative;
+  width: 16px !important;
+  height: 16px !important;
+}
+.bloco-numero-rotulo > [role='button']::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+}
+.bloco-numero .bloco-recolhivel {
+  /* Escopado ao funil — `.bloco-recolhivel` também é usado pelo aviso de
+     calibragem (`AvisoCalibragem.tsx`), que não muda. */
+  margin-top: 6px;
+  padding-top: 4px;
+}
+.bloco-numero .bloco-recolhivel-botao {
+  padding: 4px 0;
 }
 .rio-caixa-hoje {
   border-color: var(--azul);
@@ -2694,7 +2857,10 @@ html[data-mloc-tema='claro'] .tarja-inativa {
   background: var(--rio-caixa-bg);
   border: 1px solid var(--rio-caixa-borda);
   border-radius: 10px;
-  padding: 10px 12px;
+  /* 10px → 8px no vertical (build 082, ver o bloco "o funil cabe na tela").
+     O horizontal continua 12px: estreitar a lateral aproximaria o rótulo em
+     caixa alta da borda e aumentaria o risco de quebra de linha. */
+  padding: 8px 12px;
   box-shadow: var(--sombra-rio);
 }
 .bloco-numero.rio-verde { background: var(--rio-verde-bg); border-color: var(--rio-verde-bg); }
@@ -2712,7 +2878,14 @@ html[data-mloc-tema='claro'] .tarja-inativa {
 .bloco-numero-rotulo {
   display: flex; align-items: center; gap: 2px; flex-wrap: nowrap;
   font-size: 10.5px; letter-spacing: 0.3px; text-transform: uppercase;
-  color: var(--texto-fraco); margin-bottom: 1px;
+  color: var(--texto-fraco);
+  /* Build 082 — ver o bloco `.bloco-numero-rotulo > [role='button']` acima:
+     o padding de 4px hospeda a folga do alvo de toque do "i" (pra
+     scrollHeight/scrollWidth não passarem do clientHeight/clientWidth) e as
+     margens negativas devolvem esses 4px ao fluxo. O respiro real abaixo do
+     rótulo continua sendo 1px (-4 + 1 = -3 embaixo). */
+  padding: 4px 4px 4px 0;
+  margin: -4px -4px -3px 0;
   /* Item 3 (16/09/2026): "PODE SOBRAR DAS METAS" (e o equivalente "SOBROU
      DAS METAS") não cabe numa caixa de ~157px (par 50/50, build 075) no
      mesmo tamanho/letter-spacing das outras — com `overflow:hidden` +
@@ -2828,6 +3001,11 @@ html[data-mloc-tema='claro'] .tarja-inativa {
 }
 .pct-grupo-a1 .numero { font-size: 21px; font-weight: 800; color: var(--texto); }
 .pct-grupo-a1 .texto-fraco { font-size: 11.5px; }
+/* O percentual RESULTANTE, entre parênteses ao lado do percentual do plano
+   (build 086). Fonte pequena de propósito: ele é consequência, não a decisão —
+   o número de 21px continua sendo o percentual que a pessoa escolheu. `nowrap`
+   porque "(↑ 9%)" quebrando entre a seta e o número não quer dizer nada. */
+.pct-grupo-delta { font-size: 12px; font-weight: 700; white-space: nowrap; }
 
 /* Atalho de edição do GRUPO, dentro do cabeçalho do card (13/09/2026 — antes
    era `.botao-editar-linha`, uma coluna de 38px à direita da linha inteira,
@@ -3235,4 +3413,55 @@ html[data-mloc-tema='claro'] .tarja-inativa {
   padding: 10px 12px;
   color: var(--texto);
   min-height: 44px;
+}
+
+/* Build 086 — removidas com as telas que as usavam (Resumo do Mês e Situação,
+   apagadas junto com a versão Premium): `.botao-link-secao` (o botão de
+   `ExplicacaoDaTela`), `.linhas-agrupadas` (o filete que agrupava "A receber"
+   e "A pagar" do Resumo, build 055) e `.subtitulo-agrupador`. Regra do
+   projeto: classe sem nenhum consumidor não fica no arquivo esperando alguém
+   religá-la. */
+
+/* O MEDIDOR DE ARCO — 3º modelo da aba Gráficos do Planejamento (build 088).
+
+   O desenho do arco é todo SVG (geometria resgatada do `GraficoMargem` da
+   build 085); aqui ficam só o enquadramento, os estados de toque das fatias e
+   as linhas do card de detalhe. NENHUMA COR de segmento é escrita neste
+   arquivo: o arco lê os tokens de `legendaBarras.ts`, que é a mesma fonte da
+   amostra da legenda. */
+.medidor-area { display: flex; justify-content: center; }
+.medidor-svg { max-width: 100%; height: auto; }
+.medidor-fatia { cursor: pointer; transition: stroke-width .12s ease, opacity .12s ease; }
+.medidor-alvo { cursor: pointer; pointer-events: stroke; }
+.medidor-fatia:focus-visible { outline: 2px solid var(--texto); outline-offset: 2px; }
+.medidor-rotulo { fill: var(--texto-fraco); font-size: 11px; }
+.medidor-manchete { fill: var(--texto); font-size: 18px; font-weight: 700; }
+.medidor-fechamento {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 10px;
+  padding-top: 6px; border-top: 1px solid var(--borda); margin-top: 4px;
+}
+.medidor-fechamento strong { white-space: nowrap; }
+
+/* O card de detalhe. Linhas de texto, sem barra colorida de propósito — ver o
+   cabeçalho de `ModeloMedidor` em `GraficosPlanejamento.tsx`. */
+.medidor-lista { display: flex; flex-direction: column; }
+.medidor-linha-grupo, .medidor-linha-categoria {
+  display: flex; width: 100%; gap: 10px; align-items: baseline;
+  justify-content: space-between; text-align: left;
+  background: none; border: none; border-top: 1px solid var(--borda);
+  color: inherit; font: inherit; cursor: pointer;
+  /* 40px de alvo mínimo confortável numa coluna que precisa servir a 360px. */
+  padding: 10px 6px; min-height: 40px;
+}
+.medidor-linha-grupo { font-weight: 600; }
+.medidor-linha-categoria { font-size: 12.5px; color: var(--texto-fraco); }
+.medidor-linha-grupo.selecionado, .medidor-linha-categoria.selecionado {
+  background: color-mix(in srgb, var(--ideal-azul) 10%, transparent);
+  border-radius: 8px;
+}
+.medidor-linha-valor { white-space: nowrap; flex-shrink: 0; }
+.medidor-categorias { padding-left: 12px; border-left: 2px solid var(--borda); }
+.medidor-total {
+  display: flex; justify-content: space-between; gap: 10px;
+  margin-top: 8px; padding-top: 8px; border-top: 2px solid var(--borda);
 }

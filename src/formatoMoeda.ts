@@ -30,6 +30,25 @@ export function fmtComSinal(v: number): string {
   return `${v < -0.005 ? '−' : ''}${fmtBRL(v)}`
 }
 
+/* O MESMO número, com o "+" ESCRITO quando é positivo (build 086).
+ *
+ * `fmtComSinal` só escreve o "−": é ele que a tela Hoje usa nos números
+ * grandes do funil, e lá o "+" seria ruído (o valor positivo é o caso normal).
+ * No Planejamento o pedido do Rafael foi outro — *"em todas as barras mostre o
+ * valor resultante na frente da barra, positivo ou negativo"* —, e ali os dois
+ * sinais convivem barra a barra: sem o "+" escrito, a única diferença entre
+ * uma sobra e um estouro voltaria a ser a cor, que é exatamente o que a regra
+ * da build 061 proíbe.
+ *
+ * Função separada, e não um parâmetro de `fmtComSinal`, de propósito: os
+ * números do funil foram calibrados em largura (builds 075 e 082, "-R$
+ * 123.456,78" cabendo numa caixa de 157px) e ganhar um caractere a mais
+ * desfaria aquela conta.
+ */
+export function fmtSinalExplicito(v: number): string {
+  return v > 0.005 ? `+${fmtBRL(v)}` : fmtComSinal(v)
+}
+
 // Converte texto no formato mascarado ("1.234,56") de volta pro número —
 // usado ao salvar/filtrar. Aceita também texto sem máscara (ex.: "1234.56"
 // digitado por colar/preencher automático), já que remove só pontos e troca

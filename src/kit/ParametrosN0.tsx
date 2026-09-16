@@ -84,10 +84,13 @@ function LinhaParam({ label, valor, sufixo, min, max, onSalvar, hint }: {
   </CartaoDev>
 }
 
-function CampoTextoDev({ label, valor, onSalvar, linhas = 3 }: { label: string; valor: string; onSalvar: (v: string) => void; linhas?: number }) {
+function CampoTextoDev({ label, valor, onSalvar, linhas = 3, hint }: { label: string; valor: string; onSalvar: (v: string) => void; linhas?: number; hint?: string }) {
   const [rascunho, setRascunho] = useState<string | null>(null)
   return <CartaoDev>
-    <div style={{ fontSize: 12, color: DEV_TXT2, marginBottom: 8 }}>{label}</div>
+    <div style={{ fontSize: 12, color: DEV_TXT2, marginBottom: hint ? 3 : 8 }}>{label}</div>
+    {/* Build 085: explicação curta com exemplo, no mesmo tom fraco do rótulo —
+        mesma peça de texto que `LinhaParam` já usava, aqui no campo de texto. */}
+    {hint && <div style={{ fontSize: 11, color: DEV_TXT2, marginBottom: 8, lineHeight: 1.45 }}>{hint}</div>}
     <textarea
       rows={linhas} value={rascunho ?? valor}
       onChange={(e) => setRascunho(e.target.value)}
@@ -104,20 +107,21 @@ export function SubParametrosAssinatura({ irParaChat }: { irParaChat: () => void
   const tw = dp.trialWarning
   return <>
     <TituloTela>Valores padrão da assinatura de qualquer cliente novo. Estes três decidem, de verdade, quando o cliente é avisado e quando o acesso dele é cortado — a cobrança em si é registrada aqui e confirmada por você; o pagamento automático chega com o backend (Backlog 028).</TituloTela>
-    <LinhaParam label="Tolerância após vencimento" sufixo=" dia(s)" valor={dp.toleranceDays} min={0} onSalvar={(v) => void atualizarDefaultParams({ toleranceDays: v })} />
+    <LinhaParam label="Tolerância após vencimento" hint="Quantos dias o cliente continua entrando depois do vencimento. Ex.: com 5, quem vence dia 10 só é bloqueado dia 16." sufixo=" dia(s)" valor={dp.toleranceDays} min={0} onSalvar={(v) => void atualizarDefaultParams({ toleranceDays: v })} />
     {/* 12/09/2026, item 3: é ESTE número que decide quantos dias antes do
         vencimento o app do cliente mostra a tarja de aviso. Diferente de
         "Meus Alertas", que é a notificação do administrador Morfo. */}
-    <LinhaParam label="Dias de aviso antes do vencimento (tarja no app do cliente)" sufixo=" dia(s)" valor={dp.avisoVencimentoDiasAntes} min={0} onSalvar={(v) => void atualizarDefaultParams({ avisoVencimentoDiasAntes: v })} />
+    <LinhaParam label="Dias de aviso antes do vencimento (tarja no app do cliente)" hint="Quando a tarja de cobrança aparece no app dele. Ex.: com 3, quem vence dia 10 vê o aviso a partir do dia 7." sufixo=" dia(s)" valor={dp.avisoVencimentoDiasAntes} min={0} onSalvar={(v) => void atualizarDefaultParams({ avisoVencimentoDiasAntes: v })} />
     {/* Build 056: este campo ganhou legenda pra padronizar com os outros três,
         mas NÃO é "dia(s)" — os outros contam uma QUANTIDADE de dias, este é um
         DIA do mês (1 a 28). "5 dia(s)" aqui leria como cinco dias de prazo, que
         é outra coisa. O alinhamento vem da coluna de largura fixa em
         `LinhaParam`, não de o texto ser igual. */}
-    <LinhaParam label="Dia de vencimento padrão" sufixo="do mês" valor={dp.dueDay} min={1} max={28} onSalvar={(v) => void atualizarDefaultParams({ dueDay: v })} />
-    <LinhaParam label="Dias de teste grátis" sufixo=" dia(s)" valor={dp.trialDays} min={0} onSalvar={(v) => void atualizarDefaultParams({ trialDays: v })} />
+    <LinhaParam label="Dia de vencimento padrão" hint="O dia do mês que todo cliente novo já nasce usando. Ex.: com 10, quem entrar hoje vence todo dia 10." sufixo="do mês" valor={dp.dueDay} min={1} max={28} onSalvar={(v) => void atualizarDefaultParams({ dueDay: v })} />
+    <LinhaParam label="Dias de teste grátis" hint="Quanto tempo o cliente usa sem pagar. Ex.: com 7, quem entra hoje tem acesso até o 7º dia; depois cai na cobrança." sufixo=" dia(s)" valor={dp.trialDays} min={0} onSalvar={(v) => void atualizarDefaultParams({ trialDays: v })} />
     <CartaoDev>
       <div style={{ fontSize: 12, color: DEV_TXT2, marginBottom: 8 }}>Aviso automático de fim de teste (chat)</div>
+      <div style={{ fontSize: 11, color: DEV_TXT2, marginBottom: 8, lineHeight: 1.5 }}>Quando o app avisa que o teste está acabando. Ex.: com 2 dias antes e sem repetir, um teste que acaba dia 20 gera um aviso só, no dia 18.</div>
       <div style={{ fontSize: 13, fontWeight: 700, color: '#fff' }}>{tw.diasAntes} dia(s) antes do fim{tw.repetirTodoDia ? ' · repete todo dia' : ' · avisa uma vez'}</div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '12px 0 4px' }}>
         <input type="number" min={1} value={tw.diasAntes} onChange={(e) => void atualizarDefaultParams({ trialWarning: { ...tw, diasAntes: Number(e.target.value) || 1 } })}
@@ -127,7 +131,8 @@ export function SubParametrosAssinatura({ irParaChat }: { irParaChat: () => void
         <span style={{ fontSize: 11.5, color: DEV_TXT2 }}>repetir todo dia</span>
       </div>
     </CartaoDev>
-    <CampoTextoDev label="Texto do aviso" valor={tw.texto} onSalvar={(v) => void atualizarDefaultParams({ trialWarning: { ...tw, texto: v } })} />
+    {/* Build 085: todo campo de parâmetro ganhou explicação curta com exemplo. */}
+    <CampoTextoDev label="Texto do aviso" hint="A mensagem que chega no chat do cliente. Ex.: “Seu teste acaba em 2 dias — escolha um plano pra não perder o acesso.”" valor={tw.texto} onSalvar={(v) => void atualizarDefaultParams({ trialWarning: { ...tw, texto: v } })} />
     {/* Kit L1727: atalho pra as outras mensagens automáticas, sem duplicar tela */}
     <button type="button" onClick={irParaChat} style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'none', border: 'none', color: DEV_ACCENT, fontSize: 11.5, fontWeight: 700, cursor: 'pointer', padding: '4px 2px 0' }}>
       <MessageCircle size={13} /> Ver outras mensagens automáticas do chat
@@ -149,27 +154,27 @@ export function SubParametrosAmbiente() {
   const dp = paramsGlobais(platform)
   return <>
     <TituloTela>Regras que valem pro ambiente de qualquer cliente.</TituloTela>
-    <LinhaParam label="Prazo do pré-cadastro" hint="0 = sem prazo" sufixo=" dia(s)" valor={dp.precadastroMaxDias} min={0} onSalvar={(v) => void atualizarDefaultParams({ precadastroMaxDias: v })} />
-    <LinhaParam label="Exibir/Ocultar — manter últimos (painel adm.)" hint="Quantos registros de cobrança ficam visíveis nas telas agregadas do N0." sufixo=" registro(s)" valor={dp.paymentCardsVisibleCount} min={1} onSalvar={(v) => void atualizarDefaultParams({ paymentCardsVisibleCount: v })} />
+    <LinhaParam label="Prazo do pré-cadastro" hint="Por quantos dias o link de pré-cadastro continua valendo. Ex.: com 7, um link mandado hoje expira daqui a uma semana. 0 = sem prazo." sufixo=" dia(s)" valor={dp.precadastroMaxDias} min={0} onSalvar={(v) => void atualizarDefaultParams({ precadastroMaxDias: v })} />
+    <LinhaParam label="Exibir/Ocultar — manter últimos (painel adm.)" hint="Quantos registros de cobrança ficam visíveis na ficha do cliente antes do “Exibir todos”. Ex.: com 3, aparecem as 3 últimas e o resto fica recolhido." sufixo=" registro(s)" valor={dp.paymentCardsVisibleCount} min={1} onSalvar={(v) => void atualizarDefaultParams({ paymentCardsVisibleCount: v })} />
     {/* 13/09/2026 (versão Ideal): a janela do "nesse ritmo" da frase do
         veredito. Mora aqui, e não no ambiente do cliente, porque é decisão de
         metodologia da plataforma — e é parâmetro, e não constante, por pedido
         explícito do Rafael ("não gosto de nada desse tipo chumbado"). */}
-    <LinhaParam label="Janela da média do ritmo" hint="De quantos dias corridos sai a média que projeta o fim do mês. Testado: 30 erra bem menos que o ritmo do mês corrente nos primeiros dias." sufixo=" dia(s)" valor={dp.janelaMediaDias} min={7} max={90} onSalvar={(v) => void atualizarDefaultParams({ janelaMediaDias: v })} />
+    <LinhaParam label="Janela da média do ritmo" hint="De quantos dias corridos sai a média que projeta o fim do mês no app do cliente. Ex.: com 30, o “nesse ritmo” olha os últimos 30 dias, não só o que já foi gasto neste mês." sufixo=" dia(s)" valor={dp.janelaMediaDias} min={7} max={90} onSalvar={(v) => void atualizarDefaultParams({ janelaMediaDias: v })} />
 
     <SectionLabel dark>Acesso de suporte</SectionLabel>
     <CartaoDev>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
         <div>
           <div style={{ fontSize: 13, fontWeight: 700, color: '#fff' }}>Respeitar autorização de acesso</div>
-          <div style={{ fontSize: 11.5, color: DEV_TXT2, marginTop: 2, lineHeight: 1.45 }}>Ligado: só entra no ambiente do cliente se ele autorizou o acesso de suporte. Desligado: sempre permite entrar.</div>
+          <div style={{ fontSize: 11.5, color: DEV_TXT2, marginTop: 2, lineHeight: 1.45 }}>Ligado: só entra no ambiente do cliente se ele autorizou o acesso de suporte. Ex.: sem a autorização dele, o “Entrar como este cliente” fica bloqueado. Desligado: sempre permite entrar.</div>
         </div>
         <Toggle value={!!dp.respeitarAutorizacaoAcesso} onChange={(v) => void atualizarDefaultParams({ respeitarAutorizacaoAcesso: v })} />
       </div>
     </CartaoDev>
     <CartaoDev>
       <div style={{ fontSize: 13, fontWeight: 700, color: '#fff', marginBottom: 2 }}>Modo de acesso do suporte no ambiente do cliente</div>
-      <div style={{ fontSize: 11.5, color: DEV_TXT2, marginBottom: 10, lineHeight: 1.45 }}>Independente da autorização acima, define o que o suporte pode fazer ao acessar o ambiente de qualquer cliente (via "Entrar como este cliente").</div>
+      <div style={{ fontSize: 11.5, color: DEV_TXT2, marginBottom: 10, lineHeight: 1.45 }}>Independente da autorização acima, define o que o suporte pode fazer dentro do ambiente do cliente. Ex.: em “Somente consulta”, você vê os lançamentos dele mas não consegue editar nem excluir nenhum.</div>
       <div style={{ display: 'flex', gap: 8 }}>
         {MODOS_ACESSO.map((o) => {
           const ativo = (dp.modoAcessoSuporte || 'total') === o.v
@@ -185,6 +190,7 @@ export function SubParametrosAmbiente() {
     <SectionLabel dark>Retenção de dados</SectionLabel>
     <CartaoDev>
       <div style={{ fontSize: 12, color: DEV_TXT2 }}>Depois de bloqueado/encerrado</div>
+      <div style={{ fontSize: 11, color: DEV_TXT2, margin: '3px 0 6px', lineHeight: 1.45 }}>O que acontece com os dados do cliente depois que ele sai. Ex.: em “X dias depois”, com 30, um cliente encerrado hoje ficaria marcado pra exclusão daqui a um mês.</div>
       <div style={{ fontSize: 15, fontWeight: 800, color: '#fff', marginBottom: 10 }}>
         {cleanupModeLabel(dp.cleanupMode)}{dp.cleanupMode === 'days' ? ` (${dp.dataRetentionDays}d)` : ''}
       </div>
@@ -217,14 +223,14 @@ export function SubParametrosChat() {
     void atualizarChatConfig({ businessHours: { ...horarios, [d]: { ...horarios[d], ...patch } } })
   return <>
     <TituloTela>Mensagens automáticas e horário de atendimento do chat de suporte (N0 ↔ N1).</TituloTela>
-    <CampoTextoDev label="Mensagem automática na 1ª mensagem do cliente" valor={chat.autoReplyFirstMessage || ''} onSalvar={(v) => void atualizarChatConfig({ autoReplyFirstMessage: v })} />
-    <CampoTextoDev label="Mensagem fora do horário de atendimento" valor={chat.outOfHoursMessage || ''} onSalvar={(v) => void atualizarChatConfig({ outOfHoursMessage: v })} />
-    <CampoTextoDev label="Mensagem de retomada (follow-up)" valor={chat.followUpMessage || ''} onSalvar={(v) => void atualizarChatConfig({ followUpMessage: v })} linhas={2} />
-    <LinhaParam label="Enviar follow-up depois de" sufixo=" hora(s)" valor={chat.followUpHours || 24} min={1} onSalvar={(v) => void atualizarChatConfig({ followUpHours: v })} />
+    <CampoTextoDev label="Mensagem automática na 1ª mensagem do cliente" hint="Resposta imediata na primeira vez que ele escreve. Ex.: “Recebemos sua mensagem, respondemos em até 1 dia útil.”" valor={chat.autoReplyFirstMessage || ''} onSalvar={(v) => void atualizarChatConfig({ autoReplyFirstMessage: v })} />
+    <CampoTextoDev label="Mensagem fora do horário de atendimento" hint="Sai quando ele escreve fora dos horários abaixo. Ex.: “Estamos fora do horário — respondemos amanhã a partir das 9h.”" valor={chat.outOfHoursMessage || ''} onSalvar={(v) => void atualizarChatConfig({ outOfHoursMessage: v })} />
+    <CampoTextoDev label="Mensagem de retomada (follow-up)" hint="Sai depois das horas configuradas abaixo, sem resposta. Ex.: “Ainda precisa de ajuda com aquilo?”" valor={chat.followUpMessage || ''} onSalvar={(v) => void atualizarChatConfig({ followUpMessage: v })} linhas={2} />
+    <LinhaParam label="Enviar follow-up depois de" hint="Quanto tempo sem resposta até o app mandar a mensagem de retomada. Ex.: com 24, quem escreveu às 9h de terça recebe o follow-up às 9h de quarta." sufixo=" hora(s)" valor={chat.followUpHours || 24} min={1} onSalvar={(v) => void atualizarChatConfig({ followUpHours: v })} />
     {/* Kit L2532 — faltava aqui até 10/09/2026 (Decisão 58). Vale pros dois
         lados da conversa (cliente e suporte): é o limite que o botão de anexo
         do chat aplica antes de guardar a imagem (`ChatConversa.tsx`). */}
-    <LinhaParam label="Tamanho máximo de imagem anexada" sufixo=" KB" valor={chat.maxImageKB || 3072} min={64} max={10240} onSalvar={(v) => void atualizarChatConfig({ maxImageKB: v })} />
+    <LinhaParam label="Tamanho máximo de imagem anexada" hint="O limite por imagem no chat, dos dois lados. Ex.: com 3072 KB (3 MB), um print de celular passa; uma foto original da câmera pode ser recusada." sufixo=" KB" valor={chat.maxImageKB || 3072} min={64} max={10240} onSalvar={(v) => void atualizarChatConfig({ maxImageKB: v })} />
 
     <SectionLabel dark>Horário de atendimento</SectionLabel>
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 10 }}>
@@ -262,7 +268,7 @@ export function SubParametrosAlertas({ notify }: { notify: (m: string) => void }
     <TituloTela>Essas notificações avisam sobre as assinaturas SaaS das empresas. Sem backend (Backlog 028) elas ficam guardadas como preferência — nada é disparado por aqui ainda.</TituloTela>
     <CartaoDev>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div><div style={{ fontWeight: 700, fontSize: 14, color: '#fff' }}>Pagamento a vencer</div><div style={{ fontSize: 11.5, color: DEV_TXT2 }}>Avisa antes do vencimento</div></div>
+        <div><div style={{ fontWeight: 700, fontSize: 14, color: '#fff' }}>Pagamento a vencer</div><div style={{ fontSize: 11.5, color: DEV_TXT2, lineHeight: 1.45 }}>Avisa você, antes do vencimento do cliente. Ex.: com 3 dias, uma mensalidade que vence dia 10 te avisa no dia 7.</div></div>
         <Toggle value={s.vencendo.enabled} onChange={(v) => set('vencendo', { enabled: v })} />
       </div>
       {s.vencendo.enabled && <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -273,7 +279,7 @@ export function SubParametrosAlertas({ notify }: { notify: (m: string) => void }
     </CartaoDev>
     <CartaoDev>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div><div style={{ fontWeight: 700, fontSize: 14, color: '#fff' }}>Pagamento em atraso</div><div style={{ fontSize: 11.5, color: DEV_TXT2 }}>Avisa quando vencer e continuar pendente</div></div>
+        <div><div style={{ fontWeight: 700, fontSize: 14, color: '#fff' }}>Pagamento em atraso</div><div style={{ fontSize: 11.5, color: DEV_TXT2, lineHeight: 1.45 }}>Avisa enquanto a cobrança vencida não for quitada. Ex.: em “Diário”, você recebe um lembrete por dia até o cliente pagar.</div></div>
         <Toggle value={s.atraso.enabled} onChange={(v) => set('atraso', { enabled: v })} />
       </div>
       {s.atraso.enabled && <div style={{ marginTop: 12 }}>
@@ -282,7 +288,7 @@ export function SubParametrosAlertas({ notify }: { notify: (m: string) => void }
     </CartaoDev>
     <CartaoDev>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div><div style={{ fontWeight: 700, fontSize: 14, color: '#fff' }}>Resumo financeiro</div><div style={{ fontSize: 11.5, color: DEV_TXT2 }}>Envia um resumo periódico do financeiro</div></div>
+        <div><div style={{ fontWeight: 700, fontSize: 14, color: '#fff' }}>Resumo financeiro</div><div style={{ fontSize: 11.5, color: DEV_TXT2, lineHeight: 1.45 }}>Um apanhado de receita e inadimplência, de tempos em tempos. Ex.: em “Mensal”, chega um resumo por mês.</div></div>
         <Toggle value={s.resumo.enabled} onChange={(v) => set('resumo', { enabled: v })} />
       </div>
       {s.resumo.enabled && <div style={{ marginTop: 12 }}>
@@ -360,19 +366,20 @@ export function SubParametrosMarca({ notify }: { notify: (m: string) => void }) 
     />
     <CartaoDev>
       <div style={{ fontSize: 12, color: DEV_TXT2, marginBottom: 8 }}>Alinhamento na barra</div>
+      <div style={{ fontSize: 11, color: DEV_TXT2, marginBottom: 8, lineHeight: 1.5 }}>Onde a logo fica no cabeçalho do app do cliente. Ex.: em “Centro”, ela sai da esquerda e vai pro meio, entre os ícones.</div>
       <Segmented
         value={b.appLogadoPos || 'esquerda'}
         onChange={(v) => void atualizarBrandingN0({ appLogadoPos: v })}
         options={[{ value: 'esquerda', label: 'Esquerda' }, { value: 'centro', label: 'Centro' }, { value: 'direita', label: 'Direita' }]}
       />
     </CartaoDev>
-    <LinhaParam label="Altura da logo" hint="Altura em pixels; a largura acompanha sozinha" sufixo="px" min={12} max={64}
+    <LinhaParam label="Altura da logo" hint="Altura em pixels; a largura acompanha sozinha. Ex.: com 22px a logo fica do tamanho do nome do app ao lado; com 40px, o dobro."  sufixo="px" min={12} max={64}
       valor={b.appLogadoAltura ?? BRANDING_APP_LOGADO_PADRAO.appLogadoAltura}
       onSalvar={(v) => void atualizarBrandingN0({ appLogadoAltura: Math.min(64, Math.max(12, v)) })} />
-    <LinhaParam label="Espaçamento vertical" hint="Respiro acima e abaixo, dentro da barra" sufixo="px" min={0} max={40}
+    <LinhaParam label="Espaçamento vertical" hint="Respiro acima e abaixo, dentro da barra. Ex.: com 8px a barra fica compacta; com 20px ela ocupa quase o dobro da altura."  sufixo="px" min={0} max={40}
       valor={b.appLogadoEspacoV ?? BRANDING_APP_LOGADO_PADRAO.appLogadoEspacoV}
       onSalvar={(v) => void atualizarBrandingN0({ appLogadoEspacoV: Math.min(40, Math.max(0, v)) })} />
-    <LinhaParam label="Espaçamento lateral" hint="Respiro nas laterais, dentro da barra" sufixo="px" min={0} max={40}
+    <LinhaParam label="Espaçamento lateral" hint="Respiro nas laterais, dentro da barra. Ex.: com 14px a logo começa colada na margem do app; com 30px ela recua."  sufixo="px" min={0} max={40}
       valor={b.appLogadoEspacoH ?? BRANDING_APP_LOGADO_PADRAO.appLogadoEspacoH}
       onSalvar={(v) => void atualizarBrandingN0({ appLogadoEspacoH: Math.min(40, Math.max(0, v)) })} />
     <div style={{ borderRadius: 14, marginBottom: 10, background: '#141319', border: '1px solid rgba(255,255,255,0.08)', overflow: 'hidden' }}>
@@ -416,10 +423,11 @@ export function SubParametrosMarca({ notify }: { notify: (m: string) => void }) 
     <SectionLabel dark>Canal de suporte</SectionLabel>
     <CartaoDev>
       <div style={{ fontSize: 12, color: DEV_TXT2, marginBottom: 6 }}>Número do WhatsApp (só dígitos, com DDI)</div>
+      <div style={{ fontSize: 11, color: DEV_TXT2, marginBottom: 6, lineHeight: 1.5 }}>É o número que abre no “Contato” do site. Ex.: 5511990000000 (55 + DDD + número, sem traço nem parêntese).</div>
       <input value={marca.whatsappNumero ?? ''} onChange={(e) => void salvarMarcaSite({ marcaWhatsappNumero: e.target.value })}
         style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 10, border: '1.5px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.05)', color: '#fff', fontSize: 14, outline: 'none' }} />
     </CartaoDev>
-    <CampoTextoDev label="Mensagem pré-preenchida" valor={marca.whatsappMensagemPadrao ?? ''} onSalvar={(v) => void salvarMarcaSite({ marcaWhatsappMensagemPadrao: v })} linhas={2} />
+    <CampoTextoDev label="Mensagem pré-preenchida" hint="Texto que já vem digitado ao abrir a conversa. Ex.: “Olá! Vim pelo site do MorfoFinP.”" valor={marca.whatsappMensagemPadrao ?? ''} onSalvar={(v) => void salvarMarcaSite({ marcaWhatsappMensagemPadrao: v })} linhas={2} />
   </>
 }
 

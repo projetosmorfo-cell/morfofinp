@@ -12,6 +12,11 @@ import { emTituloCaso } from '../tituloCaso'
 export const RODAPE_ACENTO = '#8B7CF6' // DEV_ACCENT do DevApp
 export const RODAPE_INATIVO = '#7A7686'
 export const RODAPE_FUNDO = '#141319' // DEV_BG do DevApp
+/* Build 085: a pílula do item ATIVO. O N0 é escuro fixo por definição
+   (Decisão 50), então o valor dele fica aqui; o N1 lê o token de tema
+   `--rodape-ativo-pilula` — a regra da build 033 continua valendo, esta peça
+   compartilhada não pode ter UMA cor servindo aos dois lados. */
+export const RODAPE_PILULA = 'rgba(139, 124, 246, 0.18)'
 
 /* 11/09/2026 — a barra do N1 não seguia o tema claro: ficava sempre escura.
    Causa exata: `nav.rodape` no `index.css` SEMPRE apontou pras variáveis de
@@ -26,6 +31,7 @@ const CORES_TEMA = {
   borda: 'var(--rodape-borda, var(--borda))',
   acento: 'var(--rodape-acento, #8B7CF6)',
   inativo: 'var(--rodape-inativo, var(--texto-fraco))',
+  pilula: 'var(--rodape-ativo-pilula, transparent)',
 }
 
 export interface AbaRodape<K extends string> {
@@ -54,7 +60,7 @@ export default function RodapeAbas<K extends string>({ abas, ativa, onTrocar, cl
   dark?: boolean
 }) {
   const cores = dark
-    ? { fundo: RODAPE_FUNDO, borda: 'rgba(255,255,255,0.08)', acento: RODAPE_ACENTO, inativo: RODAPE_INATIVO }
+    ? { fundo: RODAPE_FUNDO, borda: 'rgba(255,255,255,0.08)', acento: RODAPE_ACENTO, inativo: RODAPE_INATIVO, pilula: RODAPE_PILULA }
     : CORES_TEMA
   const ref = useRef<HTMLElement>(null)
   // Publica a altura real da barra em `--rodape-altura` (Decisão 51): os
@@ -111,13 +117,18 @@ export default function RodapeAbas<K extends string>({ abas, ativa, onTrocar, cl
               alignItems: 'center',
               gap: 3,
               border: 'none',
-              background: 'transparent',
+              /* Build 085: a PÍLULA do item ativo. É o "um tom a mais" que o
+                 Rafael pediu — fundo tingido com o próprio acento, não uma
+                 quinta cor. O item inativo continua sem fundo nenhum, então a
+                 barra não vira um tabuleiro. */
+              background: ativo ? cores.pilula : 'transparent',
+              borderRadius: 12,
               cursor: 'pointer',
               padding: '7px 2px',
             }}
           >
-            <Icone width={20} height={20} color={ativo ? cores.acento : cores.inativo} strokeWidth={ativo ? 2.4 : 2} />
-            <span style={{ fontSize: 9.5, fontWeight: 700, color: ativo ? cores.acento : cores.inativo }}>{emTituloCaso(label)}</span>
+            <Icone width={20} height={20} color={ativo ? cores.acento : cores.inativo} strokeWidth={ativo ? 2.6 : 1.9} />
+            <span style={{ fontSize: 9.5, fontWeight: ativo ? 800 : 600, color: ativo ? cores.acento : cores.inativo }}>{emTituloCaso(label)}</span>
             {extra}
           </button>
         )

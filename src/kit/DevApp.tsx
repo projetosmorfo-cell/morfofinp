@@ -24,6 +24,7 @@ import { sairN0 } from './authN0'
 import { useTodosPlanos, criarPlano, atualizarPlano, inativarPlano, reativarPlano, recursosAutomaticos, PLANO_PADRAO_KIT, type Plano } from './planos'
 import SiteParametrosN0 from './SiteParametrosN0'
 import PadraoCategoriasN0 from './PadraoCategoriasN0'
+import ParametrosNotificacaoN0 from './ParametrosNotificacaoN0'
 import { contarLancamentosFicticios, apagarTodosDadosDeTeste, temDadosDeTesteNaPlataforma } from './massaTeste'
 import RodapeAbas from './RodapeAbas'
 import IndicadoresDevScreen from './indicadoresKit'
@@ -3229,7 +3230,7 @@ function SubParametrosPermissoes({ onVoltarSub }: { onVoltarSub: () => void }) {
 
 type SubParametros = 'meusDados' | 'alertas' | 'assinatura' | 'ambiente' | 'chat' | 'testesCliente' | 'limpezasCliente'
   | 'marca' | 'urls' | 'planos' | 'usuarios' | 'permissoes' | 'testesMorfo' | 'limpezasMorfo' | 'layout' | 'site'
-  | 'padraoCategorias' | null
+  | 'padraoCategorias' | 'notificacoes' | null
 
 // Casca comum das telas novas de Parâmetros (10/09/2026, Decisão 55 — Parte
 // B): cabeçalho com "‹ Voltar" + a faixa de aviso curta, no mesmo padrão que
@@ -3334,6 +3335,9 @@ function AbaParametros({ podeVerFuncN0, subInicial }: { podeVerFuncN0: (k: strin
   /* Item 7 (12/09/2026): as configurações de Categorias/Grupos/ícones do N1,
      aqui como padrão da plataforma. Ver `padraoCategorias.ts`. */
   if (sub === 'padraoCategorias') return <TelaGrupoN0 titulo="Categorias e Grupos (padrão)" subtitulo="Padrão que os ambientes não editados recebem" onVoltarSub={voltar} render={(n) => <PadraoCategoriasN0 notify={n} />} />
+  /* Build 080 (fase 5): TODAS as regras da leitura de notificação bancária,
+     com o alcance escolhido no salvamento. Ver `ParametrosNotificacaoN0.tsx`. */
+  if (sub === 'notificacoes') return <TelaGrupoN0 titulo="Notificações bancárias" subtitulo="Regras da leitura e alcance da publicação" onVoltarSub={voltar} render={(n) => <ParametrosNotificacaoN0 notify={n} />} />
 
   // Kit L509-L513 / L1600-L1700: os itens de Parâmetros agrupados pelas MESMAS
   // 3 sessões da árvore de permissão (`FUNCOES_PERFIL_N0`), na ordem do Kit.
@@ -3344,6 +3348,7 @@ function AbaParametros({ podeVerFuncN0, subInicial }: { podeVerFuncN0: (k: strin
     { sessao: 'Ambiente do Cliente', chave: 'ambiente', titulo: 'Ambiente dos Clientes', hint: 'Pré-cadastro, acesso de suporte (autorização e modo) e retenção de dados' },
     { sessao: 'Ambiente do Cliente', chave: 'chat', titulo: 'Gerenciar Chat', hint: 'Mensagem automática, follow-up e horário de atendimento por dia' },
     { sessao: 'Ambiente do Cliente', chave: 'padraoCategorias', titulo: 'Categorias e Grupos (padrão)', hint: 'Cadastro-modelo de grupos, categorias, metas e ícones — ambientes não editados recebem' },
+    { sessao: 'Ambiente do Cliente', chave: 'notificacoes', titulo: 'Notificações bancárias', hint: 'Regras da leitura de notificação — inclusive as internas — e o alcance de cada publicação' },
     { sessao: 'Ambiente do Cliente', chave: 'testesCliente', titulo: 'Gerar Teste no Cliente', hint: 'Massa de dados fictícios dentro do ambiente de um cliente (só ambiente vazio)' },
     { sessao: 'Ambiente do Cliente', chave: 'limpezasCliente', titulo: 'Limpar Dados do Cliente', hint: 'Apaga dados de teste ou reais do ambiente — checagem dupla' },
     { sessao: 'Ambiente MorfoFinP ADM', chave: 'marca', titulo: 'Marca', hint: 'Logos da Morfo e do produto por contexto + canal de suporte (WhatsApp)' },

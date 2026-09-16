@@ -10,6 +10,7 @@ import { PopupAceitavelCategoria, PopupMetaGrupo } from '../components/EdicaoRap
 import { GraficoMetasGrupos, type FatiaGrupo } from '../components/Graficos'
 import { PencilSquareIcon } from '@heroicons/react/24/outline'
 import BarraMeta, { fmtBRL as fmt } from '../components/BarraMeta'
+import { fmtSinalExplicito } from '../formatoMoeda'
 import SeletorMes from '../components/SeletorMes'
 import ListaLancamentosCategoria from '../components/ListaLancamentosCategoria'
 import { Icone } from '../icones'
@@ -18,7 +19,6 @@ import TituloTelaN1 from '../kit/CabecalhoN1'
 import { InfoDot } from '../kit/PadraoUI'
 import { calcularProjecao, explicacaoRitmo, fraseVeredito, linhaAporte } from '../projecao'
 import { paramsGlobais, usePlatformN0 } from '../kit/kitPlatform'
-import { useModoVisao } from '../configuracaoIcones'
 import GraficosPlanejamento, { type ModeloGrafico } from '../components/GraficosPlanejamento'
 import { ExportSheet, type ExportRow } from '../kit/ExportSheet'
 import { lerDoAmbiente } from '../ambiente'
@@ -26,6 +26,7 @@ import { baseMetaDoMes } from '../baseMeta'
 import { jaAconteceu } from '../statusPagamento'
 import { SUBTITULO_PLANEJAMENTO, EXPLICACAO_PLANEJAMENTO } from '../subtitulosTelas'
 import AvisoBaseMetaZerada from '../components/AvisoBaseMetaZerada'
+import Legenda from '../components/Legenda'
 
 /* A linha de introdução dos cards de grupo: quanto é o 100% e quanto os
    percentuais somam de verdade. Silêncio quando fecha; alerta quando não. */
@@ -130,8 +131,8 @@ export default function Planejamento({ mes, aoMudarMes, aoAbrirLancamento, aoAbr
 
   const [grupoAberto, setGrupoAberto] = useState<string | null>(null)
   const [exportOpen, setExportOpen] = useState(false) /* G44 regra 11b */
-  /* Aba 2 (Gráficos) — só na versão Ideal; Light e Premium continuam com a
-     árvore de sempre, sem nem ver o seletor de abas. */
+  /* Aba 2 (Gráficos) — nasceu restrita à versão Ideal (build 058). Com o fim
+     das versões (build 087) o seletor de abas é de todo mundo. */
   const [abaPlan, setAbaPlan] = useState<'arvore' | 'graficos'>('arvore')
   const [modeloGrafico, setModeloGrafico] = useState<ModeloGrafico>('colunas')
   const [grupoFiltroGrafico, setGrupoFiltroGrafico] = useState<string | null>(null)
@@ -153,7 +154,6 @@ export default function Planejamento({ mes, aoMudarMes, aoAbrirLancamento, aoAbr
      da Ideal ela não aparece: Light e Premium não foram tocadas. */
   const contasParaProjecao = useLiveQuery(() => lerDoAmbiente(db.contas.toArray()), [])
   const platformProjecao = usePlatformN0()
-  const modoVisaoAtual = useModoVisao()
   const { pctGrupo, pctCategoria } = useConfiguracaoIcones()
 
   if (!categorias || !grupos || !lancamentosDoMes || !lancamentosTodos) return null
@@ -310,6 +310,11 @@ export default function Planejamento({ mes, aoMudarMes, aoAbrirLancamento, aoAbr
      de cada lançamento continua a um toque, na cascata. */
   function linhaTotais(rotulo: string, classe: Classe, t: Totais, icone?: ReactNode, acao?: ReactNode) {
     const movimento = t.realizado + t.previsto
+    /* O VALOR RESULTANTE de qualquer barra desta tela (build 086): o que ainda
+       cabe (positivo) ou o que passou (negativo) em relação ao planejado. Sem
+       planejado não existe resultado — mostrar `−movimento` ali diria que tudo
+       que se gastou "estourou" algo que nunca foi planejado. */
+    const resultado = t.planejado > 0 ? t.planejado - movimento : undefined
     if (classe === 'saida') {
       return (
         <BarraMeta
@@ -320,6 +325,7 @@ export default function Planejamento({ mes, aoMudarMes, aoAbrirLancamento, aoAbr
           mostrarDestaque={false}
           icone={icone}
           acao={acao}
+          resultado={resultado}
         />
       )
     }
@@ -327,6 +333,10 @@ export default function Planejamento({ mes, aoMudarMes, aoAbrirLancamento, aoAbr
     // cor (BarraMeta pintaria de vermelho passar da meta, o que aqui seria
     // uma leitura errada: receber mais que o planejado é notícia boa).
     const pct = t.planejado > 0 ? Math.min(100, (movimento / t.planejado) * 100) : movimento > 0 ? 100 : 0
+    /* Na ENTRADA o sinal se inverte: receber MAIS que o planejado é notícia
+       boa, então o positivo é o excedente — nunca `planejado − movimento`,
+       que pintaria de vermelho justamente o mês em que entrou mais dinheiro. */
+    const resultadoEntrada = t.planejado > 0 ? movimento - t.planejado : undefined
     return (
       <div>
         <div className={`linha linha-barra-topo ${icone ? 'linha-cabecalho-grupo' : ''}`} style={{ border: 'none', padding: 0 }}>
@@ -339,15 +349,27 @@ export default function Planejamento({ mes, aoMudarMes, aoAbrirLancamento, aoAbr
           </span>
           {acao}
         </div>
-        <div className="barra-meta">
-          <div className="fill" style={{ width: `${pct}%` }} />
-          {t.planejado > 0 && <div className="marcador" style={{ left: '100%' }} />}
+        <div className="barra-meta-linha">
+          <div className="barra-meta">
+            <div className="fill" style={{ width: `${pct}%` }} />
+            {t.planejado > 0 && <div className="marcador" style={{ left: '100%' }} />}
+          </div>
+          {resultadoEntrada !== undefined && (
+            <span
+              className={`barra-meta-resultado ${resultadoEntrada < 0 ? 'negativo' : 'positivo'}`}
+              data-testid="barra-resultado"
+            >
+              {fmtSinalExplicito(resultadoEntrada)}
+            </span>
+          )}
         </div>
       </div>
     )
   }
 
-  const blocoVeredito = modoVisaoAtual === 'ideal' ? (() => {
+  /* Build 087: este bloco era condicionado ao modo 'completa'. Com o fim das
+     versões ele vale sempre — a tela Planejamento é de todo mundo. */
+  const blocoVeredito = (() => {
         const proj = calcularProjecao({
           lancamentos: lancamentosTodos ?? [],
           categorias: categorias ?? [],
@@ -375,7 +397,7 @@ export default function Planejamento({ mes, aoMudarMes, aoAbrirLancamento, aoAbr
             {aporte && <p className="linha-aporte ideal-t4">{aporte}</p>}
           </div>
         )
-      })() : null
+      })()
 
   return (
     <>
@@ -443,18 +465,16 @@ export default function Planejamento({ mes, aoMudarMes, aoAbrirLancamento, aoAbr
 
       {/* Base zerada não pode passar em silêncio: sem ela toda meta vira
           R$ 0,00 e o donut desenha contra zero (bug real de 12/09/2026). */}
-      {modoVisaoAtual === 'ideal' && (
-        <div className="abas-planejamento" role="tablist" aria-label="Modo do Planejamento">
-          <button type="button" role="tab" aria-selected={abaPlan === 'arvore'}
-            className={abaPlan === 'arvore' ? 'ativa' : ''}
-            onClick={() => setAbaPlan('arvore')} data-testid="aba-arvore">Árvore</button>
-          <button type="button" role="tab" aria-selected={abaPlan === 'graficos'}
-            className={abaPlan === 'graficos' ? 'ativa' : ''}
-            onClick={() => setAbaPlan('graficos')} data-testid="aba-graficos">Gráficos</button>
-        </div>
-      )}
+      <div className="abas-planejamento" role="tablist" aria-label="Modo do Planejamento">
+        <button type="button" role="tab" aria-selected={abaPlan === 'arvore'}
+          className={abaPlan === 'arvore' ? 'ativa' : ''}
+          onClick={() => setAbaPlan('arvore')} data-testid="aba-arvore">Árvore</button>
+        <button type="button" role="tab" aria-selected={abaPlan === 'graficos'}
+          className={abaPlan === 'graficos' ? 'ativa' : ''}
+          onClick={() => setAbaPlan('graficos')} data-testid="aba-graficos">Gráficos</button>
+      </div>
 
-      {modoVisaoAtual === 'ideal' && abaPlan === 'graficos' ? (
+      {abaPlan === 'graficos' ? (
         <GraficosPlanejamento
           porGrupo={porGrupo}
           modelo={modeloGrafico}
@@ -486,50 +506,41 @@ export default function Planejamento({ mes, aoMudarMes, aoAbrirLancamento, aoAbr
       <div className="cartao" data-testid="card-mes-planejamento">
         <div className="total-geral">{linhaTotais('Entradas', 'entrada', totalEntradas)}</div>
         <div className="total-geral" style={{ marginTop: 10 }}>{linhaTotais('Saídas', 'saida', totalSaidas)}</div>
-        {/* Item 10 (16/09/2026), pedido do Rafael: o card de 3 linhas
-            "planejada/até agora/projetada" saiu — virou uma legenda de cor,
-            explicando o que cada cor das barras de Entradas/Saídas acima
-            representa (mesmo vocabulário de cor de `BarraIdeal`/da régua do
-            Planejamento: realizado azul, comprometido âmbar, o que sobra da
-            meta é o trilho — margem —, vermelho quando estoura). */}
-        <div className="legenda-cores-planejamento" style={{ marginTop: 10 }}>
-          <span className="legenda-cores-item">
-            <span className="legenda-cores-bolinha" style={{ background: 'var(--azul)' }} />
-            Já realizado
-          </span>
-          <span className="legenda-cores-item">
-            <span className="legenda-cores-bolinha" style={{ background: 'var(--ideal-ambar)' }} />
-            Comprometido, ainda não realizado
-          </span>
-          <span className="legenda-cores-item">
-            <span className="legenda-cores-bolinha" style={{ background: 'var(--borda)' }} />
-            Margem — ainda cabe na meta
-          </span>
-          <span className="legenda-cores-item">
-            <span className="legenda-cores-bolinha" style={{ background: 'var(--vermelho)' }} />
-            Estourou a meta
-          </span>
-        </div>
-        {totalEntradas.planejado === 0 && (
-          /* TEXTO CORRIGIDO (13/09/2026). O anterior dizia "falta dizer quanto
-             espera receber nas categorias de Receita" e o Rafael leu como se
-             ele ainda precisasse marcar alguma coisa — sendo que o Salário dele
-             JÁ está marcado como receita fixa. São dois campos diferentes e o
-             texto não distinguia:
-               • a FLAG "é receita fixa" define a base das metas (o 100%) —
-                 está marcada, e é por isso que as metas por grupo funcionam;
-               • "quanto espera receber por mês" (`esperadoMensal`) é o
-                 planejado de ENTRADA — é este que está vazio, e só ele afeta
-                 a linha "sobra planejada".
-             Agora o texto diz qual é qual e mostra que a base está de pé —
-             em duas frases, não num parágrafo (a palavra-chave da versão
-             Ideal continua sendo limpeza). */
-          <p className="texto-fraco texto-quebra" style={{ margin: '8px 0 0', fontSize: 11.5 }}>
-            Nenhuma categoria de receita tem “quanto espera receber por mês” preenchido — por isso a
-            linha “planejada” só conta o que está previsto gastar. Esse campo é diferente da flag de
-            receita fixa, que já está marcada e é o que forma a base das metas ({fmt(baseMetaEmReais)}).
-          </p>
-        )}
+        {/* Item 10 (16/09/2026): o card de 3 linhas "planejada/até agora/
+            projetada" tinha virado uma legenda de cor escrita à mão aqui.
+            Na build 084 ela virou a peça única `Legenda`, RECOLHIDA e no fim
+            do card — pedido do Rafael de que toda legenda do app seja assim.
+            As entradas passaram a vir de `legendaBarras.ts`, o mesmo módulo
+            que nomeia os tokens que `.barra-meta` pinta. */}
+        {/* TEXTO CORRIGIDO (13/09/2026). O anterior dizia "falta dizer quanto
+            espera receber nas categorias de Receita" e o Rafael leu como se
+            ele ainda precisasse marcar alguma coisa — sendo que o Salário dele
+            JÁ está marcado como receita fixa. São dois campos diferentes e o
+            texto não distinguia:
+              • a FLAG "é receita fixa" define a base das metas (o 100%) —
+                está marcada, e é por isso que as metas por grupo funcionam;
+              • "quanto espera receber por mês" (`esperadoMensal`) é o
+                planejado de ENTRADA — é este que está vazio, e só ele afeta
+                a linha "sobra planejada".
+
+            BUILD 085 — o parágrafo saiu do corpo do card e passou a viver
+            DENTRO do recolhível da legenda (`antes`), a pedido do Rafael:
+            *"no planejamento esse conteúdo no card tbm deve ser recolhível,
+            pra padronizar todas as telas"*. Não ganhou bloco próprio porque a
+            regra da build 084 é clara — um card, um recolhível. Fechado, o
+            card mostra só a linha "Legenda e observações". */}
+        <Legenda
+          familias={['meta']}
+          testid="legenda-card-mes"
+          rotulo={totalEntradas.planejado === 0 ? 'Legenda e observações' : 'Legenda'}
+          antes={totalEntradas.planejado === 0 ? (
+            <p className="texto-fraco texto-quebra" data-testid="aviso-esperado-mensal" style={{ margin: '0 0 8px', fontSize: 11.5 }}>
+              Nenhuma categoria de receita tem “quanto espera receber por mês” preenchido — por isso a
+              linha “planejada” só conta o que está previsto gastar. Esse campo é diferente da flag de
+              receita fixa, que já está marcada e é o que forma a base das metas ({fmt(baseMetaEmReais)}).
+            </p>
+          ) : undefined}
+        />
       </div>
 
       {porGrupo.map(({ grupo, tipo: tipoGrupo, icone, iconeEstilo, iconeCor, itens, totalGrupo }) => {
@@ -671,6 +682,29 @@ export default function Planejamento({ mes, aoMudarMes, aoAbrirLancamento, aoAbr
                     <div className="pct-grupo-a1">
                       <span className="numero" data-testid={`pct-card-${grupo}`}>
                         {Number(percentualDoGrupo(grupo).toFixed(2))}%
+                        {/* O PERCENTUAL RESULTANTE, entre parênteses ao lado do
+                            percentual do plano (build 086): quanto o grupo
+                            excedeu ou ainda tem de folga EM RELAÇÃO AO
+                            REALIZADO. O percentual grande é a decisão (quanto
+                            do 100% este grupo leva); este é o resultado dela
+                            neste mês. Sem realizado não há "em relação a quê",
+                            então ele some — nunca divide por zero. */}
+                        {(() => {
+                          const realizadoGrupo = totalGrupo.realizado + totalGrupo.previsto
+                          const metaGrupo = metaEmReaisDoGrupo(grupo)
+                          if (metaGrupo <= 0 || realizadoGrupo <= 0.005) return null
+                          const delta = ((metaGrupo - realizadoGrupo) / realizadoGrupo) * 100
+                          if (Math.abs(delta) < 0.5) return null
+                          const sobra = delta > 0
+                          return (
+                            <span
+                              className={`pct-grupo-delta ${sobra ? 'valor-pos' : 'valor-neg'}`}
+                              data-testid={`pct-delta-${grupo}`}
+                            >
+                              {' '}({sobra ? '↑' : '↓'} {Math.abs(delta).toFixed(0)}%)
+                            </span>
+                          )
+                        })()}
                       </span>
                       <span className="texto-fraco">{fmt(metaEmReaisDoGrupo(grupo))}</span>
                     </div>
@@ -814,6 +848,11 @@ export default function Planejamento({ mes, aoMudarMes, aoAbrirLancamento, aoAbr
                   </div>
                 )}
               </div>
+            )}
+            {/* A legenda fica FORA da `.linha-expansivel` do cabeçalho: dentro
+                dela, tocar em "Legenda" também abriria/fecharia o grupo. */}
+            {temMovimentoNoGrupo && (
+              <Legenda familias={['meta']} testid={`legenda-grupo-${grupo}`} />
             )}
           </div>
         )

@@ -8,6 +8,7 @@ import MemoriaDescricao from './MemoriaDescricao'
 import { lerDoAmbiente, marcaDoAmbiente } from '../ambiente'
 import { hojeEfetivoISO } from '../hojeSimulado'
 import { janelaFatura } from '../faturaCiclo'
+import { desvincularLancamento } from '../vinculoNotificacao'
 
 // `hoje()` continua na data REAL do aparelho, de propósito (decisão da Etapa
 // 7: prefill de formulário fica fora da simulação de data, só status/
@@ -88,11 +89,32 @@ export default function DetalheLancamento({
     valor?: number
     tipo?: 'saida' | 'entrada'
     descricaoOriginal?: string
+    /* 16/09/2026 — a leitura de notificação passou a distinguir transação
+       AGENDADA de transação CONCLUÍDA (ver `src/parseNotificacao.ts`): o
+       banco avisa "está agendada pra amanhã" e depois "foi concluída". Uma
+       agendada abre com "já foi pago" DESMARCADO, porque ainda não
+       aconteceu. `undefined` mantém o padrão de sempre (marcado). */
+    pago?: boolean
+    /* true quando o lançamento veio de uma NOTIFICAÇÃO e nenhuma conta da
+       carteira casou com o banco que a postou. Aí o campo "Pago com" abre
+       literalmente EM BRANCO, com um placeholder, e salvar exige escolher —
+       em vez do padrão normal do formulário, que é assumir a primeira conta
+       da lista. Regra literal do Rafael (16/09/2026): "quando não existir,
+       trazer o campo em branco". Vale SÓ neste caminho; criar lançamento
+       pela tela continua funcionando exatamente como antes. */
+    contaEmBranco?: boolean
+    /* Conta da carteira que casou com o app que postou a notificação.
+       `undefined` = nenhuma casou com certeza e o campo abre EM BRANCO —
+       regra literal do Rafael, nunca chutar conta. Quem entrega isso pro
+       formulário é `contaIdSugerida`; fica aqui junto só pra sugestão ser um
+       objeto só. */
+    contaId?: number
   }
   // Chamado uma vez, só quando o lançamento foi gravado com sucesso (nunca
   // ao cancelar/fechar/excluir) — usado pela tela de Notificações bancárias
-  // pra marcar a notificação pendente como "confirmada".
-  aoSalvarComSucesso?: () => void
+  // pra marcar a notificação pendente como "confirmada" e (build 080) pra
+  // aprender o de/para a partir do que foi escolhido aqui.
+  aoSalvarComSucesso?: (escolha: { descricao: string; categoriaId?: number; contaId?: number }) => void
   onFechar: () => void
 }) {
   const categorias = useLiveQuery(() => lerDoAmbiente(db.categorias.orderBy('nome').toArray()), [])
@@ -117,6 +139,12 @@ export default function DetalheLancamento({
      com todos os campos já preenchidos. "Cancelar clonagem" volta a editar o
      original, sem ter gravado coisa nenhuma. */
   const [clonando, setClonando] = useState(!!abrirClonando)
+  /* Painel discreto de "dados de vínculo" (build 080) — recolhido por padrão. */
+  const [mostrarVinculo, setMostrarVinculo] = useState(false)
+  /* Desvincular (build 081) — confirmação em dois toques e o aviso do que NÃO
+     foi mexido, na própria tela. */
+  const [confirmandoDesvinculo, setConfirmandoDesvinculo] = useState(false)
+  const [desvincularAviso, setDesvincularAviso] = useState<string | null>(null)
   const editando = alvoId != null && !clonando
   const ehTransferenciaExistente = !!original?.transferenciaId
   const [carregado, setCarregado] = useState(false)
@@ -131,6 +159,9 @@ export default function DetalheLancamento({
   // Fica fixo desde a abertura do formulário: editar `descricao` depois
   // NUNCA muda isso (é o mesmo princípio de imutabilidade da Decisão 24).
   const descricaoOriginalFixa = sugestao?.descricaoOriginal
+  /* Só vale na CRIAÇÃO vinda de notificação sem conta casada (ver
+     `sugestao.contaEmBranco`). Na edição de lançamento existente, nunca. */
+  const contaEmBranco = !!sugestao?.contaEmBranco && alvoId == null
   // Só usados quando tipo === 'transferencia' — a transferência sempre
   // envolve duas contas (origem/destino) e agora também duas categorias
   // independentes (podem ser iguais ou diferentes, ponto 3 do feedback).
@@ -138,7 +169,7 @@ export default function DetalheLancamento({
   const [contaDestinoId, setContaDestinoId] = useState<number | ''>('')
   const [categoriaOrigemId, setCategoriaOrigemId] = useState<number | ''>('')
   const [categoriaDestinoId, setCategoriaDestinoId] = useState<number | ''>('')
-  const [pago, setPago] = useState(true)
+  const [pago, setPago] = useState(sugestao?.pago ?? true)
   /* Item 13 (16/09/2026): o padrão de "já foi pago/recebido" passa a
      considerar a DATA (e a conta, se é cartão) em vez de ser sempre `true` —
      mas só enquanto a pessoa não mexer manualmente no checkbox, e só na
@@ -325,9 +356,18 @@ export default function DetalheLancamento({
   // na prop `aoMudarMes` acima pro porquê disso ser necessário. Sem isso, um
   // lançamento salvo com data fora do mês atualmente visto na tela some da
   // lista na hora, dando a impressão de que "não salvou".
+  /* Build 080: além de marcar a notificação como confirmada, o sucesso agora
+     devolve O QUE FOI ESCOLHIDO — é isso que alimenta o de/para aprendido
+     ("quando vier este texto do banco, é esta categoria, com este nome, nesta
+     conta"). O formulário não sabe nada sobre de/para de propósito: ele só
+     relata a escolha, e quem aprende é `App.tsx` (ver `ensinarDePara`). */
   function fecharAposSalvar() {
     aoMudarMes?.(data.slice(0, 7))
-    aoSalvarComSucesso?.()
+    aoSalvarComSucesso?.({
+      descricao,
+      categoriaId: categoriaId === '' ? undefined : Number(categoriaId),
+      contaId: contaId === '' ? undefined : Number(contaId),
+    })
     onFechar()
   }
 
@@ -444,13 +484,13 @@ export default function DetalheLancamento({
       return
     }
 
-    const contaEscolhidaId = contaId || contas?.[0]?.id
+    const contaEscolhidaId = contaEmBranco ? contaId : contaId || contas?.[0]?.id
     if (!categoriaId) {
       erroCampo('categoria', 'Escolha uma categoria.')
       return
     }
     if (!contaEscolhidaId) {
-      erroCampo('conta', 'Cadastre uma conta antes de lançar.')
+      erroCampo('conta', contaEmBranco ? 'Escolha a conta desta movimentação.' : 'Cadastre uma conta antes de lançar.')
       return
     }
     const numero = paraNumero(valor)
@@ -958,10 +998,11 @@ export default function DetalheLancamento({
               <label htmlFor="dl-conta">Pago com</label>
               <select
                 id="dl-conta"
-                value={contaId || contas?.[0]?.id || ''}
+                value={contaEmBranco ? contaId : contaId || contas?.[0]?.id || ''}
                 onChange={(e) => setContaId(e.target.value ? Number(e.target.value) : '')}
                 className={campoComErro === 'conta' ? 'campo-com-erro' : undefined}
               >
+                {contaEmBranco && <option value="">Escolha a conta</option>}
                 {(contas ?? [])
                   .filter((c) => c.ativa || c.id === original?.contaId)
                   .map((c) => (
@@ -978,7 +1019,7 @@ export default function DetalheLancamento({
                   compra cai numa fatura diferente da que a data indicaria. Só
                   aparece pra conta tipo cartão; some/reseta pra "atual" se a
                   pessoa trocar pra uma conta que não é cartão. */}
-              {(contas ?? []).find((c) => c.id === (contaId || contas?.[0]?.id))?.tipo === 'cartao' && (
+              {(contas ?? []).find((c) => c.id === (contaEmBranco ? contaId : contaId || contas?.[0]?.id))?.tipo === 'cartao' && (
                 <>
                   <label htmlFor="dl-fatura-override">Em qual fatura</label>
                   <select
@@ -1166,6 +1207,126 @@ export default function DetalheLancamento({
             </button>
           </div>
         </form>
+
+        {/* DADOS DE VÍNCULO (16/09/2026, build 080 — fase 2 do pedido).
+            DISCRETO de propósito: um link de texto pequeno, nunca um campo do
+            formulário. `descricaoOriginal` sempre foi gravado corretamente em
+            todo caminho de criação e é imutável (Decisão 24), mas NUNCA era
+            mostrado em tela nenhuma — só saía no CSV. Num lançamento feito à
+            mão ele é igual à descrição, e é por isso que o painel diz isso com
+            todas as letras em vez de exibir um duplicado confuso. */}
+        {editando && original && (
+          <div style={{ marginTop: 14, borderTop: '1px solid var(--borda)', paddingTop: 10 }}>
+            <button
+              type="button"
+              className="texto-fraco"
+              style={{ background: 'none', border: 'none', padding: 0, fontSize: 12, textDecoration: 'underline', cursor: 'pointer' }}
+              data-testid="abrir-vinculo"
+              onClick={() => setMostrarVinculo((v) => !v)}
+            >
+              {mostrarVinculo ? '▾' : '▸'} Dados de vínculo
+            </button>
+            {mostrarVinculo && (
+              <div className="texto-fraco" style={{ fontSize: 12, marginTop: 6 }} data-testid="painel-vinculo">
+                <p style={{ margin: '0 0 4px' }}>
+                  <b>Nome original:</b> {original.descricaoOriginal ?? '(não registrado)'}
+                </p>
+                {original.vinculoOrigem ? (
+                  <>
+                    <p style={{ margin: '0 0 4px' }}>
+                      <b>Veio de:</b>{' '}
+                      {original.vinculoOrigem.origem === 'notificacao' ? 'notificação do banco' : 'importação'}
+                      {original.vinculoOrigem.app ? ` · ${original.vinculoOrigem.app}` : ''}
+                      {original.vinculoOrigem.pacote ? ` (${original.vinculoOrigem.pacote})` : ''}
+                    </p>
+                    {original.vinculoOrigem.recebidoEm && (
+                      <p style={{ margin: '0 0 4px' }}>
+                        <b>Recebida em:</b> {new Date(original.vinculoOrigem.recebidoEm).toLocaleString('pt-BR')}
+                      </p>
+                    )}
+                    {original.vinculoOrigem.vinculadoAExistente && (
+                      <p style={{ margin: '0 0 4px' }}>
+                        Foi <b>vinculada a este lançamento que já existia</b>
+                        {original.vinculoOrigem.valorAnterior != null
+                          ? ` — o valor previsto era ${fmtBRL(Math.abs(original.vinculoOrigem.valorAnterior))}.`
+                          : '.'}
+                      </p>
+                    )}
+                    {original.vinculoOrigem.textoCru && (
+                      <p style={{ margin: 0, whiteSpace: 'pre-wrap' }} data-testid="vinculo-texto-cru">
+                        <b>Texto do banco:</b> {original.vinculoOrigem.textoCru}
+                      </p>
+                    )}
+                    {/* DESVINCULAR (build 081, item 5). Os campos acima são
+                        READ-ONLY de propósito: o valor deles é serem o registro
+                        NÃO editado do que o banco disse — é o que os torna
+                        âncora da conciliação bancária futura. O que faltava era
+                        o DESFAZER: vinculei na linha errada. Só aparece quando
+                        existe origem pra limpar. Valor/situação/data ficam como
+                        estão, e a linha abaixo avisa isso. */}
+                    <div style={{ marginTop: 8 }}>
+                      {confirmandoDesvinculo ? (
+                        <>
+                          <p style={{ margin: '0 0 6px' }}>
+                            Desvincular limpa a origem e devolve a notificação pra Pendentes.{' '}
+                            <b>O valor, a situação e a data do lançamento ficam como estão</b> — se quiser mudá-los,
+                            edite aqui mesmo.
+                          </p>
+                          <div style={{ display: 'flex', gap: 8 }}>
+                            <button
+                              type="button"
+                              style={{ marginTop: 0, background: 'none', border: '1px solid var(--borda)', borderRadius: 10, color: 'var(--texto)', padding: '8px 12px', cursor: 'pointer', fontWeight: 600, fontSize: 12 }}
+                              data-testid="vinculo-desvincular-confirmar"
+                              onClick={async () => {
+                                if (original.id == null) return
+                                const r = await desvincularLancamento(original.id)
+                                setConfirmandoDesvinculo(false)
+                                setDesvincularAviso(
+                                  r.voltouParaPendentes
+                                    ? 'Vínculo desfeito. A notificação voltou pra Pendentes; o valor e a situação deste lançamento não foram alterados.'
+                                    : 'Vínculo desfeito. A notificação de origem não está mais no aparelho; o valor e a situação deste lançamento não foram alterados.',
+                                )
+                              }}
+                            >
+                              Sim, desvincular
+                            </button>
+                            <button
+                              type="button"
+                              style={{ marginTop: 0, background: 'none', border: 'none', color: 'var(--texto-fraco)', padding: '8px 4px', cursor: 'pointer', fontSize: 12 }}
+                              onClick={() => setConfirmandoDesvinculo(false)}
+                            >
+                              Cancelar
+                            </button>
+                          </div>
+                        </>
+                      ) : (
+                        <button
+                          type="button"
+                          style={{ marginTop: 0, background: 'none', border: '1px solid var(--borda)', borderRadius: 10, color: 'var(--texto)', padding: '8px 12px', cursor: 'pointer', fontWeight: 600, fontSize: 12 }}
+                          data-testid="vinculo-desvincular"
+                          onClick={() => setConfirmandoDesvinculo(true)}
+                        >
+                          Desvincular
+                        </button>
+                      )}
+                    </div>
+                  </>
+                ) : desvincularAviso ? (
+                  /* Depois de desvincular, `vinculoOrigem` some — e sem esta
+                     ramificação a pessoa cairia no texto de "feito à mão", que
+                     passou a ser MENTIRA pra este lançamento. O aviso fica no
+                     lugar dele enquanto o formulário estiver aberto. */
+                  <p style={{ margin: 0 }} data-testid="vinculo-desfeito">{desvincularAviso}</p>
+                ) : (
+                  <p style={{ margin: 0 }} data-testid="vinculo-sem-origem">
+                    Este lançamento foi criado por você, à mão — não veio de notificação nem de importação, então não
+                    há texto de banco pra guardar aqui.
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Clonar — só faz sentido num lançamento que já existe e enquanto
             não se está clonando. Não grava nada: só troca o formulário pro

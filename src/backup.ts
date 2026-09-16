@@ -43,6 +43,11 @@ export const TABELAS_BACKUP = [
   'planos',
   'usuariosN0',
   'notificacoesPendentes',
+  /* 16/09/2026 (build 080): o de/para aprendido a cada confirmação de
+     notificação. Entra no backup na MESMA rodada em que a tabela nasce —
+     regra da build 027; backup incompleto é pior que backup ausente, e este é
+     um cadastro que o Rafael administra à mão. */
+  'aprendizadosNotificacao',
 ] as const
 
 export type TabelaBackup = (typeof TABELAS_BACKUP)[number]

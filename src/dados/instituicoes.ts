@@ -296,9 +296,16 @@ export function acharInstituicao(nome?: string): Instituicao | undefined {
    também a sigla (`bb.png`, `cef.png`). Devolve `undefined` quando não tem
    certeza — nunca chuta, pra não colocar a logo de um banco em cima de
    outro. */
-function normalizar(t: string) {
+/* Exportada desde 16/09/2026: a leitura de notifica\u00e7\u00e3o banc\u00e1ria
+   (`src/parseNotificacao.ts`) precisa comparar o nome do APP que postou a
+   notifica\u00e7\u00e3o com o nome das contas da Carteira, que \u00e9 exatamente o mesmo
+   problema de "compara nome de banco sem acento, sem pontua\u00e7\u00e3o e sem espa\u00e7o"
+   resolvido aqui. Exportar em vez de copiar evita uma TERCEIRA implementa\u00e7\u00e3o
+   divergente da mesma regra no projeto. */
+export function normalizarNome(t: string) {
   return t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '')
 }
+const normalizar = normalizarNome
 export function casarArquivoComInstituicao(nomeArquivo: string): Instituicao | undefined {
   const base = normalizar(nomeArquivo.replace(/\.[^.]+$/, ''))
   if (!base) return undefined

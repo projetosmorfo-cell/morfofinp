@@ -19,7 +19,7 @@
  * A tabela `saldosInformados` existe no banco desde a primeira versão e NUNCA
  * teve tela. É ela que este componente finalmente usa.
  */
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../db'
 import { lerDoAmbiente, marcaDoAmbiente } from '../ambiente'
@@ -88,15 +88,26 @@ export async function informarSaldo(contaId: number, valor: number) {
 }
 
 /**
- * O que o card do cofrinho mostra: o informado como número principal, e a
- * linha de contexto embaixo. Quando nunca houve informe, mostra o calculado e
- * convida a informar.
+ * A LINHA DE INFORME + o botão "informar o saldo real", sem cabeçalho nenhum.
+ *
+ * Extraída do corpo de `SaldoDoCofrinho` na build 086, quando o Rafael pediu
+ * que **toda conta de tipo cofrinho** ganhasse esse botão — não só o card
+ * virtual. Antes o componente inteiro (cabeçalho "Cofrinho" + valor + linha +
+ * botão) era indivisível, e um card de conta real já desenha o próprio
+ * cabeçalho, com o selo da instituição e o nome dela.
+ *
+ * É componente de verdade (não um trecho de JSX devolvido por função) porque
+ * chama `useUltimoInforme` — assim ele pode ser renderizado dentro de um
+ * `.map()` de contas sem virar hook condicional.
+ *
+ * O COMPORTAMENTO É O MESMO de sempre: grava em `saldosInformados` pelo
+ * `contaId` recebido, e o histórico de cada conta é independente.
  */
-export default function SaldoDoCofrinho({
-  contaId = COFRINHO_VIRTUAL_ID,
+export function LinhaInformeSaldo({
+  contaId,
   calculado,
 }: {
-  contaId?: number
+  contaId: number
   calculado: number
 }) {
   const informe = useUltimoInforme(contaId)
@@ -116,25 +127,11 @@ export default function SaldoDoCofrinho({
     setAberto(false)
   }
 
-  const mostrado = informe ? informe.valor : calculado
   const diferenca = informe ? informe.valor - calculado : 0
 
   return (
     <>
-      <div className="linha-destaque" style={{ marginTop: 0 }}>
-        <strong>Cofrinho</strong>
-        {/* O sinal importa: com a regra corrigida do cofrinho, o saldo
-            calculado pode ser NEGATIVO (saiu mais do que entrou). Mostrar
-            tudo em verde e sem sinal escondia exatamente esse caso. */}
-        <strong
-          className={mostrado < 0 ? 'valor-neg' : 'valor-pos'}
-          data-testid="saldo-cofrinho"
-        >
-          {mostrado < 0 ? '−' : ''}{fmtBRL(Math.abs(mostrado))}
-        </strong>
-      </div>
-
-      {informe ? (
+      {informe && (
         <span
           className={`ideal-t4 ${informe.velho ? 'informe-velho' : 'texto-fraco'}`}
           data-testid="linha-informe"
@@ -148,8 +145,6 @@ export default function SaldoDoCofrinho({
             </>
           )}
         </span>
-      ) : (
-        <span className="texto-fraco">Total acumulado pelos lançamentos</span>
       )}
 
       <span
@@ -162,7 +157,7 @@ export default function SaldoDoCofrinho({
         }}
         data-testid="abrir-informar-saldo"
       >
-        {informe ? '✎ Atualizar o saldo real' : '✎ Informar o saldo real do cofrinho'}
+        {informe ? '✎ Atualizar o saldo real' : '✎ Informar o saldo real no cofrinho'}
       </span>
 
       {aberto && (
@@ -199,6 +194,59 @@ export default function SaldoDoCofrinho({
           </div>
         </div>
       )}
+    </>
+  )
+}
+
+/**
+ * O que o card do cofrinho VIRTUAL mostra: o informado como número principal,
+ * e a linha de contexto embaixo. Quando nunca houve informe, mostra o
+ * calculado e convida a informar.
+ *
+ * Conta de cofrinho REAL não usa este componente — ela já tem cabeçalho
+ * próprio (selo + nome + valor) e só acrescenta `LinhaInformeSaldo`.
+ */
+export default function SaldoDoCofrinho({
+  contaId = COFRINHO_VIRTUAL_ID,
+  calculado,
+  nome = 'Cofrinho',
+  selo,
+}: {
+  contaId?: number
+  calculado: number
+  /* Nome e selo vêm da CONTA do cofrinho padrão desde a build 087 — o card
+     virtual passou a ter um registro no cadastro, e é ele que dá manutenção de
+     nome e ícone a este card (ver `src/contasCofrinho.ts`). Os padrões mantêm
+     o desenho antigo para quem ainda não rodou a migração. */
+  nome?: string
+  selo?: ReactNode
+}) {
+  const informe = useUltimoInforme(contaId)
+  const mostrado = informe ? informe.valor : calculado
+
+  return (
+    <>
+      <div className="linha-destaque" style={{ marginTop: 0 }}>
+        <strong style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+          {selo}
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{nome}</span>
+        </strong>
+        {/* O sinal importa: com a regra corrigida do cofrinho, o saldo
+            calculado pode ser NEGATIVO (saiu mais do que entrou). Mostrar
+            tudo em verde e sem sinal escondia exatamente esse caso. */}
+        <strong
+          className={mostrado < 0 ? 'valor-neg' : 'valor-pos'}
+          data-testid="saldo-cofrinho"
+        >
+          {mostrado < 0 ? '\u2212' : ''}{fmtBRL(Math.abs(mostrado))}
+        </strong>
+      </div>
+
+      {!informe && <span className="texto-fraco">Total acumulado pelos lan\u00e7amentos</span>}
+
+      {/* A linha de informe e o bot\u00e3o vivem em `LinhaInformeSaldo` desde a
+          build 086 \u2014 a mesma pe\u00e7a que toda conta de cofrinho REAL usa. */}
+      <LinhaInformeSaldo contaId={contaId} calculado={calculado} />
     </>
   )
 }

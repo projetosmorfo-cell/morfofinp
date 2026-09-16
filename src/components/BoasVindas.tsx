@@ -20,9 +20,10 @@
  * limpa o singleton junto, então um app genuinamente zerado recomeça do
  * começo — que é o certo.
  *
- * Light e Premium continuam com o comportamento antigo (tour automático a cada
- * abertura, com "Não exibir novamente") — esta é uma decisão de apresentação da
- * Ideal, e mudar as outras duas seria mexer no que não foi pedido.
+ * (Até a build 086 a versão Light mantinha o comportamento antigo — tour
+ * automático a cada abertura, com "Não exibir novamente". Com o fim das
+ * versões na 087, o convite abaixo passou a ser o ÚNICO caminho automático, e
+ * a abertura automática deixou de existir junto com o botão dela.)
  */
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, type Categoria, type GrupoRegistro, type Meta } from '../db'
@@ -31,7 +32,7 @@ import { contarDoAmbiente } from '../ambiente'
 import { avaliarPassos } from './PrimeirosPassos'
 import { NOME_PRODUTO } from '../kit/siteKit'
 
-/* Mesmo sentinela de `useModoVisaoComEstado`: `useLiveQuery` devolve
+/* `useLiveQuery` devolve
    `undefined` tanto para "ainda carregando" quanto para "carregou e não existe
    registro nenhum" — e o segundo caso é justamente o de quem abre o app pela
    primeira vez, que é quando esta tela precisa aparecer. Sem distinguir os

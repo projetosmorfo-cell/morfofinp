@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { SUBTITULO_RESUMO, SUBTITULO_SITUACAO, SUBTITULO_PLANEJAMENTO } from '../subtitulosTelas'
+import { SUBTITULO_PLANEJAMENTO } from '../subtitulosTelas'
 
 // Tour guiado (spotlight) — Roteiro de Parametrização Morfo, Etapa 6
 // (05/09/2026), adaptado quase literal de `GuidedTour` no Kit de Estrutura
@@ -12,11 +12,15 @@ import { SUBTITULO_RESUMO, SUBTITULO_SITUACAO, SUBTITULO_PLANEJAMENTO } from '..
 // quadro pra o elemento existir de verdade no DOM, por isso a medição tenta
 // de novo via `requestAnimationFrame` (até ~20 tentativas); se não achar
 // depois de todas as tentativas, cai num cartão centralizado sem recorte —
-// o tour nunca trava (ex.: Rafael desligou a visão Premium e "Situação" não
-// existe no rodapé agora — o tour segue em frente mesmo assim).
+// o tour nunca trava (acontece quando um menu está em "Ocultar" no Layout do
+// Sistema e o passo dele sobrou no roteiro).
 //
-// Só abre manualmente (botão "Ver tour guiado" em Manutenção) — nunca
-// dispara sozinho. Diferente do Kit original, que também tinha um
+// COMO ELE ABRE (revisto na build 087, com o fim das versões): pelo CONVITE
+// que aparece uma vez, quando o plano fica pronto, e à mão em Configuração →
+// Ajuda → "Tour guiado". A abertura automática a cada início do app existia só
+// na versão Light e saiu com ela — junto com o botão "Não exibir novamente",
+// que só fazia sentido contra essa abertura automática.
+// Diferente do Kit original, que também tinha um
 // `OnboardingTour` em slideshow disparando automaticamente no 1º acesso do
 // tenant: esse NÃO foi portado nesta etapa (ver CLAUDE.md/Decisões — o
 // MFinp já está em uso diário há meses, não existe um "1º acesso" de
@@ -56,24 +60,24 @@ export default function GuidedTour({
   passos,
   onIrPara,
   onFinalizar,
-  onNaoExibirNovamente,
 }: {
   passos: PassoTour[]
-  /* Item 6 da lista de 12/09/2026: "deve abrir toda vez que abrir o app, com
-     opção Não exibir novamente (com mensagem ao escolher), e a mesma mensagem
-     no fim do passo a passo explicando onde clicar pra ver de novo". Quando
-     esta função é passada, o botão aparece; sem ela (tour aberto à mão pela
-     Ajuda), não faz sentido oferecer. */
-  onNaoExibirNovamente?: () => void
   onIrPara: (passo: PassoTour) => void
   onFinalizar: () => void
 }) {
   const [i, setI] = useState(0)
   const [rect, setRect] = useState<Recorte | null>(null)
-  const passo = passos[i]
+  /* `passos` é FILTRADO por quem chama (`App.tsx` tira o passo de tela que não
+     está na navegação). Se o filtro levar tudo — todo menu em "Ocultar", por
+     exemplo —, `passos[i]` é `undefined` e o render quebrava no `passo.titulo`,
+     derrubando o app inteiro: um clique em "Tour guiado" que não produz efeito
+     visível nenhum. O guard devolve o controle a quem abriu em vez de estourar
+     (build 087). */
+  const passo = passos[i] as PassoTour | undefined
   const ultimo = i === passos.length - 1
 
   useEffect(() => {
+    if (!passo) { onFinalizar(); return }
     onIrPara(passo)
     let raf: number | null = null
     let cancelado = false
@@ -103,6 +107,8 @@ export default function GuidedTour({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [i])
+
+  if (!passo) return null
 
   const pad = 6
   const recorte =
@@ -161,6 +167,8 @@ export default function GuidedTour({
         <div style={{ position: 'fixed', inset: 0, background: corMascara }} />
       )}
       <div
+        data-testid="tour-cartao"
+        data-tour-passo={passo.dataTour ?? ''}
         style={{
           ...estiloCartao,
           background: 'var(--bg-elevado)',
@@ -216,36 +224,30 @@ export default function GuidedTour({
             {ONDE_REABRIR_TOUR}
           </p>
         )}
-        {onNaoExibirNovamente && (
-          <button
-            type="button"
-            data-testid="tour-nao-exibir"
-            onClick={onNaoExibirNovamente}
-            style={{ display: 'block', width: '100%', marginTop: 10, padding: 0, background: 'none', border: 'none', color: 'var(--texto-fraco)', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
-          >
-            Não exibir novamente
-          </button>
-        )}
       </div>
     </div>
   )
 }
 
-// Roteiro real do MFinp (não genérico como o do Kit) — as 5 abas do rodapé
-// + "Novo lançamento" + engrenagem, essa ordem por ser a mesma do rodapé
-
-// em visão Light — o tour não trava nesse caso (ver comentário no topo do
-// arquivo), só mostra um cartão centralizado sem recorte pra esse passo.
-/** Mensagem única de "onde reabrir" (item 6) — usada no fim do tour e ao
-    escolher "não exibir novamente". */
+/* Roteiro real do MFinp (não genérico como o do Kit): as QUATRO abas do
+   rodapé, na mesma ordem em que elas aparecem lá, mais "Novo lançamento", o
+   "⋮" e os quatro passos de Configuração que fecham o tour.
+   Conferido elemento a elemento na build 087 — todo `dataTour` daqui existe
+   numa tela do app de hoje. */
+/* Mensagem única de "onde reabrir" — usada no fim do tour e ao recusar o
+   convite. O texto cita o rótulo EXATO do item ("Tour guiado", em
+   `AjudaN1`); até a build 086 dizia "Ver tour guiado", que não é o nome de
+   nada na tela. */
 export const ONDE_REABRIR_TOUR =
-  'Pra ver este passo a passo de novo: toque no ⋮ no topo → Configuração → Ajuda → Ver tour guiado.'
+  'Pra ver este passo a passo de novo: toque no ⋮ no topo → Configuração → Ajuda → Tour guiado.'
 
 export const TOUR_STEPS_N1: PassoTour[] = [
   /* Item 7 (12/09/2026): os textos das telas principais são os MESMOS
      subtítulos que aparecem nelas — `src/subtitulosTelas.ts`, fonte única. */
-  { dataTour: 'nav-tab-resumo', tela: 'resumo', titulo: 'Resumo', texto: `${SUBTITULO_RESUMO}. Quanto entrou, quanto saiu e o que sobra no bolso, já descontado o que está comprometido.` },
-  { dataTour: 'nav-tab-situacao', tela: 'situacao', titulo: 'Situação', texto: `${SUBTITULO_SITUACAO}. É a tela pra responder "posso gastar hoje?".` },
+  /* Build 086: o passo do Resumo saiu junto com a tela, e o de "Situação"
+     deixou de existir como passo próprio — a aba `situacao` É a tela Hoje nas
+     duas versões agora, então há UM passo só para ela. */
+  { dataTour: 'nav-tab-situacao', tela: 'situacao', titulo: 'Hoje', texto: 'A tela do dia: quanto está livre de verdade, quanto ainda dá pra economizar até o fim do mês e, no ritmo atual, se os gastos variáveis estouram ou sobram.' },
   { dataTour: 'nav-tab-lancamentos', tela: 'lancamentos', titulo: 'Lançamentos', texto: 'A tela principal do app — todos os seus lançamentos do mês, com busca e filtros.' },
   { dataTour: 'lancamentos-incluir', tela: 'lancamentos', titulo: 'Novo lançamento', texto: 'Toque no + pra cadastrar um novo lançamento.' },
   { dataTour: 'nav-tab-carteira', tela: 'carteira', titulo: 'Carteira', texto: 'Seus cofrinhos e contas — saldo e histórico de cada um.' },
@@ -262,21 +264,13 @@ export const TOUR_STEPS_N1: PassoTour[] = [
   { dataTour: 'cfg-categorias', tela: 'config:configuracoes', titulo: 'Meta do grupo', texto: 'Na aba "Grupos e Metas", cada grupo recebe um percentual da sua receita fixa do mês — é a meta do grupo. A soma das metas das categorias dele deveria caber dentro dessa meta.' },
 ]
 
-/* Na versão Ideal a MESMA aba `situacao` renderiza a tela Hoje (ver
-   `App.tsx`), e o rótulo dela muda junto. Um passo de tour que diz "Situação"
-   apontando pra uma aba escrita "Hoje" descreve outra coisa — por isso o
-   roteiro troca esse passo por inteiro em vez de reaproveitar o texto.
-   Passo que não existe na visão atual já é filtrado por `telasVisiveis` em
-   `App.tsx`; aqui só muda o CONTEÚDO do que sobra. */
-export const PASSO_HOJE_IDEAL: PassoTour = {
-  dataTour: 'nav-tab-situacao',
-  tela: 'situacao',
-  titulo: 'Hoje',
-  texto:
-    'A tela do dia: quanto está livre de verdade, quanto ainda dá pra economizar até o fim do mês e, no ritmo atual, se o Variável estoura ou sobra.',
-}
-
-export function passosTourN1(modo: 'light' | 'ideal' | 'premium'): PassoTour[] {
-  if (modo !== 'ideal') return TOUR_STEPS_N1
-  return TOUR_STEPS_N1.map((p) => (p.dataTour === 'nav-tab-situacao' ? PASSO_HOJE_IDEAL : p))
+/* Build 087: o parâmetro `modo` SAIU. Ele era o resto da época de três
+   versões, quando o passo da aba `situacao` trocava de conteúdo conforme a
+   tela que ela renderizava; na 086 já não escolhia nada e agora não existe
+   versão nenhuma para escolher. O único filtro que resta é o de `App.tsx`, por
+   `telasVisiveis` — um passo cuja aba está em "Ocultar" no Layout do Sistema
+   sai do roteiro. A função continua existindo (em vez de exportar só a
+   constante) porque é o ponto único por onde o roteiro passa. */
+export function passosTourN1(): PassoTour[] {
+  return TOUR_STEPS_N1
 }

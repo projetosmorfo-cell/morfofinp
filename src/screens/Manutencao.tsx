@@ -9,9 +9,6 @@ import {
 import { salvarArquivoTexto, escolherArquivoTexto } from '../arquivoLocal'
 import { BUILD_NUMBER } from '../buildInfo'
 import {
-  useModoVisao,
-  salvarModoVisao,
-  ROTULO_MODO_VISAO,
   useOrdemAbas,
   salvarOrdemAbas,
 } from '../configuracaoIcones'
@@ -36,14 +33,16 @@ import {
 // chaves/nomes de `TELAS` em `App.tsx` (não importado daqui de propósito,
 // pra não criar um acoplamento maior entre os dois arquivos só por causa de
 // rótulo de texto).
+/* Build 086: 'resumo' saiu (a tela foi apagada com a versão Premium) e
+   'situacao' passou a ser a tela Hoje — a chave continua a mesma, porque é
+   ela que está gravada em `ordemAbas`; só o rótulo mudou. */
 const ABAS_ROTULO: Record<string, string> = {
-  resumo: 'Resumo',
-  situacao: 'Situação',
+  situacao: 'Hoje',
   lancamentos: 'Lançamentos',
   carteira: 'Carteira',
   planejamento: 'Planejamento',
 }
-const ORDEM_ABAS_PADRAO = ['resumo', 'situacao', 'lancamentos', 'carteira', 'planejamento']
+const ORDEM_ABAS_PADRAO = ['situacao', 'lancamentos', 'carteira', 'planejamento']
 
 // Itens do menu de engrenagem (08/09/2026, correção pós-G59) — mesmas
 // chaves/rótulos de `ITENS_MENU_ENGRENAGEM_PADRAO`/`ROTULO_MENU_ENGRENAGEM`
@@ -123,8 +122,9 @@ export default function Manutencao({
 
   // Layout do rodapé — ordem das abas (04/09/2026, Roteiro de Parametrização
   // Morfo, Etapa 4 — Kit de Estrutura Mínima, adaptação da seção "Ordem dos
-  // menus" de `LayoutTenantScreen` do Kit). Só reordena — visibilidade de
-  // cada aba continua sendo só o Light×Premium acima, nunca duplicado aqui.
+  // menus" de `LayoutTenantScreen` do Kit). Só REORDENA — desde a build 087
+  // as quatro abas existem para todo mundo, e quem some com uma da navegação é
+  // só o "Ocultar" do Layout do Sistema (N0), nunca esta tela.
   /* Ordem própria do ambiente × padrão da Morfo (12/09/2026): sem ordem
      própria, vale a do N0 (`layoutConfig.ordemAbasN1`), como em `App.tsx`.
      Uma lista vazia gravada é o "sem ordem própria" — é o que o botão
@@ -169,19 +169,12 @@ export default function Manutencao({
   }
   const menuPosEfetivo = normalizarMenuPosModo(menuPosProprio?.modo ?? layoutCfgN0?.menuPosN1?.modo)
 
-  // Visão Light × Premium (04/09/2026, pedido do Rafael: "quero já olhar as
-  // duas versões"). Light reduz o rodapé a 3 abas (Resumo, Lançamentos,
-  // Carteira) — o essencial do dia a dia, sem Situação/Planejamento (as
-  // telas de análise orçamentária mais densas). Nada é apagado: trocar de
-  // volta pra Premium traz as 5 abas de volta exatamente como estavam,
-  // dado e tudo (mesma base, ver `App.tsx`/`useModoVisao`).
-  const modoVisao = useModoVisao()
 
   // "Limpar dados" (04/09/2026, pedido do Rafael) — apaga TODOS os
   // lançamentos, inclusive os gerados por série fixa/parcelada (é a mesma
   // tabela `lancamentos`, sem distinção especial pra recorrência — apagar a
   // tabela inteira já cobre isso). Categorias, contas, grupos e
-  // configurações (ícones, modo de visão) NUNCA são tocados aqui, de
+  // configurações (ícones, layout) NUNCA são tocados aqui, de
   // propósito — é limpeza de LANÇAMENTO, não um reset de cadastro. Efeito
   // colateral esperado, não um bug: depois de limpar, uma série "fixa" que
   // existia perde a última ocorrência de referência, então
@@ -388,35 +381,18 @@ export default function Manutencao({
 
       {mostraLayout && (
       <>
-      <h2 style={{ marginTop: 0 }}>Visão do App</h2>
+      {/* A seção "Visão do App" (o seletor Light × Completa) SAIU NA BUILD
+          087, junto com o conceito de versão — ver `migrarFimDasVersoes()` em
+          `src/configuracaoIcones.ts`. Não existe mais o que escolher aqui: as
+          quatro abas são de todo mundo. Diferença de acesso, quando o app for
+          comercializado, é permissionamento, não layout. */}
+      <h2 style={{ marginTop: 0 }}>Layout do Rodapé</h2>
       <div className="cartao">
         <p className="texto-fraco" style={{ marginTop: 0 }}>
-          <strong>Light</strong> é o essencial. <strong>Ideal</strong> é a versão nova: abre em
-          "Hoje", com dois números que respondem quanto dá pra gastar sem se preocupar e quanto dá
-          pra tentar economizar. <strong>Premium</strong> é o app completo, com Resumo e Situação.
-          Nenhum dado muda entre as três — o mesmo mês, os mesmos lançamentos, as mesmas metas.
+          Ordem das abas do rodapé — não muda QUAIS abas aparecem, só a posição de cada uma.
         </p>
-        <div className="abas-tela" role="tablist">
-          {(['light', 'ideal', 'premium'] as const).map((m) => (
-            <button
-              key={m}
-              type="button"
-              role="tab"
-              aria-selected={modoVisao === m}
-              className={`aba-tela-item ${modoVisao === m ? 'ativa' : ''}`}
-              onClick={() => salvarModoVisao(m)}
-            >
-              {ROTULO_MODO_VISAO[m]}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <h2>Layout do Rodapé</h2>
-      <div className="cartao">
-        <p className="texto-fraco" style={{ marginTop: 0 }}>
-          Ordem das abas do rodapé — não muda o que aparece (isso é o Light/Premium acima), só a
-          posição de cada uma.
+        <p className="param-exemplo" data-testid="exemplo-ordem-abas" style={{ margin: '0 0 12px' }}>
+          Ex.: subir "Carteira" com a seta ↑ faz ela virar a primeira aba, à esquerda de tudo.
         </p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {ordemAbas.map((chave, i) => (
@@ -474,6 +450,9 @@ export default function Manutencao({
           Decide, item a item, se ele aparece na barra do rodapé, dentro do "⋮" ou em lugar nenhum.
           Vale só pro seu ambiente, por cima do padrão que a Morfo definiu pro sistema inteiro.
           "Configuração" nunca pode ser ocultada — sem ela não haveria como voltar até aqui.
+        </p>
+        <p className="param-exemplo" data-testid="exemplo-posicao-menus" style={{ margin: '0 0 12px' }}>
+          Ex.: marcar "Planejamento" como "⋮" tira ele do rodapé e deixa só dentro do menu de três pontos.
         </p>
         {!layoutLiberado ? (
           <div style={{ border: '1.5px dashed var(--borda)', borderRadius: 12, padding: 16, textAlign: 'center' }}>
@@ -541,6 +520,9 @@ export default function Manutencao({
       <div className="cartao">
         <p className="texto-fraco" style={{ marginTop: 0 }}>
           Onde o botão "⋮" aparece, quando pelo menos um menu acima está marcado como "⋮".
+        </p>
+        <p className="param-exemplo" data-testid="exemplo-posicao-botao-mais" style={{ margin: '0 0 12px' }}>
+          Ex.: em "Rodapé, à direita", o "⋮" vira o último item da barra e o painel dele abre pra cima.
         </p>
         {!layoutLiberado ? (
           <p className="texto-fraco" style={{ margin: 0 }}>Recurso do plano — veja a seção acima.</p>

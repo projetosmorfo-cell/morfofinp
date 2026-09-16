@@ -181,6 +181,12 @@ function MemoriaDescricaoParametro({ onAviso }: { onAviso: (m: string) => void }
       diz quantos <strong>dias pra trás</strong> ele procura. Padrão: {MEMORIA_DESCRICAO_DIAS_PADRAO} dias.
       Zero desliga a sugestão (o campo continua sendo texto livre, como sempre).
     </p>
+    {/* Build 085: todo parâmetro do app ganhou um exemplo do efeito do valor
+        em vigor — não um exemplo genérico. */}
+    <p className="param-exemplo" data-testid="exemplo-memoria-descricao" style={{ margin: '0 0 12px' }}>
+      Ex.: com {salvo} dias, digitar "merc" traz de volta o "Mercado do bairro" que você lançou nos
+      últimos {salvo} dias — mais antigo que isso, não.
+    </p>
     <Campo label="Dias pra trás">
       <input
         type="number"
@@ -228,6 +234,9 @@ export function AparenciaN1({ aoVoltar }: { aoVoltar: () => void }) {
       <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 2 }}>Tema das telas</div>
       <p style={{ fontSize: 12, color: 'var(--texto-fraco)', margin: '0 0 12px', lineHeight: 1.5 }}>
         "Automático" acompanha a configuração do seu celular. Recurso <strong>experimental</strong> — o app foi desenhado escuro, então no tema claro pode sobrar alguma tela fora do tom; se não ficar bom, é só avisar que a gente remove.
+      </p>
+      <p className="param-exemplo" data-testid="exemplo-tema" style={{ margin: '0 0 12px' }}>
+        Ex.: em "Automático", o app abre claro de dia e escuro à noite, junto com o seu celular.
       </p>
       <div style={{ display: 'flex', gap: 6 }}>
         {OPCOES_TEMA.map((o) => {

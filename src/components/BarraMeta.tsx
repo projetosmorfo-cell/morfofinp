@@ -12,7 +12,7 @@
 // aqui dentro (achado ao rodar `tsc` de verdade pela primeira vez nesta
 // sessão — ver nota no CLAUDE.md sobre o comando `tsc` correto do projeto).
 import type { ReactNode } from 'react'
-import { fmtBRL } from '../formatoMoeda'
+import { fmtBRL, fmtSinalExplicito } from '../formatoMoeda'
 export { fmtBRL }
 
 export default function BarraMeta({
@@ -23,6 +23,7 @@ export default function BarraMeta({
   acao,
   mostrarDestaque = true,
   comprometido = 0,
+  resultado,
 }: {
   gasto: number
   previsto: number
@@ -52,6 +53,17 @@ export default function BarraMeta({
   // total de faltam/estourou em destaque fora do componente — nesses casos a
   // linha de destaque abaixo da barra ficaria repetindo a mesma informação.
   mostrarDestaque?: boolean
+  /* O VALOR RESULTANTE, com sinal, na frente da barra (build 086, pedido do
+     Rafael para o Planejamento: "em todas as barras mostre o valor resultante
+     na frente da barra, positivo ou negativo").
+     Sempre por `fmtSinalExplicito` (que é `fmtComSinal` com o "+" escrito) —
+     regra da build 061: onde o número aparece isolado, sem rótulo de sinal, a
+     cor sozinha não informa, e aqui sobra e estouro convivem barra a barra.
+     Fica na MESMA
+     linha da barra, como já acontece em `BarraIdeal` (`.barra-ideal-valor`),
+     e não no lugar da linha de destaque, que continua governada por
+     `mostrarDestaque`. */
+  resultado?: number
 }) {
   const temPrevisto = previsto > 0
   const estourou = temPrevisto ? gasto > previsto : gasto > 0
@@ -84,12 +96,22 @@ export default function BarraMeta({
           {acao}
         </div>
       )}
-      <div className={`barra-meta ${estourou ? 'estourou' : ''}`}>
-        <div className="fill" style={{ width: `${realizadoPct}%` }} />
-        {comprometidoPct > 0 && (
-          <div className="fill fill-comprometido" style={{ width: `${comprometidoPct}%` }} data-testid="barra-meta-comprometido" />
+      <div className="barra-meta-linha">
+        <div className={`barra-meta ${estourou ? 'estourou' : ''}`}>
+          <div className="fill" style={{ width: `${realizadoPct}%` }} />
+          {comprometidoPct > 0 && (
+            <div className="fill fill-comprometido" style={{ width: `${comprometidoPct}%` }} data-testid="barra-meta-comprometido" />
+          )}
+          {marcadorPct !== null && <div className="marcador" style={{ left: `${marcadorPct}%` }} />}
+        </div>
+        {resultado !== undefined && (
+          <span
+            className={`barra-meta-resultado ${resultado < 0 ? 'negativo' : 'positivo'}`}
+            data-testid="barra-resultado"
+          >
+            {fmtSinalExplicito(resultado)}
+          </span>
         )}
-        {marcadorPct !== null && <div className="marcador" style={{ left: `${marcadorPct}%` }} />}
       </div>
       {mostrarDestaque && (
         <div className="linha-destaque">

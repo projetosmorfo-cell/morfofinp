@@ -3,6 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../db'
 import { salvarConfiguracaoIcones } from '../configuracaoIcones'
 import { hojeEfetivoISO } from '../hojeSimulado'
+import type { ParametrosNotificacao, ParametrosNotificacaoN0, EscopoPublicacao } from '../notificacaoParametros'
 import { uid, type Endereco } from './kitBase'
 import { LOGO_PRODUTO_BRANCA, LOGO_PRODUTO_COR } from './logosProduto'
 
@@ -441,9 +442,11 @@ export function normalizarMenuPosModo(v: string | undefined): MenuPosModo {
    de verdade (`App.tsx` no N1, `DevApp.tsx` no N0) já tem os ícones, e trazer
    ícone pra cá criaria dependência de `App.tsx` dentro de `kitPlatform`.
    `protegido` = o item que nunca aceita "Ocultar". */
+/* Build 086: 'resumo' saiu (a tela foi apagada com a versão Premium) e
+   'situacao' passou a rotular a tela Hoje — a CHAVE continua 'situacao'
+   porque é ela que está persistida em `posicaoN1`/`ordemAbas`. */
 export const ITENS_NAV_N1: { key: string; label: string; padrao: PosicaoMenu }[] = [
-  { key: 'resumo', label: 'Resumo', padrao: 'rodape' },
-  { key: 'situacao', label: 'Situação', padrao: 'rodape' },
+  { key: 'situacao', label: 'Hoje', padrao: 'rodape' },
   { key: 'lancamentos', label: 'Lançamentos', padrao: 'rodape' },
   { key: 'carteira', label: 'Carteira', padrao: 'rodape' },
   { key: 'planejamento', label: 'Planejamento', padrao: 'rodape' },
@@ -630,6 +633,15 @@ export interface PlatformN0 {
      compara com o que já aplicou (`padraoCatVersaoAplicada`, `db.configuracoes`)
      pra saber se tem padrão novo pra receber. Ver `padraoCategorias.ts`. */
   padraoCategorias?: PadraoCategoriasN0
+  /* Parâmetros da notificação bancária publicados pela Morfo (16/09/2026,
+     build 080). MESMA mecânica do `padraoCategorias` logo acima — `versao` sobe
+     a cada salvamento e cada ambiente guarda qual já processou —, com UMA
+     diferença: aqui o N0 escolhe o ESCOPO no momento de salvar. 'naoEditados'
+     vale pra quem nunca personalizou aquele parâmetro (e pra quem chegar
+     depois); 'todos' impõe, apagando a personalização do ambiente na abertura
+     seguinte. Ver `src/notificacaoParametros.ts` — inclusive o limite honesto
+     de que, sem backend, isso só alcança os ambientes deste aparelho. */
+  parametrosNotificacao?: ParametrosNotificacaoN0
   /* URLs do produto (12/09/2026, build 053 — pedido do Rafael: "nas configs do
      N0, ter novo menu pra URLs, lá devo preencher com a url pra download do
      apk", e mais adiante "coloque tbm a URL do Website... mostrar como
@@ -693,6 +705,9 @@ export const FUNCOES_PERFIL_N0: FuncaoPerfil[] = [
     { k: 'parametros.ambiente', l: 'Ambiente dos Clientes', sessao: 'Ambiente do Cliente' },
     { k: 'parametros.chat', l: 'Gerenciar Chat', sessao: 'Ambiente do Cliente' },
     { k: 'parametros.padraoCategorias', l: 'Categorias e Grupos (padrão)', sessao: 'Ambiente do Cliente' },
+    /* Build 080: as regras e parâmetros da leitura de notificação bancária —
+       TODOS, inclusive os que não são expostos no app do cliente. */
+    { k: 'parametros.notificacoes', l: 'Notificações bancárias', sessao: 'Ambiente do Cliente' },
     { k: 'parametros.testesCliente', l: 'Gerar Teste no Cliente', sessao: 'Ambiente do Cliente' },
     { k: 'parametros.limpezasCliente', l: 'Limpar Dados do Cliente (teste e reais)', sessao: 'Ambiente do Cliente' },
     { k: 'parametros.marca', l: 'Marca', sessao: 'Ambiente MorfoFinP ADM' },
@@ -708,8 +723,7 @@ export const FUNCOES_PERFIL_N0: FuncaoPerfil[] = [
   { k: 'indicadores', l: 'Indicadores' },
 ]
 export const FUNCOES_PERFIL_N1: FuncaoPerfil[] = [
-  { k: 'resumo', l: 'Resumo' },
-  { k: 'situacao', l: 'Situação' },
+  { k: 'situacao', l: 'Hoje' },
   { k: 'lancamentos', l: 'Lançamentos' },
   { k: 'carteira', l: 'Carteira' },
   { k: 'planejamento', l: 'Planejamento' },
@@ -1333,6 +1347,24 @@ export async function atualizarLayoutConfig(patch: Partial<LayoutConfig>) {
 }
 /* Grava o padrão da plataforma subindo `versao` — é a subida de versão que
    faz cada N1 não-editado receber o padrão novo na abertura seguinte. */
+/**
+ * Publica os parâmetros da notificação bancária, com o escopo escolhido no
+ * momento do salvamento. Devolve a versão nova — é ela que cada ambiente
+ * compara com a que já processou.
+ */
+export async function salvarParametrosNotificacaoN0(
+  valores: Partial<ParametrosNotificacao>,
+  escopo: EscopoPublicacao,
+) {
+  const atual = await lerPlatformN0Persistida()
+  const versao = (atual.parametrosNotificacao?.versao ?? 0) + 1
+  await salvarPlatformN0({
+    ...atual,
+    parametrosNotificacao: { versao, atualizadoEm: agoraISO(), escopo, valores },
+  })
+  return versao
+}
+
 export async function salvarPadraoCategoriasN0(dados: Omit<PadraoCategoriasN0, 'versao' | 'atualizadoEm'>) {
   const atual = await lerPlatformN0Persistida()
   const versao = (atual.padraoCategorias?.versao ?? 0) + 1

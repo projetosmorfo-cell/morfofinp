@@ -1,6 +1,7 @@
 import Dexie, { type EntityTable } from 'dexie'
 import type { SiteConfig, SitePage } from './kit/kitBase'
 import type { PlatformN0 } from './kit/kitPlatform'
+import type { ParametrosNotificacao } from './notificacaoParametros'
 
 // Modelo de dados — baseado em claude/mfip-modelo-de-dados.md
 // MVP inicial: modo "Lite" (input manual, sem importação/conciliação).
@@ -35,6 +36,22 @@ export interface Conta {
   diaFechamento?: number
   diaVencimento?: number
   contaPagamentoPadraoId?: number
+  /* O COFRINHO PADRÃO (build 087). Marca a ÚNICA conta que representa, no
+     cadastro, o cofrinho que a Carteira sempre desenhou por natureza (o card
+     "virtual" — soma de Aporte menos Gasto de cofrinho sobre todo o
+     histórico). Ela existe para dar manutenção de ÍCONE e nome a esse card:
+     sem registro, não havia o que listar no cadastro de Contas.
+
+     Por que ela é diferente de um cofrinho comum: o saldo dela NÃO vem dos
+     lançamentos que apontam para o `contaId` dela (não há nenhum — cada
+     Aporte histórico carrega a conta REAL de onde o dinheiro saiu, decisão de
+     30/08/2026, intocável). Vem da soma por natureza. Por isso os demais
+     campos do cadastro são bloqueados nela: mudar tipo, fechamento ou
+     vencimento não teria efeito nenhum sobre o que a Carteira mostra.
+
+     Aditivo, não indexado, lido em JS — sem bump de schema, mesma regra dos
+     campos de ícone acima. Ver `src/contasCofrinho.ts`. */
+  cofrinhoPadrao?: boolean
   /* ---- Escopo por AMBIENTE (12/09/2026, itens 13/14/15/23 do Rafael) ----
      Qual ambiente (tenant) é dono deste registro. AUSENTE = o ambiente deste
      aparelho (`t0`), que é como todo o histórico real dele já está gravado —
@@ -329,6 +346,51 @@ export interface Lancamento {
   // não criar ambiguidade de "quem vem primeiro" entre um item com ordem
   // escolhida e outro sem.
   ordemManual?: number
+
+  /* ---- Dados de vínculo: DE ONDE este lançamento veio (16/09/2026, build
+     080, fase 2 do pedido do Rafael) ----
+
+     Até aqui o elo era de mão única: `NotificacaoPendente.lancamentoId`
+     apontava pro lançamento, e o lançamento não sabia de nada. Abrindo um
+     lançamento não havia como responder "de onde isso veio?" — nem o texto
+     cru do banco (que estava gravado em `descricaoOriginal`, mas nunca era
+     mostrado em tela nenhuma, só no CSV).
+
+     Campo ADITIVO, opcional, objeto — lido só via `.get()`/`.filter()` em JS,
+     NUNCA via `.where()`, então não pede bump de schema (regra documentada no
+     topo deste arquivo). Nada aqui é chave de nada: a regra dura de
+     conciliação continua sendo data+valor+conta.
+
+     `descricaoOriginal` continua imutável e separado: num lançamento criado à
+     mão ele é igual à descrição, e é por isso que o painel de vínculo checa
+     `origem` antes de mostrar qualquer coisa — sem origem externa ele diz
+     isso com todas as letras, em vez de exibir um duplicado confuso. */
+  vinculoOrigem?: {
+    /** 'notificacao' hoje; 'importacao' fica reservado pro extrato (fase futura). */
+    origem: 'notificacao' | 'importacao'
+    /** `NotificacaoPendente.id` que gerou (ou foi vinculada a) este lançamento. */
+    notificacaoId?: number
+    /** Nome legível do app que postou ("Bradesco"). */
+    app?: string
+    /** Pacote Android ("com.bradesco"). */
+    pacote?: string
+    /** Texto CRU da notificação, título + corpo, exatamente como chegou. */
+    textoCru?: string
+    /** Quando a notificação chegou no aparelho (ISO completo). */
+    recebidoEm?: string
+    /** ISO de quando o vínculo foi feito (confirmação do Rafael). */
+    vinculadoEm?: string
+    /** true = a notificação foi ligada a um lançamento que JÁ EXISTIA. */
+    vinculadoAExistente?: boolean
+    /** Valor que o lançamento tinha antes de o vínculo trazer o valor real. */
+    valorAnterior?: number
+    /* A competência PLANEJADA, guardada quando o vínculo moveu o lançamento
+       para a data da notificação (build 081 — ver `vinculoNotificacao.ts`).
+       O FATO andou; o PLANO não: é esta data que o gerador de série fixa usa
+       como ritmo, para o mês de origem não ficar sem a ocorrência nem ganhar
+       uma duplicada. Ausente = o vínculo não moveu a data. */
+    dataCompetenciaAnterior?: string
+  }
 }
 
 export interface Meta {
@@ -410,6 +472,22 @@ export interface ConfiguracaoIcones {
   // instalação (11/09/2026) — ver `migrarTipoDosGrupos()` em
   // `src/gruposUtil.ts`. Mesma regra do campo acima: aditivo, não indexado.
   gruposTipoRevisado?: boolean
+  /* Marca da criação da conta cofrinho padrão (build 086) — ver
+     `garantirContaCofrinho()` em `src/contasCofrinho.ts`. O app passou a
+     exigir PELO MENOS UMA conta de tipo 'cofre' cadastrada; instalação antiga
+     podia não ter nenhuma, porque até aqui o cofrinho da Carteira era um card
+     VIRTUAL somado por natureza, nunca uma `Conta`. Migração puramente
+     aditiva: cria a conta e nada mais — nenhum lançamento é tocado ou
+     reatribuído. Roda uma vez e nunca mais. */
+  contaCofrinhoRevisado?: boolean
+  /* Build 087: a marca acima ficou obsoleta — a migração dela criava a conta
+     SÓ quando não havia nenhum cofre, e por isso a instalação do Rafael (que
+     já tinha um cofrinho próprio) continuou sem o registro do cofrinho
+     PADRÃO. Esta é a marca da migração nova, que garante a conta marcada
+     `cofrinhoPadrao` em qualquer instalação, adotando a criada pela 086
+     quando ela existe. Marca nova em vez de reaproveitar a antiga porque a
+     antiga já está gravada como "feito" em quem rodou a 086. */
+  contaCofrinhoPadraoRevisado?: boolean
   // Padrão de Categorias/Grupos/ícones da plataforma (12/09/2026, item 7 do
   // Rafael). `padraoCatVersaoAplicada` é a versão do padrão do N0 que ESTE
   // ambiente já recebeu; `catsEditadasPeloUsuario` marca que a pessoa mexeu
@@ -418,26 +496,44 @@ export interface ConfiguracaoIcones {
   // indexados, sem bump de schema — mesma regra desta tabela singleton.
   padraoCatVersaoAplicada?: number
   catsEditadasPeloUsuario?: boolean
-  // `modoVisao` (04/09/2026, pedido do Rafael): visão "Light" (simplificada —
-  // só Resumo/Lançamentos/Carteira no rodapé) vs. "Premium" (todas as 5
-  // abas, o app como é hoje). Mesmo raciocínio de sempre pra campo aditivo
-  // numa tabela singleton já existente: não indexado, lido via
-  // `db.configuracoes.get(1)` direto — não precisa de bump de schema.
-  // Ausente/undefined = 'premium' (compatível com quem já usava o app antes
-  // deste campo existir). Ver `src/configuracaoIcones.ts`.
-  // 13/09/2026: entra a 'ideal' — a versão NOVA, entre a Light e a Premium
-  // (ver "Diretrizes de Layout — Versão Ideal (v2)"). Ela é o PADRÃO a partir
-  // desta build: quem não tem o campo gravado abre nela. Light e Premium não
-  // foram tocadas — continuam inteiras, e a troca é em Configurações.
-  modoVisao?: 'light' | 'ideal' | 'premium'
+  /* ---- Parâmetros da notificação bancária (16/09/2026, build 080) ----
+     Mesma mecânica do padrão de categorias acima, aplicada a PARÂMETRO em vez
+     de cadastro — ver `src/notificacaoParametros.ts` pro desenho das 3
+     camadas (fábrica → publicado pelo N0 → personalizado pelo ambiente).
+     `notifParamsPorAmbiente` guarda SÓ o que o dono daquele ambiente
+     personalizou, parâmetro a parâmetro (é a camada 3, e é ela que
+     "Restaurar padrão do app" apaga); `notifVersaoPorAmbiente` guarda qual
+     versão publicada pelo N0 cada ambiente já processou, pra uma publicação
+     de escopo "todos" não ser imposta duas vezes. Aditivos, não indexados,
+     sem bump de schema — mesma regra desta tabela singleton. */
+  notifParamsPorAmbiente?: Record<string, Partial<ParametrosNotificacao>>
+  notifVersaoPorAmbiente?: Record<string, number>
+  /* `modoVisao` EXISTIU de 04/09 a 16/09/2026 e foi REMOVIDO na build 087
+     junto com o conceito de versão (Light/Ideal/Premium/Completa). O app tem
+     UM conjunto de abas para todo mundo — ver o cabeçalho de
+     `migrarFimDasVersoes()` em `src/configuracaoIcones.ts` para o motivo (a
+     Light escondia o Planejamento, que é onde as metas se editam) e para a
+     regra que fica no lugar: diferença de acesso é permissionamento
+     comercial, nunca ramificação de layout.
+
+     O campo NÃO está declarado aqui de propósito — declarar um campo morto é
+     convite a ramificar por ele de novo. `migrarFimDasVersoes()` o apaga do
+     banco (e apaga também `modoVisaoCompletaRevisado`, a marca da migração da
+     086), lendo o valor cru por cast; a marca desta limpeza é
+     `versaoUnicaRevisado`, logo abaixo. */
+  versaoUnicaRevisado?: boolean
   // Ordem das 5 abas do rodapé (04/09/2026, Roteiro de Parametrização Morfo,
   // Etapa 4 — "Kit de Estrutura Mínima", adaptação da seção "Ordem dos menus"
   // de `LayoutTenantScreen` do Kit). Lista das chaves de `TELAS` em
-  // `App.tsx` (`'resumo'|'situacao'|'lancamentos'|'carteira'|'planejamento'`)
+  // `App.tsx` (`'situacao'|'lancamentos'|'carteira'|'planejamento'` — a chave
+  // 'resumo' existiu até a build 086, quando a tela Resumo do Mês saiu junto
+  // com a versão Premium; uma ordem gravada que ainda a cite é simplesmente
+  // ignorada, porque a ordem só reordena abas que existem)
   // na ordem escolhida pelo Rafael em Manutenção → "Layout do rodapé".
-  // Ausente/undefined = ordem padrão (a mesma de sempre). A VISIBILIDADE de
-  // cada aba continua sendo só o mecanismo `modoVisao` já existente — este
-  // campo nunca esconde aba nenhuma, só reordena as que já estão visíveis.
+  // Ausente/undefined = ordem padrão (a mesma de sempre). Este campo nunca
+  // esconde aba nenhuma, só reordena as que existem — desde a build 087 as
+  // quatro abas são as mesmas para todo mundo, e quem some uma aba da
+  // navegação é só o "Ocultar" do Layout do Sistema (N0).
   ordemAbas?: string[]
   // Plano "contratado" (05/09/2026, Etapa 5 — Modelo de negócio Completo).
   // PLACEHOLDER: não existe cobrança real nem backend (Decisão 6/Backlog
@@ -752,6 +848,47 @@ export interface NotificacaoPendente {
   ambienteId?: string
 }
 
+/* ---- De/Para aprendido a cada confirmação (16/09/2026, build 080, fase 3) --
+ *
+ * O ativo que o Rafael quer administrar: cada vez que ele confirma uma
+ * notificação (criando um lançamento novo OU vinculando a um já previsto), o
+ * app guarda o que aprendeu — "quando vier ESTE texto do banco, é ESTA
+ * categoria, com ESTE nome, nesta conta". É isso que vai fazer a importação de
+ * extrato casar sozinha depois, e é isso que resolve o "corrigi PJBANK pra
+ * PJ Bank uma vez e passou a valer" sem nenhuma regra escondida.
+ *
+ * `chave` é o nome da contraparte passado por `normalizarNome()` de
+ * `dados/instituicoes.ts` — o MESMO normalizador do casamento de instituição e
+ * do parser. Não existe um terceiro normalizador no projeto, de propósito.
+ *
+ * `tipo` separa os dois aprendizados que hoje existem:
+ *   'texto'            — texto do banco → categoria/descrição/conta.
+ *   'parTransferencia' — par de apps que o Rafael JÁ confirmou ser
+ *                        transferência entre contas dele (fase 4). Fica como
+ *                        LINHA VISÍVEL e apagável, nunca caixa-preta.
+ *
+ * Tudo aqui é sugestão: nenhuma linha desta tabela grava lançamento sozinha.
+ */
+export type TipoAprendizado = 'texto' | 'parTransferencia'
+
+export interface AprendizadoNotificacao {
+  id?: number
+  tipo: TipoAprendizado
+  /** Nome normalizado da contraparte ('texto') ou "pacoteA|pacoteB" ordenado ('parTransferencia'). */
+  chave: string
+  /** Como o texto apareceu, pra tela mostrar algo legível. */
+  rotulo: string
+  /** Descrição que o Rafael escolheu — é o "PJBANK → PJ Bank". */
+  descricao?: string
+  categoriaId?: number
+  contaId?: number
+  /** Quantas vezes este aprendizado foi reforçado. */
+  vezes: number
+  criadoEm: string
+  atualizadoEm: string
+  ambienteId?: string
+}
+
 // Versão dos DADOS DE SEMENTE (não é versão de schema — isso é o `.version()`
 // abaixo). Incremente este número toda vez que `src/seed.ts` mudar de um jeito
 // que deveria alterar os números que aparecem na tela (categoria recategorizada,
@@ -799,6 +936,7 @@ class MFinpDB extends Dexie {
   planos!: EntityTable<PlanoRegistro, 'id'>
   usuariosN0!: EntityTable<UsuarioN0, 'id'>
   notificacoesPendentes!: EntityTable<NotificacaoPendente, 'id'>
+  aprendizadosNotificacao!: EntityTable<AprendizadoNotificacao, 'id'>
 
   constructor() {
     super(`mfinp-db-semente${VERSAO_SEMENTE_DEMO}`)
@@ -1006,6 +1144,32 @@ class MFinpDB extends Dexie {
       planos: '++id',
       usuariosN0: '++id, email',
       notificacoesPendentes: '++id, idNativo, status',
+    })
+
+    /* v9 (16/09/2026, build 080 — de/para aprendido): tabela NOVA
+       `aprendizadosNotificacao` (ver `AprendizadoNotificacao` acima). Tabela
+       nova sempre exige bump (regra da v6). INDEXA `chave` porque
+       `notificacaoBancaria.ts` busca o aprendizado pelo nome normalizado da
+       contraparte (`.where('chave')`) toda vez que uma notificação é exibida —
+       sem índice, `SchemaError` (mesma classe de bug da v5/v7/v8) —, e `tipo`
+       porque a tela de administração lista uma família de cada vez. Nenhuma
+       tabela existente mudou; sem `.upgrade()` (tabela nova, nada a migrar).
+       Os campos novos desta build em tabelas EXISTENTES (`Lancamento.vinculoOrigem`,
+       `ConfiguracaoIcones.notifParamsPorAmbiente`/`notifVersaoPorAmbiente`) NÃO
+       pedem bump: são opcionais e lidos só via `.get()`/`.filter()` em JS. */
+    this.version(9).stores({
+      contas: '++id, nome, tipo, ativa',
+      categorias: '++id, nome, grupo, ativa',
+      grupos: '++id, nome, ativo',
+      lancamentos: '++id, dataCompetencia, contaId, categoriaId, status, chaveImportacao, serieId, transferenciaId',
+      metas: '++id, grupo, mesVigencia',
+      saldosInformados: '++id, contaId, dataReferencia',
+      usuarios: '++id, login',
+      configuracoes: 'id',
+      planos: '++id',
+      usuariosN0: '++id, email',
+      notificacoesPendentes: '++id, idNativo, status',
+      aprendizadosNotificacao: '++id, chave, tipo',
     })
   }
 }

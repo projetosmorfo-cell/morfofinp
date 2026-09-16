@@ -39,10 +39,11 @@
    disputa largura com o próprio título — e o preâmbulo, que não dizia nada,
    era o primeiro a empurrar os dois pro corte. Sobrou só o que distingue uma
    tela da outra. Vira rótulo, não frase: sem ponto final. */
-export const SUBTITULO_RESUMO = 'Real × compromissos'
-
-export const SUBTITULO_SITUACAO = 'Real × metas + compromissos'
-
+/* Build 086: `SUBTITULO_RESUMO` e `SUBTITULO_SITUACAO` saíram junto com as
+   duas telas que os exibiam (Resumo do Mês e Situação), apagadas com a versão
+   Premium. O subtítulo da tela Hoje nunca morou aqui — ele é escrito no
+   próprio `Hoje.tsx`, porque aquela tela não compara "real × alguma coisa" da
+   mesma forma que as outras. */
 export const SUBTITULO_PLANEJAMENTO = 'Real × metas'
 
 /* A Carteira não compara nada — ela responde ONDE o dinheiro está agora. Por
@@ -57,12 +58,8 @@ export const SUBTITULO_CARTEIRA = 'Onde o dinheiro está'
    completa da MESMA ideia — separar os dois arquivos é o caminho mais curto
    para eles se contradizerem. */
 
-export const EXPLICACAO_RESUMO =
-  'Esta tela é o caixa do mês: o que entrou, o que saiu e o que ainda vai entrar ou sair por compromisso já assumido — parcela em andamento e conta fixa recorrente. Nenhuma meta entra nesta conta. A sobra que aparece aqui é a do mês inteiro, livre de tudo.'
-
-export const EXPLICACAO_SITUACAO =
-  'Esta é a única tela que junta as duas coisas: a meta do mês menos o que já saiu menos o que já está comprometido. O resultado é o que ainda dá pra gastar hoje, não a sobra do mês. Como o mês ainda está correndo, a meta variável não fechou: o que não foi gasto ainda pode ser gasto, e é por isso que este número muda todo dia.'
-
+/* `EXPLICACAO_RESUMO` e `EXPLICACAO_SITUACAO` saíram na build 086, pelo mesmo
+   motivo dos subtítulos acima. */
 export const EXPLICACAO_PLANEJAMENTO =
   'Aqui é o placar de cada meta: quanto você planejou, quanto já aconteceu e quanto ainda está previsto — no geral, por grupo, por categoria e até o lançamento. Compromisso não entra nesta conta (isso é assunto da Situação): esta tela responde onde você está gastando mais do que combinou, não se pode gastar hoje.'
 

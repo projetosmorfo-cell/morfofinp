@@ -8,6 +8,7 @@ import MenuLinha from '../components/MenuLinha'
 import SeletorComExplicacao, { type OpcaoExplicada } from '../components/SeletorComExplicacao'
 import { PencilSquareIcon } from '@heroicons/react/24/outline'
 import { lerDoAmbiente, marcaDoAmbiente } from '../ambiente'
+import { AVISO_ULTIMO_COFRINHO, AVISO_COFRINHO_PADRAO_FIXO, MOTIVO_COFRINHO_PADRAO_TRAVADO, ehCofrinhoPadrao, ehUltimoCofrinho } from '../contasCofrinho'
 
 const ROTULO_TIPO: Record<TipoConta, string> = {
   corrente: 'Conta corrente',
@@ -70,15 +71,32 @@ export default function Contas({ aoVoltar }: { aoVoltar: () => void }) {
   const [menuContaAberta, setMenuContaAberta] = useState<number | null>(null)
   const [mostrarNova, setMostrarNova] = useState(false)
   const [novaConta, setNovaConta] = useState<RascunhoConta>(rascunhoVazio())
+  /* A frase do bloqueio do último cofrinho — visível, nunca um clique que não
+     faz nada (mesma disciplina do "salvar sem ação" já documentada). */
+  const [avisoCofrinho, setAvisoCofrinho] = useState<string | null>(null)
 
   const contaEmEdicao = (contas ?? []).find((c) => c.id === editandoId) ?? null
 
   /* Formulário da conta — o MESMO nos dois popups (nova e edição), pra não
      existirem dois desenhos que podem divergir (11/09/2026, "Nos cadastros
      todos do sistema, deve abrir popup e nunca na mesma tela"). */
+  /* `travado` = este é o COFRINHO PADRÃO (build 087, pedido do Rafael: "ele
+     deve aparecer no cadastro para manutenção pelo menos de ícone, o resto dos
+     campos pode deixar bloqueado (somente no Cofrinho padrão)").
+
+     Nome e ícone ficam FORA do fieldset porque são exatamente o que a Carteira
+     lê daquele registro — é a manutenção que ele pediu. O resto entra num
+     `<fieldset disabled>`, não `disabled` campo a campo: é a regra documentada
+     desde a build 052, e é o que faz o bloqueio valer também para componentes
+     próprios (`SeletorComExplicacao`) e para qualquer campo que venha a ser
+     acrescentado aqui depois.
+
+     Só o cofrinho PADRÃO trava. Cofrinho que o usuário cadastrou continua
+     editável por inteiro — `ehCofrinhoPadrao` é a única régua. */
   function formularioConta(
     rasc: RascunhoConta,
     setRasc: React.Dispatch<React.SetStateAction<RascunhoConta>>,
+    travado = false,
   ) {
     return (
       <>
@@ -96,6 +114,14 @@ export default function Contas({ aoVoltar }: { aoVoltar: () => void }) {
           valor={rasc.icone}
           onEscolher={(icone) => setRasc((r) => ({ ...r, icone }))}
         />
+        {/* A frase do bloqueio: uma linha, dizendo o que dá pra mudar e por
+            que o resto não dá — um bloqueio sem motivo visível parece defeito. */}
+        {travado && (
+          <p className="texto-fraco texto-quebra" data-testid="motivo-cofrinho-padrao" style={{ margin: '4px 0 10px', fontSize: 12 }}>
+            {MOTIVO_COFRINHO_PADRAO_TRAVADO}
+          </p>
+        )}
+        <fieldset className="campos-travaveis" disabled={travado}>
         <label htmlFor="conta-tipo">Tipo</label>
         <SeletorComExplicacao<TipoConta>
           id="conta-tipo"
@@ -126,6 +152,7 @@ export default function Contas({ aoVoltar }: { aoVoltar: () => void }) {
             />
           </>
         )}
+        </fieldset>
       </>
     )
   }
@@ -147,10 +174,28 @@ export default function Contas({ aoVoltar }: { aoVoltar: () => void }) {
       icone: { instituicao: c.iconeInstituicao, cor: c.iconeCor, imagemUri: c.iconeImagemUri },
     })
     setConfirmandoExclusaoId(null)
+    setAvisoCofrinho(null)
   }
 
   async function salvarEdicao() {
     if (editandoId == null) return
+    /* PROTEÇÃO DO ÚLTIMO COFRINHO, caminho indireto (build 086): trocar o tipo
+       do último cofrinho ativo para outra coisa o faz sumir tanto quanto
+       excluir. Editar nome, ícone e qualquer outro campo continua livre — é
+       só a saída do tipo 'cofre' que é barrada. */
+    const atual = (contas ?? []).find((c) => c.id === editandoId)
+    if (atual && rascunho.tipo !== 'cofre' && ehUltimoCofrinho(atual, contas)) {
+      setAvisoCofrinho(AVISO_ULTIMO_COFRINHO)
+      return
+    }
+    /* Cinto e suspensório: o Tipo já está dentro do `<fieldset disabled>` do
+       cofrinho padrão, então não há como chegar aqui pela tela. A checagem
+       existe porque a proteção é de DADO, não de campo — a mesma disciplina da
+       build 086, que cobriu os três caminhos que zeram o conjunto. */
+    if (atual && ehCofrinhoPadrao(atual) && rascunho.tipo !== 'cofre') {
+      setAvisoCofrinho(AVISO_COFRINHO_PADRAO_FIXO)
+      return
+    }
     await db.contas.update(editandoId, {
       nome: rascunho.nome.trim(),
       tipo: rascunho.tipo,
@@ -161,15 +206,43 @@ export default function Contas({ aoVoltar }: { aoVoltar: () => void }) {
       diaVencimento: rascunho.tipo === 'cartao' ? diaValido(rascunho.diaVencimento, 10) : undefined,
     })
     setEditandoId(null)
+    setAvisoCofrinho(null)
   }
 
   async function excluir(id: number) {
+    const alvo = (contas ?? []).find((c) => c.id === id)
+    /* O cofrinho PADRÃO não se exclui: ele é o registro do card virtual da
+       Carteira, e a migração que o cria roda uma vez só — excluído, o cadastro
+       voltaria a não ter a linha dele, que é exatamente o que o Rafael
+       reportou nesta rodada. */
+    if (alvo && ehCofrinhoPadrao(alvo)) {
+      setAvisoCofrinho(AVISO_COFRINHO_PADRAO_FIXO)
+      setConfirmandoExclusaoId(null)
+      return
+    }
+    if (alvo && ehUltimoCofrinho(alvo, contas)) {
+      setAvisoCofrinho(AVISO_ULTIMO_COFRINHO)
+      setConfirmandoExclusaoId(null)
+      return
+    }
     await db.contas.delete(id)
     setConfirmandoExclusaoId(null)
+    setAvisoCofrinho(null)
   }
 
   async function alternarAtiva(c: Conta) {
+    // Inativar o último cofrinho ativo é o mesmo que ficar sem nenhum.
+    // Reativar nunca é bloqueado.
+    if (c.ativa && ehCofrinhoPadrao(c)) {
+      setAvisoCofrinho(AVISO_COFRINHO_PADRAO_FIXO)
+      return
+    }
+    if (c.ativa && ehUltimoCofrinho(c, contas)) {
+      setAvisoCofrinho(AVISO_ULTIMO_COFRINHO)
+      return
+    }
     await db.contas.update(c.id!, { ativa: !c.ativa })
+    setAvisoCofrinho(null)
   }
 
   async function adicionarConta() {
@@ -207,6 +280,11 @@ export default function Contas({ aoVoltar }: { aoVoltar: () => void }) {
       </p>
 
       <h2>Cadastradas</h2>
+      {avisoCofrinho && (
+        <p className="valor-neg texto-quebra" data-testid="aviso-ultimo-cofrinho" style={{ margin: '0 0 8px' }}>
+          {avisoCofrinho}
+        </p>
+      )}
       <div className="cartao">
         {contas.length === 0 && <p className="texto-fraco">Nenhuma conta cadastrada ainda.</p>}
         {contas.map((c) => {
@@ -230,6 +308,9 @@ export default function Contas({ aoVoltar }: { aoVoltar: () => void }) {
                     {c.nome}
                     <span className="texto-fraco" style={{ fontSize: 11.5 }}>
                       {' · '}{ROTULO_TIPO[c.tipo]}
+                      {/* Build 087: quem é o cofrinho PADRÃO se lê na própria
+                          lista — é ele que tem campo travado ao editar. */}
+                      {c.cofrinhoPadrao && ' · padrão do app'}
                       {!c.ativa && ' · inativa'}
                       {c.tipo === 'cartao' && c.diaFechamento ? ` · fecha ${c.diaFechamento}` : ''}
                       {c.tipo === 'cartao' && c.diaVencimento ? ` · vence ${c.diaVencimento}` : ''}
@@ -327,7 +408,7 @@ export default function Contas({ aoVoltar }: { aoVoltar: () => void }) {
           onFechar={() => setEditandoId(null)}
           onSalvar={salvarEdicao}
         >
-          {formularioConta(rascunho, setRascunho)}
+          {formularioConta(rascunho, setRascunho, ehCofrinhoPadrao(contaEmEdicao))}
         </ModalCadastro>
       )}
     </>
