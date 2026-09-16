@@ -15,6 +15,22 @@
 //   mesma razão de antes: cor própria e fixa, só que agora com um ícone de
 //   verdade em vez de um círculo/retângulo).
 import type { CSSProperties } from 'react'
+/* Build 089: ícones DESENHADOS por nós, para os conceitos que o Heroicons não
+   tem (bomba de combustível, xícara, caneca, cachorro, porquinho, halter,
+   talher, carro de passeio). Sem eles, trocar o pacote de "3D colorido" para
+   "Apenas borda"/"Preenchido" mudava o SIGNIFICADO do ícone da categoria —
+   Pets virava um coração, Cofrinho virava uma caixa de arquivo. Ver o
+   cabeçalho de `iconesProprios.tsx`. */
+import {
+  BombaCombustivelContorno, BombaCombustivelPreenchido,
+  CafeContorno, CafePreenchido,
+  CanecaContorno, CanecaPreenchido,
+  PetContorno, PetPreenchido,
+  PorquinhoContorno, PorquinhoPreenchido,
+  HalterContorno, HalterPreenchido,
+  TalherContorno, TalherPreenchido,
+  CarroContorno, CarroPreenchido,
+} from './iconesProprios'
 import type { ComponentType, SVGProps } from 'react'
 import {
   Squares2X2Icon,
@@ -715,30 +731,30 @@ interface DefIcone {
 export const ICONES: Record<string, DefIcone> = {
   outros: { nome: 'Outros', outline: Squares2X2Icon, solid: Squares2X2IconSolid, emoji: '📦', categoria: 'simbolos', sinonimos: ['geral', 'diversos', 'variado'] },
   mercado: { nome: 'Mercado/Compras', outline: ShoppingCartIcon, solid: ShoppingCartIconSolid, emoji: '🛒', categoria: 'compras', sinonimos: ['supermercado', 'feira', 'compras do mes', 'mantimentos'] },
-  alimentacao: { nome: 'Alimentação', outline: CakeIcon, solid: CakeIconSolid, emoji: '🍽️', categoria: 'alimentacao', sinonimos: ['comida', 'restaurante', 'almoco', 'jantar', 'lanche'] },
+  alimentacao: { nome: 'Alimentação', outline: TalherContorno, solid: TalherPreenchido, emoji: '🍽️', categoria: 'alimentacao', sinonimos: ['comida', 'restaurante', 'almoco', 'jantar', 'lanche'] },
   casa: { nome: 'Casa/Moradia', outline: HomeIcon, solid: HomeIconSolid, emoji: '🏠', categoria: 'moradia', sinonimos: ['moradia', 'aluguel', 'residencia', 'lar'] },
-  transporte: { nome: 'Transporte/Carro', outline: TruckIcon, solid: TruckIconSolid, emoji: '🚗', categoria: 'transporte', sinonimos: ['carro', 'veiculo', 'uber', 'onibus', 'deslocamento'] },
-  combustivel: { nome: 'Combustível', outline: BoltIcon, solid: BoltIconSolid, emoji: '⛽', categoria: 'transporte', sinonimos: ['gasolina', 'alcool', 'diesel', 'posto'] },
+  transporte: { nome: 'Transporte/Carro', outline: CarroContorno, solid: CarroPreenchido, emoji: '🚗', categoria: 'transporte', sinonimos: ['carro', 'veiculo', 'uber', 'onibus', 'deslocamento'] },
+  combustivel: { nome: 'Combustível', outline: BombaCombustivelContorno, solid: BombaCombustivelPreenchido, emoji: '⛽', categoria: 'transporte', sinonimos: ['gasolina', 'alcool', 'diesel', 'posto'] },
   saude: { nome: 'Saúde', outline: PlusCircleIcon, solid: PlusCircleIconSolid, emoji: '🩺', categoria: 'saude', sinonimos: ['medico', 'remedio', 'farmacia', 'plano de saude', 'clinica'] },
   educacao: { nome: 'Educação', outline: AcademicCapIcon, solid: AcademicCapIconSolid, emoji: '🎓', categoria: 'educacao', sinonimos: ['escola', 'faculdade', 'curso', 'ensino'] },
   lazer: { nome: 'Lazer/Cinema', outline: FilmIcon, solid: FilmIconSolid, emoji: '🎬', categoria: 'lazer', sinonimos: ['cinema', 'entretenimento', 'diversao', 'filme'] },
   musica: { nome: 'Música', outline: MusicalNoteIcon, solid: MusicalNoteIconSolid, emoji: '🎵', categoria: 'lazer', sinonimos: ['spotify', 'show', 'instrumento', 'playlist'] },
   viagem: { nome: 'Viagem', outline: PaperAirplaneIcon, solid: PaperAirplaneIconSolid, emoji: '✈️', categoria: 'lazer', sinonimos: ['ferias', 'passagem', 'turismo', 'viajar'] },
   roupas: { nome: 'Roupas', outline: TagIcon, solid: TagIconSolid, emoji: '👕', categoria: 'compras', sinonimos: ['vestuario', 'moda', 'calcado', 'loja de roupa'] },
-  academia: { nome: 'Academia/Esporte', outline: TrophyIcon, solid: TrophyIconSolid, emoji: '🏋️', categoria: 'saude', sinonimos: ['esporte', 'ginastica', 'musculacao', 'personal'] },
+  academia: { nome: 'Academia/Esporte', outline: HalterContorno, solid: HalterPreenchido, emoji: '🏋️', categoria: 'saude', sinonimos: ['esporte', 'ginastica', 'musculacao', 'personal'] },
   presente: { nome: 'Presente', outline: GiftIcon, solid: GiftIconSolid, emoji: '🎁', categoria: 'compras', sinonimos: ['aniversario', 'gift', 'lembranca'] },
-  cofrinho: { nome: 'Cofrinho', outline: ArchiveBoxIcon, solid: ArchiveBoxIconSolid, emoji: '🐷', categoria: 'financas', sinonimos: ['poupanca', 'reserva', 'economia'] },
+  cofrinho: { nome: 'Cofrinho', outline: PorquinhoContorno, solid: PorquinhoPreenchido, emoji: '🐷', categoria: 'financas', sinonimos: ['poupanca', 'reserva', 'economia'] },
   cartao: { nome: 'Cartão', outline: CreditCardIcon, solid: CreditCardIconSolid, emoji: '💳', categoria: 'financas', sinonimos: ['credito', 'debito', 'fatura do cartao'] },
   salario: { nome: 'Salário/Renda', outline: BanknotesIcon, solid: BanknotesIconSolid, emoji: '💵', categoria: 'financas', sinonimos: ['renda', 'pagamento', 'holerite', 'pro-labore'] },
   transferencia: { nome: 'Transferência', outline: ArrowsRightLeftIcon, solid: ArrowsRightLeftIconSolid, emoji: '🔄', categoria: 'financas', sinonimos: ['pix', 'ted', 'doc', 'envio de dinheiro'] },
   fatura: { nome: 'Fatura/Recibo', outline: ReceiptPercentIcon, solid: ReceiptPercentIconSolid, emoji: '🧾', categoria: 'financas', sinonimos: ['recibo', 'conta', 'boleto'] },
   assinatura: { nome: 'Assinatura/Serviços', outline: ArrowPathIcon, solid: ArrowPathIconSolid, emoji: '🔁', categoria: 'financas', sinonimos: ['mensalidade', 'servico recorrente', 'plano'] },
   celular: { nome: 'Celular', outline: DevicePhoneMobileIcon, solid: DevicePhoneMobileIconSolid, emoji: '📱', categoria: 'tecnologia', sinonimos: ['smartphone', 'telefone movel', 'plano de celular'] },
-  pet: { nome: 'Pet', outline: HeartIcon, solid: HeartIconSolid, emoji: '🐶', categoria: 'pessoas', sinonimos: ['cachorro', 'gato', 'animal de estimacao', 'veterinario'] },
+  pet: { nome: 'Pet', outline: PetContorno, solid: PetPreenchido, emoji: '🐶', categoria: 'pessoas', sinonimos: ['cachorro', 'gato', 'animal de estimacao', 'veterinario'] },
   trabalho: { nome: 'Trabalho', outline: BriefcaseIcon, solid: BriefcaseIconSolid, emoji: '💼', categoria: 'trabalho', sinonimos: ['emprego', 'servico', 'profissao'] },
   protecao: { nome: 'Seguro/Proteção', outline: ShieldCheckIcon, solid: ShieldCheckIconSolid, emoji: '🛡️', categoria: 'seguranca', sinonimos: ['seguro', 'apolice', 'protecao veicular'] },
-  bar: { nome: 'Bar/Bebida', outline: BeakerIcon, solid: BeakerIconSolid, emoji: '🍺', categoria: 'alimentacao', sinonimos: ['bebida', 'cerveja', 'happy hour'] },
-  cafe: { nome: 'Café', outline: BuildingStorefrontIcon, solid: BuildingStorefrontIconSolid, emoji: '☕', categoria: 'alimentacao', sinonimos: ['cafeteria', 'padaria', 'lanchonete'] },
+  bar: { nome: 'Bar/Bebida', outline: CanecaContorno, solid: CanecaPreenchido, emoji: '🍺', categoria: 'alimentacao', sinonimos: ['bebida', 'cerveja', 'happy hour'] },
+  cafe: { nome: 'Café', outline: CafeContorno, solid: CafePreenchido, emoji: '☕', categoria: 'alimentacao', sinonimos: ['cafeteria', 'padaria', 'lanchonete'] },
   investimento: { nome: 'Investimento', outline: ArrowTrendingUpIcon, solid: ArrowTrendingUpIconSolid, emoji: '📈', categoria: 'financas', sinonimos: ['aplicacao', 'bolsa', 'renda fixa', 'acoes'] },
   doacao: { nome: 'Doação', outline: HandRaisedIcon, solid: HandRaisedIconSolid, emoji: '🤝', categoria: 'financas', sinonimos: ['caridade', 'contribuicao', 'ajuda'] },
   impostos: { nome: 'Impostos/Governo', outline: BuildingLibraryIcon, solid: BuildingLibraryIconSolid, emoji: '🏛️', categoria: 'financas', sinonimos: ['governo', 'taxas', 'tributos', 'irpf'] },
@@ -1044,6 +1060,23 @@ export const ICONES: Record<string, DefIcone> = {
   textoSublinhado: { nome: 'Texto Sublinhado', outline: UnderlineIcon, solid: UnderlineIconSolid, emoji: '✏️', categoria: 'documentos' },
   focoMira: { nome: 'Foco/Mira', outline: ViewfinderCircleIcon, solid: ViewfinderCircleIconSolid, emoji: '🎯', categoria: 'tecnologia' },
   fecharCancelar: { nome: 'Fechar/Cancelar', outline: XMarkIcon, solid: XMarkIconSolid, emoji: '✖️', categoria: 'simbolos' },
+
+  /* Build 089 — estes 8 Heroicons eram usados como APROXIMAÇÃO para
+     conceitos que eles não representam (caminhão fazia as vezes de carro,
+     troféu de academia, coração de pet, béquer de bar, loja de café,
+     caixa de cofrinho, raio de combustível, bolo de alimentação). Esses
+     conceitos ganharam desenho próprio em `iconesProprios.tsx`; os
+     Heroicons continuam na biblioteca, agora com o significado que de
+     fato têm — a biblioteca ganhou 8 entradas em vez de perder 8. */
+  caminhao: { nome: 'Caminhão/Frete', outline: TruckIcon, solid: TruckIconSolid, emoji: '🚚', categoria: 'transporte', sinonimos: ['frete','entrega','mudanca','carga'] },
+  bolo: { nome: 'Bolo/Aniversário', outline: CakeIcon, solid: CakeIconSolid, emoji: '🎂', categoria: 'alimentacao', sinonimos: ['aniversario','doce','festa','confeitaria'] },
+  eletricidade: { nome: 'Energia Elétrica', outline: BoltIcon, solid: BoltIconSolid, emoji: '⚡', categoria: 'moradia', sinonimos: ['luz','conta de luz','energia eletrica','raio'] },
+  trofeu: { nome: 'Troféu/Conquista', outline: TrophyIcon, solid: TrophyIconSolid, emoji: '🏆', categoria: 'lazer', sinonimos: ['conquista','premio','meta batida','campeao'] },
+  caixa: { nome: 'Caixa/Arquivo', outline: ArchiveBoxIcon, solid: ArchiveBoxIconSolid, emoji: '📦', categoria: 'documentos', sinonimos: ['arquivo','guardado','estoque','encomenda'] },
+  coracao: { nome: 'Coração/Favorito', outline: HeartIcon, solid: HeartIconSolid, emoji: '❤️', categoria: 'simbolos', sinonimos: ['favorito','amor','curtir','doacao'] },
+  laboratorio: { nome: 'Laboratório/Exames', outline: BeakerIcon, solid: BeakerIconSolid, emoji: '🧪', categoria: 'saude', sinonimos: ['exame','analise','quimica','pesquisa'] },
+  loja: { nome: 'Loja/Comércio', outline: BuildingStorefrontIcon, solid: BuildingStorefrontIconSolid, emoji: '🏪', categoria: 'compras', sinonimos: ['comercio','mercadinho','ponto','varejo'] },
+
 }
 
 export const LISTA_ICONES: { id: string; nome: string; categoria: string; sinonimos?: string[] }[] = Object.entries(

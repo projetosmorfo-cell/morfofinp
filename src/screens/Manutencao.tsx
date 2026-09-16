@@ -3,7 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../db'
 import { exportarConfiguracaoIcones } from '../iconesPadrao'
 import {
-  montarBackup, nomeArquivoBackup, lerArquivoBackup, restaurarBackup, apagarTudo,
+  montarBackup, nomeArquivoBackup, usuarioDoBackup, lerArquivoBackup, restaurarBackup, apagarTudo,
   totalDeRegistros, tabelasForaDoBackup, ROTULO_TABELA, type ResumoBackup,
 } from '../backup'
 import { salvarArquivoTexto, escolherArquivoTexto } from '../arquivoLocal'
@@ -212,7 +212,11 @@ export default function Manutencao({
     setErroBackup(null); setAvisoBackup(null); setBackupNaTela(null); setOcupadoBackup('gerando')
     try {
       const arquivo = await montarBackup(BUILD_NUMBER)
-      const nome = nomeArquivoBackup()
+      /* Build 089: o nome passou a levar o usuário — `Bkp MorfoFinp <Usuário>
+         DDMMAAAA HHMM.json`. Resolvido aqui, no momento de gerar, e não
+         guardado em lugar nenhum: se a pessoa trocar de acesso, o próximo
+         backup já sai com o nome novo sem nada pra sincronizar. */
+      const nome = nomeArquivoBackup(await usuarioDoBackup())
       const conteudo = JSON.stringify(arquivo)
       const total = totalDeRegistros(arquivo.contagens)
       const r = await salvarArquivoTexto(nome, conteudo)

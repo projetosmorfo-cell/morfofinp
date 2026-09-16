@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../db'
+import type { PacotesIconesN0 } from '../pacotesIcones'
 import { salvarConfiguracaoIcones } from '../configuracaoIcones'
 import { hojeEfetivoISO } from '../hojeSimulado'
 import type { ParametrosNotificacao, ParametrosNotificacaoN0, EscopoPublicacao } from '../notificacaoParametros'
@@ -633,6 +634,12 @@ export interface PlatformN0 {
      compara com o que já aplicou (`padraoCatVersaoAplicada`, `db.configuracoes`)
      pra saber se tem padrão novo pra receber. Ver `padraoCategorias.ts`. */
   padraoCategorias?: PadraoCategoriasN0
+  /* Os TRÊS pacotes de ícones da plataforma + qual está em uso para cliente
+     novo (build 089). Mesma mecânica de propagação do `padraoCategorias`
+     logo acima: `versao` sobe a cada salvamento. Ver `src/pacotesIcones.ts`
+     — inclusive a razão de a cor de categorias e a de grupos serem
+     obrigatoriamente distantes. */
+  pacotesIcones?: PacotesIconesN0
   /* Parâmetros da notificação bancária publicados pela Morfo (16/09/2026,
      build 080). MESMA mecânica do `padraoCategorias` logo acima — `versao` sobe
      a cada salvamento e cada ambiente guarda qual já processou —, com UMA
@@ -705,6 +712,8 @@ export const FUNCOES_PERFIL_N0: FuncaoPerfil[] = [
     { k: 'parametros.ambiente', l: 'Ambiente dos Clientes', sessao: 'Ambiente do Cliente' },
     { k: 'parametros.chat', l: 'Gerenciar Chat', sessao: 'Ambiente do Cliente' },
     { k: 'parametros.padraoCategorias', l: 'Categorias e Grupos (padrão)', sessao: 'Ambiente do Cliente' },
+    /* Build 089: as três propostas de ícone e qual delas cliente novo recebe. */
+    { k: 'parametros.pacotesIcones', l: 'Pacotes de ícones', sessao: 'Ambiente do Cliente' },
     /* Build 080: as regras e parâmetros da leitura de notificação bancária —
        TODOS, inclusive os que não são expostos no app do cliente. */
     { k: 'parametros.notificacoes', l: 'Notificações bancárias', sessao: 'Ambiente do Cliente' },
@@ -1369,6 +1378,12 @@ export async function salvarPadraoCategoriasN0(dados: Omit<PadraoCategoriasN0, '
   const atual = await lerPlatformN0Persistida()
   const versao = (atual.padraoCategorias?.versao ?? 0) + 1
   await salvarPlatformN0({ ...atual, padraoCategorias: { ...dados, versao, atualizadoEm: agoraISO() } })
+  return versao
+}
+export async function salvarPacotesIconesN0(dados: Omit<PacotesIconesN0, 'versao' | 'atualizadoEm'>) {
+  const atual = await lerPlatformN0Persistida()
+  const versao = (atual.pacotesIcones?.versao ?? 0) + 1
+  await salvarPlatformN0({ ...atual, pacotesIcones: { ...dados, versao, atualizadoEm: agoraISO() } })
   return versao
 }
 export async function atualizarUrlsN0(patch: Partial<NonNullable<PlatformN0['urlsProduto']>>) {

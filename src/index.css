@@ -148,7 +148,7 @@
   --texto-fraco: #6b6558;
   --azul: #2563eb;
   --verde: #15803d;
-  --vermelho: #b91c1c;
+  --vermelho: #c41414;  /* build 089: sat 0,74 -> 0,81; 6,07 sobre branco (AA) */
   --amarelo: #a16207;
   --fundo-feito: #f1eee8;
   --fundo-pendente: #fdf6e3;
@@ -172,8 +172,8 @@
   --ideal-ambar-txt: #7c4a00;     /* 7,40 */
   --ideal-verde: #2e9e4f;         /* 3,43 */
   --ideal-verde-txt: #166534;     /* 7,13 */
-  --ideal-vermelho: #d64545;      /* 4,38 */
-  --ideal-vermelho-txt: #a81f1f;  /* 7,29 */
+  --ideal-vermelho: #ec2020;   /* build 089: sat 0,64 -> 0,84, contraste IDENTICO (4,38) */
+  --ideal-vermelho-txt: #c01212;  /* build 089: sat 0,69 -> 0,83; 6,29 sobre branco */
   --ideal-trilho: #d6d0c6;   /* 1,53 sobre o cartão branco (era 1,27) */
   /* "O Rio" no tema claro — sem amostra de print (a referência do Rafael é
      escura); reaproveita os tons claros já calibrados para contraste em vez
@@ -196,6 +196,22 @@
    sempre foi. Deixar o `prefers-color-scheme` valer por padrão viraria o
    app inteiro pra claro no primeiro celular configurado em modo claro,
    sem ninguém ter pedido — mudança silenciosa de uma decisão de produto. */
+/* BUG REAL corrigido na build 089. Este bloco é a paleta clara para quem
+   escolheu "Automático" e está num aparelho em modo claro — e ele tinha só 18
+   dos 39 tokens do bloco `[data-mloc-tema='claro']` logo acima. Os 21 que
+   faltavam eram justamente os de COR das barras e do funil (`--ideal-*`,
+   `--rio-*`, `--sombra-rio`): como não eram redefinidos, caíam nos valores do
+   `:root`, que são calibrados para fundo ESCURO. Resultado, em Automático +
+   aparelho claro: as caixas da tela Hoje continuavam com fundo escuro
+   (`--rio-caixa-bg: #182338`) dentro de uma tela clara, e o trilho das barras
+   ficava quase preto. Ninguém tinha reportado porque o Rafael usa o tema
+   escolhido à mão; qualquer pessoa em "Automático" via o app meio escuro,
+   meio claro.
+   REGRA: este bloco tem que ser IDÊNTICO, token a token, ao de
+   `[data-mloc-tema='claro']`. São dois porque o CSS não deixa um seletor
+   entrar e sair de uma @media ao mesmo tempo — não porque sejam paletas
+   diferentes. O roteiro de teste compara os dois conjuntos e reprova se
+   divergirem, que é o que impede este mesmo buraco de voltar. */
 @media (prefers-color-scheme: light) {
   :root[data-mloc-tema='auto'] {
     --bg: #f7f5f2;
@@ -205,19 +221,49 @@
     --texto-fraco: #6b6558;
     --azul: #2563eb;
     --verde: #15803d;
-    --vermelho: #b91c1c;
+    --vermelho: #c41414;  /* build 089: sat 0,74 -> 0,81; 6,07 sobre branco (AA) */
     --amarelo: #a16207;
     --fundo-feito: #f1eee8;
     --fundo-pendente: #fdf6e3;
     --fundo-atrasado: #fdecec;
+    /* Roxo mais fechado no claro: o #8b7cf6 do tema escuro some sobre branco.
+       Build 085: fecha mais um passo (#5521d6) e o inativo clareia, pelo mesmo
+       motivo do tema escuro — o par precisava de distância, não de tom novo. */
     --rodape-acento: #5521d6;
     --rodape-inativo: #8d8677;
     --rodape-ativo-pilula: rgba(85, 33, 214, 0.1);
+    /* No claro quem separa o popup é a BORDA (branco sobre branco não tem
+       contraste nenhum); a sombra fica suave, só pra dar profundidade. */
     --borda-popup: #cfc8bd;
     --sombra-popup: 0 18px 44px rgba(28, 27, 34, 0.22), 0 2px 8px rgba(28, 27, 34, 0.1);
     --veu-popup: rgba(28, 27, 34, 0.42);
     color-scheme: light;
-  }
+    /* Versão Ideal — par claro. Só os tokens mudam; nenhuma regra de layout. */
+    --ideal-azul: #2f7bd6;          /* preenchimento 4,26 */
+    --ideal-azul-txt: #1b5ea8;      /* texto 6,54 */
+    --ideal-ambar: #c97a00;         /* 3,35 */
+    --ideal-ambar-txt: #7c4a00;     /* 7,40 */
+    --ideal-verde: #2e9e4f;         /* 3,43 */
+    --ideal-verde-txt: #166534;     /* 7,13 */
+    --ideal-vermelho: #ec2020;   /* build 089: sat 0,64 -> 0,84, contraste IDENTICO (4,38) */
+    --ideal-vermelho-txt: #c01212;  /* build 089: sat 0,69 -> 0,83; 6,29 sobre branco */
+    --ideal-trilho: #d6d0c6;   /* 1,53 sobre o cartão branco (era 1,27) */
+    /* "O Rio" no tema claro — sem amostra de print (a referência do Rafael é
+       escura); reaproveita os tons claros já calibrados para contraste em vez
+       de inventar hex novo. */
+    --rio-caixa-bg: var(--bg-elevado);
+    --rio-caixa-borda: var(--borda);
+    --rio-verde-bg: #e6f4ea;
+    --rio-verde-txt: var(--ideal-verde-txt);
+    --rio-ambar-bg: #fdf1e0;
+    --rio-ambar-txt: var(--ideal-ambar-txt);
+    --rio-vermelho-bg: var(--fundo-atrasado);
+    --rio-vermelho-txt: var(--ideal-vermelho-txt);
+    --rio-seta: var(--borda);
+    --sombra-rio: 0 2px 6px rgba(28, 27, 34, 0.14);
+    --rio-barra-azul: var(--azul);
+    --rio-barra-vermelho: var(--vermelho);
+}
 }
 
 * {
@@ -340,6 +386,40 @@ h2 {
   border: 1px solid var(--borda);
   border-radius: 12px;
   padding: 14px 16px;
+}
+
+/* ESPAÇO ENTRE CARTÕES — build 089.
+   Pedido do Rafael: "tem alguns que estão grudados e não tem correlação; só
+   mantenha [colado] se o segundo card for continuidade do mesmo tema, fora
+   isso deixe o espaçamento que já usa hoje em vários".
+
+   O que existia: `.cartao` não tinha margem NENHUMA, e cada tela resolvia o
+   respiro por conta própria num `style` inline — medido antes da correção,
+   havia 0px, 8px, 10px, 12px e 14px convivendo, e os 0px eram simplesmente
+   os lugares onde ninguém tinha escrito nada. Não era uma decisão de
+   proximidade, era ausência de decisão.
+
+   O padrão é 10px porque é o que o app JÁ usa em mais lugares: `.card-conta`
+   (lista da Carteira), os cartões de grupo do Planejamento e vários
+   `marginBottom: 10` — e é o `ESPACO_LINHA` do Padrão de Interface Morfo.
+
+   Como aplicar daqui pra frente: nada a fazer, é automático entre cartões
+   vizinhos. Para GRUDAR dois cartões de propósito (o segundo é continuação
+   do primeiro), ponha `.cartao-continuacao` no segundo — assim a exceção
+   fica escrita e legível, em vez de ser a falta de uma regra. */
+:root { --espaco-cartoes: 10px; }
+
+main .cartao + .cartao,
+main .cartao + .card-conta,
+main .card-conta + .cartao {
+  margin-top: var(--espaco-cartoes);
+}
+
+/* A exceção declarada: continuação do mesmo assunto, sem respiro no meio. */
+main .cartao + .cartao.cartao-continuacao,
+main .cartao + .card-conta.cartao-continuacao,
+main .card-conta + .cartao.cartao-continuacao {
+  margin-top: 0;
 }
 
 .linha {
@@ -1044,8 +1124,16 @@ nav.rodape {
   padding: 0;
 }
 
+/* Build 089 — os dois botões de ação COLORIDOS levam texto branco escrito, em
+   vez de herdar `--texto`. No tema escuro `--texto` é quase branco e dava
+   certo por coincidência; no claro ele é quase preto, e "Excluir" ficava em
+   2,81 de contraste sobre o vermelho (medido na varredura do app inteiro
+   desta build). Branco dá 6,07 sobre o vermelho e 5,17 sobre o azul.
+   `.acao-editar` NÃO entra: o fundo dela é `--bg-elevado`, e ali quem está
+   certo é justamente o `--texto` do tema. */
 .item-lancamento-acao.acao-duplicar {
   background: var(--azul);
+  color: #fff;
 }
 
 .item-lancamento-acao.acao-editar {
@@ -1056,6 +1144,7 @@ nav.rodape {
 
 .item-lancamento-acao.acao-excluir {
   background: var(--vermelho);
+  color: #fff;
 }
 
 /* Listagem COMPLETA (duas linhas) — 31/08/2026, rodada seguinte: usada em
@@ -3202,7 +3291,12 @@ html[data-mloc-tema='claro'] .tarja-inativa {
 .regua-fill { position: absolute; top: 0; bottom: 0; left: 0; background: var(--ideal-azul); }
 .regua-fill.estouro { background: var(--ideal-vermelho); }
 .regua-comprometido { position: absolute; top: 0; bottom: 0; background: var(--ideal-ambar); }
-.regua-meta { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: #fff; }
+/* Build 089: mesma correção do nome acima — o marcador da meta era `#fff`
+   cravado e sumia no tema claro (1,53 sobre o trilho). Passa a usar
+   `var(--texto)`, o MESMO token que `.barra-ideal-meta` já usava desde a
+   build 057 para o marcador equivalente: duas peças com o mesmo papel
+   passam a falar a mesma língua. */
+.regua-meta { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--texto); }
 .regua-nome {
   position: absolute; top: 50%; transform: translateY(-50%);
   font-size: 11.5px; font-weight: 700; white-space: nowrap;
@@ -3212,7 +3306,16 @@ html[data-mloc-tema='claro'] .tarja-inativa {
 /* Dentro do preenchido (azul/âmbar/verde claros): texto escuro. */
 .regua-nome.dentro { left: 8px; color: #0b1220; }
 /* Fora dele, sobre o trilho escuro: texto claro. `left` vem do JS. */
-.regua-nome.fora { color: #ffffff; }
+.regua-nome.fora {
+  /* Build 089 — BUG REAL relatado pelo Rafael ("existem textos brancos ou
+     quase brancos que não dá pra ler... exemplo em planejamento, o gráfico
+     por linha"). Era `#ffffff` cravado: no tema escuro cai sobre o trilho
+     escuro (10,57 de contraste, ótimo), mas no claro cai sobre o trilho
+     `#d6d0c6` e dá 1,53 — invisível. `var(--texto)` é o token de "texto
+     sobre o fundo do cartão", que é exatamente onde este nome está quando
+     não coube dentro do preenchimento: 8,70 no escuro e 11,14 no claro. */
+  color: var(--texto);
+}
 .regua-linha.forte .regua-nome { font-size: 12.5px; letter-spacing: .04em; }
 .regua-valor {
   flex: 0 0 auto; font-size: 11.5px; font-weight: 700; white-space: nowrap;
@@ -3464,4 +3567,56 @@ html[data-mloc-tema='claro'] .tarja-inativa {
 .medidor-total {
   display: flex; justify-content: space-between; gap: 10px;
   margin-top: 8px; padding-top: 8px; border-top: 2px solid var(--borda);
+}
+
+/* ---- Pacotes de ícones (build 089) — `EscolhaPacoteIcones.tsx`.
+   Reaproveita `.abas-tela`/`.aba-tela-item` (as abas de tela do app) e
+   `.paleta-cores-icone`/`.swatch-cor` (a paleta que o seletor de ícone já
+   usava): nenhum elemento visual novo foi inventado, só composto. ---- */
+.selo-em-uso {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--azul);
+  color: #fff;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+.previa-pacote {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--borda);
+  border-radius: 10px;
+  background: var(--bg);
+}
+.previa-pacote-linha {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 0;
+}
+.previa-pacote-rotulo {
+  flex: 0 0 72px;
+  font-size: 11px;
+  color: var(--texto-fraco);
+}
+/* Os ícones podem passar da largura numa tela estreita: rolam só eles, nunca
+   a página (regra do projeto — `<main>` é o único contêiner de rolagem). */
+.previa-pacote-icones {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.previa-pacote-icones::-webkit-scrollbar { display: none; }
+.rotulo-cor-pacote {
+  display: block;
+  font-size: 11.5px;
+  color: var(--texto-fraco);
+  margin: 12px 0 4px;
 }

@@ -407,19 +407,15 @@ export default function Planejamento({ mes, aoMudarMes, aoAbrirLancamento, aoAbr
           subtitulo={SUBTITULO_PLANEJAMENTO}
           explicacao={<>{EXPLICACAO_PLANEJAMENTO} São 4 níveis: Geral, Grupo, Categoria e Lançamento — toque num grupo pra descer de nível.</>}
           onExportar={() => setExportOpen(true)}
-          /* ⚖ sempre disponível, mesmo com tudo calibrado — a faixa de alerta
-             abaixo só aparece quando há algo errado (build 059). */
-          antes={aoAbrirCalibragem ? (
-            <button
-              type="button"
-              className="botao-voltar-circular"
-              onClick={aoAbrirCalibragem}
-              aria-label="Calibragem"
-              data-testid="abrir-calibragem"
-            >
-              ⚖
-            </button>
-          ) : undefined}
+          /* Build 089: o ⚖ que ficava à ESQUERDA do título saiu. Ele era o
+             único atalho de tela desenhado como emoji solto na linha do
+             título — fora do padrão do app, que usa ícone só à direita
+             (exportar, buscar, filtrar) — e era redundante: a
+             `FaixaPercentuais` logo abaixo é uma faixa fixa, sempre visível,
+             que leva à mesma tela de Calibragem. Duas portas para o mesmo
+             lugar a 20px de distância. `aoAbrirCalibragem` continua chegando
+             na tela e é por ela que a faixa e os cards de grupo abrem a
+             Calibragem — o que saiu foi só o atalho duplicado. */
         />
         <SeletorMes mes={mes} onMudar={aoMudarMes} />
       </div>

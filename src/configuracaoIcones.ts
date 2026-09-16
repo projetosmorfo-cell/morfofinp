@@ -140,6 +140,12 @@ export function useConfiguracaoIcones(): Required<
     /* 16/09/2026 (build 087): marca da migração que ENCERRA o conceito de
        versão — ver `migrarFimDasVersoes()` logo abaixo. */
     | 'versaoUnicaRevisado'
+    /* Build 089: o pacote de ícones escolhido por este ambiente é lido pela
+       tela de Aparência (`usePacoteEscolhido`), não por este hook, que existe
+       só para os 3 percentuais de tamanho. */
+    | 'pacoteIconesEscolhido'
+    | 'pacoteIconesCorCategorias'
+    | 'pacoteIconesCorGrupos'
   >
 > {
   const config = useLiveQuery(() => db.configuracoes.get(1), [])

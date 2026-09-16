@@ -91,9 +91,61 @@ export async function montarBackup(build: number): Promise<ArquivoBackup> {
   }
 }
 
-export function nomeArquivoBackup(agora = new Date()) {
+/* Nome do arquivo de backup — formato pedido pelo Rafael na build 089:
+   `Bkp MorfoFinp <Usuário> DDMMAAAA HHMM.json`.
+
+   Por que a data vai DD-MM-AAAA e não AAAA-MM-DD: ele lê esses arquivos numa
+   pasta do Drive, na ordem em que o Windows mostra, e o formato pedido é o
+   que ele reconhece de bater o olho. A ordenação por nome deixa de ser
+   cronológica — quem precisa da ordem usa a data de modificação do arquivo,
+   que continua correta.
+
+   O nome do usuário passa por `nomeParaArquivo`: um backup vai parar no
+   Drive, no WhatsApp e no cartão de memória do celular, e caractere proibido
+   em nome de arquivo (Windows: \\ / : * ? " < > |) faz a gravação falhar de
+   um jeito que parece "o backup não funciona". Acento fica, espaço fica —
+   os dois são válidos nos três sistemas e o Rafael pediu o nome legível. */
+export function nomeParaArquivo(nome: string | undefined | null): string {
+  const limpo = (nome ?? '')
+    .replace(/[\\/:*?"<>|]/g, ' ')
+    /* Caracteres de controle quebram o nome do arquivo sem aparecer na tela —
+       por isso eles são justamente o que precisa ser removido aqui. A regra
+       `no-control-regex` existe para pegar quem põe um caractere de controle
+       numa busca por engano; este é o caso oposto, e desligar a regra NA
+       LINHA é o que o projeto faz desde a build 047 em vez de reescrever o
+       código para enganar o lint. */
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\u0000-\u001f\u007f]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 40)
+  return limpo || 'Sem usuario'
+}
+
+export function nomeArquivoBackup(usuario?: string, agora = new Date()) {
   const p = (n: number) => String(n).padStart(2, '0')
-  return `morfofinp-backup-${agora.getFullYear()}${p(agora.getMonth() + 1)}${p(agora.getDate())}-${p(agora.getHours())}${p(agora.getMinutes())}.json`
+  const data = `${p(agora.getDate())}${p(agora.getMonth() + 1)}${agora.getFullYear()}`
+  const hora = `${p(agora.getHours())}${p(agora.getMinutes())}`
+  return `Bkp MorfoFinp ${nomeParaArquivo(usuario)} ${data} ${hora}.json`
+}
+
+/* Quem é o "Usuário" do nome do arquivo: o usuário logado no ambiente deste
+   aparelho. Lê do banco (nunca de um valor de render), então serve tanto pra
+   tela quanto pra um script. Sem sessão — ou num ambiente sem usuário
+   cadastrado — cai no nome do próprio ambiente, e depois no genérico: o
+   backup nunca deixa de ser gerado por falta de nome. */
+export async function usuarioDoBackup(): Promise<string> {
+  try {
+    const cfg = await db.configuracoes.get(1)
+    const platform = cfg?.platformN0
+    const tenant =
+      platform?.tenants?.find((t) => t.id === (cfg?.loggedTenantIdN1 || 't0')) ??
+      platform?.tenants?.find((t) => t.id === 't0')
+    const user = tenant?.users?.find((u) => u.id === cfg?.loggedUserIdN1)
+    return user?.name || user?.login || tenant?.ownerName || tenant?.companyName || 'Sem usuario'
+  } catch {
+    return 'Sem usuario'
+  }
 }
 
 export interface ResumoBackup {

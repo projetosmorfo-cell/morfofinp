@@ -20,6 +20,7 @@ import {
   type RascunhoGrupo,
 } from '../components/FormulariosCadastro'
 import MenuLinha from '../components/MenuLinha'
+import PacoteIconesN1 from '../components/PacoteIconesN1'
 import ModalCadastro from '../components/ModalCadastro'
 import { ROTULO_TIPO_GRUPO, comportamentoDoGrupo, gruposParaNatureza, tipoDoGrupo } from '../gruposUtil'
 import { fmtBRL, formatarMoeda, aplicarMascaraValor, paraNumero } from '../formatoMoeda'
@@ -505,6 +506,11 @@ export default function Categorias(_props: TelaProps & { aoVoltar: () => void })
 
       {abaAtiva === 'aparencia' && (
         <>
+          {/* Build 089: o PACOTE de ícones vem primeiro — escolher o traço é
+              uma decisão maior que calibrar o tamanho dele, e é a primeira
+              coisa que alguém faz ao abrir "Aparência". */}
+          <PacoteIconesN1 />
+
           {/* 01/09/2026, rodada seguinte: config universal de tamanho de
               ícone — NÃO é por categoria/grupo (por isso fica aqui, fora do
               cadastro de cada um), é um parâmetro só, aplicado em todo o app

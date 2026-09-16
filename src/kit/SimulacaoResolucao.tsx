@@ -165,7 +165,7 @@ export function FerramentasTesteFlutuantes({ onAbrirFerramentaData }: { onAbrirF
             ? 'Ferramenta de teste MVP: voltar pra largura normal de produção (430px)'
             : 'Ferramenta de teste MVP: alternar pra área simulada WEB (100% da largura do navegador)'
         }
-        style={{ ...base, left: esquerda(12), background: web ? '#f59e0b' : 'rgba(0,0,0,0.35)' }}
+        style={{ ...base, left: esquerda(12), background: web ? '#f59e0b' : 'rgba(0,0,0,0.55)' }}
       >
         {web ? '📱' : '🖥️'}
       </button>
@@ -182,7 +182,7 @@ export function FerramentasTesteFlutuantes({ onAbrirFerramentaData }: { onAbrirF
            canto ESQUERDO (12 + 44 + 8 = 64), longe de qualquer botão do
            produto. Mesma classe do bug de 09/09 com a engrenagem flutuante
            interceptando o "Ver" do banner de notificação. */
-        style={{ ...base, left: esquerda(12 + FLUT_SIZE + 8), background: dataSimulada ? '#f59e0b' : 'rgba(0,0,0,0.35)' }}
+        style={{ ...base, left: esquerda(12 + FLUT_SIZE + 8), background: dataSimulada ? '#f59e0b' : 'rgba(0,0,0,0.55)' }}
       >
         🕐
       </button>

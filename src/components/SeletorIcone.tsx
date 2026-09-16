@@ -28,9 +28,25 @@ import { CATEGORIAS_ICONE, ICONES, Icone, LISTA_ICONES, PALETA_CORES, type Estil
 // botão), e o conjunto de definição (abas de estilo, paleta, busca, sub-abas,
 // grade) só aparece dentro de um modal ao clicar em "Alterar ícone" — mesmo
 // padrão de modal já usado em `DetalheLancamento`/`BuscaEFiltros`
-// (`.modal-fundo`/`.modal-conteudo`). Fechar o modal (✕, "Concluído" ou
-// clicar fora) não desfaz nada — cada escolha já chama `onChange` na hora,
-// igual antes.
+// (`.modal-fundo`/`.modal-conteudo`).
+//
+// BUG REAL corrigido na build 089 (relatado pelo Rafael): "tem o botão
+// concluir, mas se altero o ícone e nem clico no botão e volto pra tela de
+// categorias já aplicou a alteração". Causa: cada clique na grade/aba/paleta
+// chamava `onChange` NA HORA, e em `Categorias.tsx` esse `onChange` grava
+// direto no banco (`atualizarCampoCategoria`) — então o botão "Concluído"
+// não decidia nada, só fechava uma janela cuja mudança já tinha sido salva.
+// Um botão que não decide nada é pior que não existir: ele promete um
+// desfazer que não há.
+//
+// Agora o modal trabalha sobre um RASCUNHO local (`rascunho`), inicializado
+// com o valor atual toda vez que abre. A grade, as abas e a paleta mexem só
+// nele; `onChange` é chamado UMA vez, no "Concluído". Fechar pelo ✕, pelo
+// "Cancelar" ou clicando fora descarta o rascunho e não avisa ninguém — o
+// valor gravado continua o de antes. Isso vale de graça para os 4 lugares que usam
+// o componente (cadastro de categoria e de grupo no N1, e os dois no padrão
+// do N0), inclusive os que guardam em estado de formulário em vez de gravar
+// na hora: commitar uma vez só nunca é pior que commitar a cada clique.
 const ABAS_ESTILO: { valor: EstiloIcone; rotulo: string }[] = [
   { valor: 'borda', rotulo: 'Apenas borda' },
   { valor: 'preenchido', rotulo: 'Preenchido' },
@@ -74,6 +90,26 @@ export default function SeletorIcone({
   // Popup fechado por padrão (ver comentário no topo do arquivo) — a tela de
   // Categoria/Grupo só mostra a linha recolhida até o Rafael clicar.
   const [modalAberto, setModalAberto] = useState(false)
+  /* O rascunho do modal (build 089). Só existe enquanto o modal está aberto;
+     `abrir()` sempre o inicializa com o valor JÁ GRAVADO, então reabrir depois
+     de um descarte nunca traz de volta a escolha abandonada. */
+  const [rascunho, setRascunho] = useState({ icone, estilo, cor })
+
+  function abrir() {
+    setRascunho({ icone, estilo, cor })
+    setBusca('')
+    setAbaCategoria('todas')
+    setModalAberto(true)
+  }
+  /* Descarta: fecha sem chamar `onChange`. Usado pelo ✕, pelo "Cancelar" e
+     pelo clique fora — os três caminhos de "saí sem concluir". */
+  function descartar() {
+    setModalAberto(false)
+  }
+  function concluir() {
+    onChange(rascunho)
+    setModalAberto(false)
+  }
 
   const termoBusca = normalizar(busca.trim())
   const iconesFiltrados = useMemo(
@@ -86,8 +122,12 @@ export default function SeletorIcone({
 
   const nomeIconeAtual = icone === 'nenhum' ? 'Sem ícone' : (ICONES[icone]?.nome ?? ICONES.outros.nome)
 
-  const previaIcone =
-    icone === 'nenhum' ? (
+  /* Duas prévias, de propósito: a linha recolhida mostra o que está GRAVADO
+     (props) e a de dentro do modal mostra o RASCUNHO. Enquanto o modal está
+     aberto as duas podem divergir — é exatamente isso que faz o "Concluído"
+     significar alguma coisa. */
+  const previa = (ic: string, est: EstiloIcone, c: string) =>
+    ic === 'nenhum' ? (
       <span
         className="texto-fraco"
         style={{
@@ -104,7 +144,7 @@ export default function SeletorIcone({
         —
       </span>
     ) : (
-      <Icone id={icone} estilo={estilo} cor={cor} tamanho={34} />
+      <Icone id={ic} estilo={est} cor={c} tamanho={34} />
     )
 
   return (
@@ -112,10 +152,10 @@ export default function SeletorIcone({
       <button
         type="button"
         className="linha-selecionar-icone"
-        onClick={() => setModalAberto(true)}
+        onClick={abrir}
         aria-label={`Ícone atual: ${nomeIconeAtual}. Alterar.`}
       >
-        {previaIcone}
+        {previa(icone, estilo, cor)}
         <span className="linha-selecionar-icone-texto">
           {/* Item 11 (16/09/2026): o nome INTERNO do ícone (usado só pra
               busca dentro da grade, `nomeIconeAtual`) não é mais mostrado
@@ -127,14 +167,15 @@ export default function SeletorIcone({
       </button>
 
       {modalAberto && (
-        <div className="modal-fundo" onClick={() => setModalAberto(false)}>
+        <div className="modal-fundo" onClick={descartar}>
           <div className="modal-conteudo" onClick={(e) => e.stopPropagation()}>
             <div className="linha" style={{ border: 'none', padding: 0, marginBottom: 8 }}>
               <h2 style={{ margin: 0 }}>Escolher Ícone</h2>
               <button
                 type="button"
-                onClick={() => setModalAberto(false)}
-                aria-label="Fechar"
+                onClick={descartar}
+                aria-label="Fechar sem aplicar"
+                data-testid="fechar-seletor-icone"
                 style={{ background: 'none', border: 'none', fontSize: 20, color: 'var(--texto-fraco)', cursor: 'pointer' }}
               >
                 ✕
@@ -142,8 +183,8 @@ export default function SeletorIcone({
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-              {previaIcone}
-              <span className="texto-fraco">{icone === 'nenhum' ? 'Sem ícone' : 'Pré-visualização'}</span>
+              {previa(rascunho.icone, rascunho.estilo, rascunho.cor)}
+              <span className="texto-fraco">{rascunho.icone === 'nenhum' ? 'Sem ícone' : 'Pré-visualização'}</span>
             </div>
 
             <div role="tablist" className="abas-estilo-icone">
@@ -152,25 +193,25 @@ export default function SeletorIcone({
                   key={aba.valor}
                   type="button"
                   role="tab"
-                  aria-selected={estilo === aba.valor}
-                  className={`aba-estilo-icone-item ${estilo === aba.valor ? 'ativa' : ''}`}
-                  onClick={() => onChange({ icone, estilo: aba.valor, cor })}
+                  aria-selected={rascunho.estilo === aba.valor}
+                  className={`aba-estilo-icone-item ${rascunho.estilo === aba.valor ? 'ativa' : ''}`}
+                  onClick={() => setRascunho((r) => ({ ...r, estilo: aba.valor }))}
                 >
                   {aba.rotulo}
                 </button>
               ))}
             </div>
 
-            {estilo !== 'colorido' && (
+            {rascunho.estilo !== 'colorido' && (
               <div className="paleta-cores-icone">
                 {PALETA_CORES.map((c) => (
                   <button
                     key={c}
                     type="button"
                     aria-label={`Cor ${c}`}
-                    className={`swatch-cor ${cor === c ? 'selecionada' : ''}`}
+                    className={`swatch-cor ${rascunho.cor === c ? 'selecionada' : ''}`}
                     style={{ background: c }}
-                    onClick={() => onChange({ icone, estilo, cor: c })}
+                    onClick={() => setRascunho((r) => ({ ...r, cor: c }))}
                   />
                 ))}
               </div>
@@ -212,8 +253,8 @@ export default function SeletorIcone({
               {abaCategoria === 'todas' && !termoBusca && (
                 <button
                   type="button"
-                  className={`grade-icone-item ${icone === 'nenhum' ? 'selecionado' : ''}`}
-                  onClick={() => onChange({ icone: 'nenhum', estilo, cor })}
+                  className={`grade-icone-item ${rascunho.icone === 'nenhum' ? 'selecionado' : ''}`}
+                  onClick={() => setRascunho((r) => ({ ...r, icone: 'nenhum' }))}
                 >
                   <span
                     aria-hidden
@@ -238,10 +279,10 @@ export default function SeletorIcone({
                 <button
                   key={i.id}
                   type="button"
-                  className={`grade-icone-item ${icone === i.id ? 'selecionado' : ''}`}
-                  onClick={() => onChange({ icone: i.id, estilo, cor })}
+                  className={`grade-icone-item ${rascunho.icone === i.id ? 'selecionado' : ''}`}
+                  onClick={() => setRascunho((r) => ({ ...r, icone: i.id }))}
                 >
-                  <Icone id={i.id} estilo={estilo} cor={cor} tamanho={26} />
+                  <Icone id={i.id} estilo={rascunho.estilo} cor={rascunho.cor} tamanho={26} />
                   <span className="grade-icone-nome">{i.nome}</span>
                 </button>
               ))}
@@ -252,9 +293,14 @@ export default function SeletorIcone({
               )}
             </div>
 
-            <button type="button" className="primario" style={{ marginTop: 12 }} onClick={() => setModalAberto(false)}>
-              Concluído
-            </button>
+            <div className="acoes-modal" style={{ marginTop: 12 }}>
+              <button type="button" className="secundario" onClick={descartar}>
+                Cancelar
+              </button>
+              <button type="button" className="primario" data-testid="concluir-seletor-icone" onClick={concluir}>
+                Concluído
+              </button>
+            </div>
           </div>
         </div>
       )}

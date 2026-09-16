@@ -671,7 +671,7 @@ export default function Hoje({ mes, aoMudarMes, aoAbrirLancamento, aoAbrirPlanej
               visível, entre o gráfico e a calibragem. A lógica/frase em si
               não mudou — só o lugar. */}
           {frase && (
-            <div className="cartao" style={{ marginTop: 14 }} data-testid="cartao-veredito">
+            <div className="cartao" data-testid="cartao-veredito">
               <div className="linha-veredito" style={{ marginTop: 0, paddingTop: 0, borderTop: 'none' }} data-testid="veredito">
                 <span
                   className={`ideal-t3 ${projecao.variavel < 0 ? 'veredito-mal' : 'veredito-bem'}`}

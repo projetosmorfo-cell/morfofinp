@@ -550,6 +550,19 @@ export interface ConfiguracaoIcones {
   // Kit). Campo aditivo, não indexado, sem bump de schema.
   // Ausente/undefined = 'escuro' (o app como sempre foi, Etapa 4).
   temaPreferido?: 'claro' | 'escuro' | 'auto'
+  /* Qual PACOTE DE ÍCONES este ambiente escolheu (build 089) — 'borda',
+     'preenchido' ou 'colorido'. Campo aditivo, não indexado, sem bump de
+     schema (mesma regra de sempre desta tabela singleton). Ausente = o
+     ambiente ainda não escolheu e vale o que o N0 publica como `emUso`.
+     Ver `src/pacotesIcones.ts`. */
+  pacoteIconesEscolhido?: 'borda' | 'preenchido' | 'colorido'
+  /* Cores que ESTE ambiente escolheu para os ícones, sobrepondo as do pacote
+     publicado pelo N0 (build 089). Ficam separadas do pacote de propósito:
+     a personalização aqui é POR PARÂMETRO, não tudo-ou-nada (regra da build
+     080) — quem trocou só a cor continua recebendo do N0 as melhorias de
+     desenho e de estilo. */
+  pacoteIconesCorCategorias?: string
+  pacoteIconesCorGrupos?: string
   // Aviso de permissões da notificação bancária (12/09/2026, pedido do
   // Rafael: "ao abrir o app, apareça um popup com esses dados e os 2 botões,
   // enquanto não forem fornecidas as permissões [...] com a opção de lembrar

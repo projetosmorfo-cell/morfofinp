@@ -21,6 +21,7 @@ import { mesesComPendencia } from './pendencias'
 import { avancarSeriesFixasPendentes } from './recorrencia'
 import { migrarComportamentoDosGrupos, migrarGruposAntigosParaInvestimento, migrarTipoDosGrupos } from './gruposUtil'
 import { aplicarPadraoSeNaoEditado } from './kit/padraoCategorias'
+import { aplicarPacoteN0SeNaoEscolhido } from './pacotesIcones'
 import { garantirContaCofrinho } from './contasCofrinho'
 import { migrarReceitaFixa } from './baseMeta'
 import { usarBotaoVoltar } from './voltarAndroid'
@@ -729,6 +730,12 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: ModoConsultaN
       // sido editado pelo próprio dono, e nunca apaga nada — ver
       // `src/kit/padraoCategorias.ts`.
       await aplicarPadraoSeNaoEditado()
+      /* Pacote de ícones publicado pelo N0 (build 089). Só age quando ESTE
+         ambiente nunca escolheu um pacote — a escolha do dono do ambiente
+         nunca é sobrescrita —, e não faz nada enquanto o N0 não tiver
+         publicado: esta build oferece as três propostas, não repinta o
+         cadastro de quem já usa o app sem pedir. Ver `src/pacotesIcones.ts`. */
+      await aplicarPacoteN0SeNaoEscolhido()
       /* Parâmetros da notificação bancária publicados pelo N0 (build 080).
          Mesma mecânica do padrão de categorias logo acima, aplicada a
          PARÂMETRO: no escopo "só quem nunca mexeu" a composição das camadas já
