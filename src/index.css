@@ -421,6 +421,37 @@ button.perigo:active {
   opacity: 0.85;
 }
 
+/* Item 5 (16/09/2026): confirmação de exclusão INLINE, em harmonia com uma
+   linha compacta de lista (categoria/grupo em Categorias.tsx) — versão mini
+   dos botões `.perigo`/`.secundario`, sempre os dois juntos. */
+.confirmacao-inline-linha {
+  display: flex;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.botao-mini-perigo,
+.botao-mini-secundario {
+  border-radius: 8px;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.botao-mini-perigo {
+  background: var(--vermelho);
+  border: none;
+  color: #fff;
+}
+
+.botao-mini-secundario {
+  background: var(--bg-elevado);
+  border: 1px solid var(--borda);
+  color: var(--texto);
+}
+
 /* Ação neutra ao lado de uma primária/de risco (Cancelar, Voltar). Mesmo
    formato dos outros dois — muda só a cor, igual à regra de 12/09/2026 de que
    a diferença entre botões é o significado, não o desenho. Item 19 da lista
@@ -444,12 +475,30 @@ button.secundario:active {
 /* Item 18 (12/09/2026): cartão de categoria no modo "Todas abertas" — mesmo
    desenho do cartão de categoria da tela de padrão do N0, só que na paleta do
    ambiente do cliente. */
+/* Item 4 (16/09/2026): no modo "Todas abertas" o contêiner deixa de ser um
+   cartão — quem é cartão ali é cada categoria (ver `Categorias.tsx`). Sem isso
+   os dois níveis usavam o mesmo `--bg-elevado` e a divisão entre categorias
+   sumia. */
+.lista-cats-abertas {
+  background: none;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+}
+
 .cartao-categoria-aberta {
   background: var(--bg-elevado);
   border: 1px solid var(--borda);
   border-radius: 12px;
-  padding: 12px;
-  margin-bottom: 10px;
+  padding: 14px 16px; /* o mesmo respiro interno de `.cartao` */
+  /* 2× ESPACO_LINHA (`src/kit/PadraoUI.tsx`) — o respiro entre cartões vizinhos
+     é o dobro do espaçamento entre linhas de um mesmo cartão. */
+  margin-bottom: 20px;
+  box-shadow: var(--sombra-rio);
+}
+
+.lista-cats-abertas > .cartao-categoria-aberta:last-child {
+  margin-bottom: 0;
 }
 
 .cartao-categoria-aberta label:first-child {
@@ -551,6 +600,20 @@ nav.rodape {
   background: var(--ideal-ambar);
 }
 
+/* Item 10 (16/09/2026): legenda de cor no lugar do card de 3 linhas
+   "planejada/até agora/projetada" no Planejamento — explica as cores das
+   barras de Entradas/Saídas logo acima. */
+.legenda-cores-planejamento {
+  display: flex; flex-wrap: wrap; gap: 10px 16px; padding: 10px 2px;
+}
+.legenda-cores-item {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 12px; color: var(--texto-fraco);
+}
+.legenda-cores-bolinha {
+  width: 10px; height: 10px; border-radius: 999px; flex: 0 0 auto;
+}
+
 .barra-meta > .marcador {
   position: absolute;
   top: 0;
@@ -578,12 +641,28 @@ nav.rodape {
    Enxugada — as setas continuam com 44px de LARGURA (alvo de toque horizontal,
    que é onde o dedo erra numa linha dessas) mas com 34px de altura, e o gap
    caiu pra 8px. */
+/* Item 2 (16/09/2026): setas SEMPRE nas bordas absolutas da barra
+   (`justify-content: space-between`) — antes era tudo centralizado com
+   `gap`, então um botão extra ao lado do nome (ex.: "Hoje") empurrava a
+   seta direita pra mais perto do texto, ao invés de ficar fixa na borda. */
 .seletor-mes {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0;
+}
+
+/* A área do MEIO (nome do mês/período + "Hoje" + reprocessar) — largura
+   fixa, grande o bastante pro maior nome de mês em português ("Setembro de
+   2026", ~140px a 16px) sem nunca cortar/esconder o texto, e centralizada
+   entre as duas setas. */
+.seletor-mes-centro {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  margin: 0;
+  min-width: 170px;
 }
 
 /* Fora do mês atual (10/09/2026) — ver `SeletorMes.tsx`. Cor de alerta + tarja
@@ -641,27 +720,6 @@ nav.rodape {
 }
 .seletor-mes-fora .seletor-mes-nome-botao {
   color: var(--amarelo, #eab308);
-}
-
-/* Item 6 (15/09/2026): a barra que substitui o SeletorMes em Lançamentos
-   quando o filtro é por período (data de/até) em vez de mês. */
-.periodo-filtro {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin: 8px 0;
-}
-.periodo-filtro input[type='date'] {
-  background: var(--bg-elevado);
-  border: 1px solid var(--borda);
-  color: var(--texto);
-  border-radius: 8px;
-  padding: 6px 8px;
-  font-size: 13px;
-}
-.periodo-filtro button {
-  margin-left: auto;
 }
 
 .seletor-mes button {
@@ -1096,6 +1154,8 @@ nav.rodape {
   line-height: 1.1;
   color: var(--texto-fraco);
   letter-spacing: 0.02em;
+  /* Item 3 (16/09/2026) — mesmo motivo/correção de `.sessao-data`, acima. */
+  background: var(--fundo-feito);
 }
 
 /* Fundo diferenciado pra lançamento não pago/atrasado — pago/recebido fica
@@ -1177,6 +1237,14 @@ nav.rodape {
   line-height: 1.1;
   color: var(--texto-fraco);
   letter-spacing: 0.02em;
+  /* Item 3 (16/09/2026): sem fundo próprio, esta linha ficava sobre o fundo
+     do `.cartao` (`--bg-elevado`), que é mais ESCURO que o fundo das linhas
+     normais (`--fundo-feito`, ver `FUNDO_STATUS`/`statusPagamento.ts`) — a
+     linha de data aparecia mais escura que o restante da lista, sem nenhum
+     motivo de status. A ÚNICA variação de fundo permitida nestas listas é a
+     de `FUNDO_STATUS`; a linha de data usa o mesmo fundo de um lançamento
+     "feito" (a maioria dos casos), nunca o do `.cartao`. */
+  background: var(--fundo-feito);
 }
 
 .botao-ordem {
@@ -1222,6 +1290,15 @@ nav.rodape {
 
 .total-geral + .total-geral {
   margin-top: 8px;
+}
+
+/* Item 5 (16/09/2026): Entradas/Saídas do período em 2 colunas, uma linha só,
+   dentro do BlocoTotais da Carteira. */
+.linha-2col-totais {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 2px 0;
 }
 
 /* Botão de engrenagem — fixo no topo de toda tela principal (30/08/2026),
@@ -2013,6 +2090,45 @@ html[data-mloc-tema="escuro"] body {
   flex-shrink: 0;
 }
 
+/* Item 4 (16/09/2026) — lista de opções do popup "excluir lançamento de
+   série" (`DetalheLancamento.tsx`), no mesmo padrão visual de
+   `.folha-escolha-item` acima: linha inteira, padding/espaçamento
+   consistentes, radio e rótulo lado a lado. `input, select { width: 100% }`
+   (regra genérica lá em cima) é o que esticava o radio antes — aqui ele
+   ganha largura fixa de volta. */
+.lista-opcoes-escopo {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.opcao-escopo-item {
+  width: 100%;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  text-align: left;
+  padding: 8px;
+  min-height: 38px;
+  border-radius: 9px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--texto);
+}
+
+.opcao-escopo-item.ativo {
+  background: rgba(124, 92, 255, 0.16);
+}
+
+.opcao-escopo-item input[type='radio'] {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  padding: 0;
+  margin: 0;
+}
+
 .folha-escolha-item-nome {
   flex: 1;
   min-width: 0;
@@ -2595,9 +2711,18 @@ html[data-mloc-tema='claro'] .tarja-inativa {
 .bloco-numero:not(.rio-verde):not(.rio-ambar):not(.rio-vermelho) .ideal-t1 { color: var(--texto); }
 .bloco-numero-rotulo {
   display: flex; align-items: center; gap: 2px; flex-wrap: nowrap;
-  font-size: 10.5px; letter-spacing: 0.7px; text-transform: uppercase;
+  font-size: 10.5px; letter-spacing: 0.3px; text-transform: uppercase;
   color: var(--texto-fraco); margin-bottom: 1px;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  /* Item 3 (16/09/2026): "PODE SOBRAR DAS METAS" (e o equivalente "SOBROU
+     DAS METAS") não cabe numa caixa de ~157px (par 50/50, build 075) no
+     mesmo tamanho/letter-spacing das outras — com `overflow:hidden` +
+     `ellipsis` o título ficava cortado ("PODE SOBRAR D…"). Corrigido
+     deixando o rótulo QUEBRAR em até 2 linhas (nunca cortar) — as caixas do
+     mesmo par continuam com a MESMA altura (`.rio-linha` já usa
+     `align-items: stretch`), só a altura do par cresce quando o rótulo mais
+     longo precisar de 2 linhas. */
+  white-space: normal; overflow: visible; text-overflow: clip;
+  line-height: 1.2;
 }
 /* As duas caixas de topo (Mês passado/Este mês) e as duas de baixo (Livre de
    tudo/Reservado) precisam ter a MESMA altura par a par, sem quebra de linha

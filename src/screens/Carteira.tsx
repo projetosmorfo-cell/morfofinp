@@ -5,16 +5,18 @@ import type { TelaProps } from '../mes'
 import { somarMes } from '../mes'
 import SeletorMes from '../components/SeletorMes'
 import ItemLancamentoAcoes from '../components/ItemLancamentoAcoes'
+import { usePeriodoLista } from '../components/periodoLista'
 import SeloInstituicao from '../components/SeloInstituicao'
 import {
-  useSelecao, BarraSelecao, TotaisEntradaSaida, MarcadorLinha, blocosPorCorte, RodapeTotais,
+  useSelecao, BarraSelecao, TotaisEntradaSaida, MarcadorLinha, blocosPorCorte, RodapeTotais, somarTotais,
 } from '../components/SelecaoETotais'
 import { CampoBusca, FolhaFiltros, FILTROS_VAZIOS, aplicarFiltros, contarFiltrosAtivos, type FiltrosAvancados } from '../components/BuscaEFiltros'
 import { obterOuCriarCategoriaPagamentoFatura } from '../categoriasSistema'
+import { janelaFatura } from '../faturaCiclo'
 import { formatarCabecalhoData } from '../formatoData'
 import SaldoDoCofrinho from '../components/SaldoDoCofrinho'
 import { fmtBRL, formatarMoeda, aplicarMascaraValor, paraNumero } from '../formatoMoeda'
-import { useHojeSimuladoISO } from '../hojeSimulado'
+import { useHojeSimuladoISO, hojeEfetivoISO } from '../hojeSimulado'
 import TituloTelaN1 from '../kit/CabecalhoN1'
 import { ExportSheet, type ExportRow } from '../kit/ExportSheet'
 import { EXPLICACAO_CARTEIRA, SUBTITULO_CARTEIRA } from '../subtitulosTelas'
@@ -30,40 +32,11 @@ function formatarDataCurta(dataISO: string) {
   return `${dia}/${mes}`
 }
 
-function ultimoDiaDoMes(ano: number, mesIndice0: number): number {
-  return new Date(ano, mesIndice0 + 1, 0).getDate()
-}
-
-// Janela FECHADA de uma fatura específica, identificada pelo mês em que ela
-// FECHA (mesISO = "yyyy-mm", o mesmo mês do SeletorMes comum do app) — do dia
-// seguinte ao fechamento do mês anterior até o dia ANTERIOR ao fechamento
-// deste mês (o próprio dia de fechamento já pertence à fatura SEGUINTE).
-//
-// 15/09/2026 — correção de bug real, achado na reconciliação contra o
-// Organizze (referência real, batendo com a fatura Porto Seguro do Rafael):
-// a versão anterior incluía o dia de fechamento na fatura que estava
-// FECHANDO, e a fatura seguinte começava só no dia depois — mas o
-// comportamento real de fatura de cartão (conferido contra o Organizze) é o
-// oposto: uma compra feita NO PRÓPRIO dia do fechamento já cai na fatura
-// SEGUINTE, não na que está fechando. Isso causava lançamentos "sumidos" da
-// janela (ex.: "Clareamento + Dentista 2/2", em 08/08, com fechamento no dia
-// 8 — ficava de fora tanto da fatura de julho quanto da de agosto do jeito
-// antigo). Agora o fim da janela é o dia ANTERIOR ao fechamento.
-function janelaFatura(diaFechamento: number, mesISO: string): { inicio: string; fim: string } {
-  const [ano, mesUm] = mesISO.split('-').map(Number)
-  const mesIdx = mesUm - 1
-  const diaFechoEsteMes = Math.min(diaFechamento, ultimoDiaDoMes(ano, mesIdx))
-  const fim = new Date(ano, mesIdx, diaFechoEsteMes)
-  fim.setDate(fim.getDate() - 1)
-
-  const anoAnterior = mesIdx === 0 ? ano - 1 : ano
-  const mesAnteriorIdx = mesIdx === 0 ? 11 : mesIdx - 1
-  const diaFechoMesAnterior = Math.min(diaFechamento, ultimoDiaDoMes(anoAnterior, mesAnteriorIdx))
-  const inicio = new Date(anoAnterior, mesAnteriorIdx, diaFechoMesAnterior)
-
-  const iso = (d: Date) => d.toISOString().slice(0, 10)
-  return { inicio: iso(inicio), fim: iso(fim) }
-}
+// `ultimoDiaDoMes`/`janelaFatura` moraram aqui até 16/09/2026 (item 12) —
+// movidas pra `src/faturaCiclo.ts` (compartilhado) porque `DetalheLancamento.tsx`
+// passou a precisar da mesma janela pra perguntar cartão+mês ao lançar um
+// "Pagamento de fatura" diretamente pelo formulário. Nenhuma regra mudou —
+// mesmo código, só extraído pra não duplicar.
 
 // Janela da fatura em aberto de um cartão "até o momento" — do dia de
 // fechamento (inclusive, ver correção acima) até hoje. Só usada no card
@@ -188,7 +161,18 @@ export default function Carteira({ mes, aoMudarMes, aoAbrirLancamento }: TelaPro
     // um número acumulado (fatura em aberto / total de sempre). Corrigido pra
     // "Saldo atual" = saldo inicial cadastrado + todo o histórico de verdade,
     // acumulado de sempre até hoje — o mesmo tipo de número que os outros dois.
-    return { rotulo: 'Saldo atual', valor: (conta.saldoInicial ?? 0) + daConta.reduce((s, l) => s + l.valor, 0) }
+    //
+    // Item 5 (16/09/2026), bug real corrigido: "até hoje" não estava sendo
+    // respeitado de verdade — a soma incluía QUALQUER lançamento, inclusive
+    // com `dataCompetencia` no futuro (ex.: uma parcela ainda não vencida),
+    // o que inflava/desinflava o "Saldo atual" do card em relação ao "Saldo"
+    // mostrado no drill-in daquele mesmo mês (que é sempre limitado ao mês
+    // selecionado). Agora a soma respeita literalmente "até hoje".
+    const hojeISO = hojeEfetivoISO()
+    return {
+      rotulo: 'Saldo atual',
+      valor: (conta.saldoInicial ?? 0) + daConta.filter((l) => l.dataCompetencia <= hojeISO).reduce((s, l) => s + l.valor, 0),
+    }
   }
   const linhasCarteira: ExportRow[] = [
     ...contas.map((c) => {
@@ -244,8 +228,10 @@ export default function Carteira({ mes, aoMudarMes, aoAbrirLancamento }: TelaPro
           rotuloValor = 'Total acumulado'
         } else {
           // Item 2 (15/09/2026): acumulado de sempre, igual ao cofre — ver
-          // comentário em `valorDoCard`.
-          valorNumero = (conta.saldoInicial ?? 0) + lancamentosDaConta.reduce((s, l) => s + l.valor, 0)
+          // comentário em `valorDoCard`. Item 5 (16/09/2026): limitado a
+          // "até hoje" de verdade (mesma correção de `valorDoCard`).
+          const hojeISO = hojeEfetivoISO()
+          valorNumero = (conta.saldoInicial ?? 0) + lancamentosDaConta.filter((l) => l.dataCompetencia <= hojeISO).reduce((s, l) => s + l.valor, 0)
           rotuloValor = 'Saldo atual'
         }
         // F-05 da revisão de UI (04/09/2026): medido 549px (64% da área
@@ -337,67 +323,75 @@ export default function Carteira({ mes, aoMudarMes, aoAbrirLancamento }: TelaPro
   )
 }
 
-function BlocoTotais({
-  saldoInicial,
-  entradasPeriodo,
-  saidasPeriodo,
-  saldoFinal,
+/* Item 1 (16/09/2026), restruturação pedida pelo Rafael a partir do
+   screenshot da tela: o card "ATÉ HOJE" (Entrada/Saída/Total numa linha só —
+   a mesma peça `TotaisEntradaSaida` usada no corte "até hoje × dias
+   futuros", ver `SelecaoETotais.tsx`, build 066) MUDOU DE LUGAR — saiu de
+   dentro da lista (onde aparecia por bloco, no meio/topo dela) e passou a
+   ser o ÚLTIMO elemento da lista de lançamentos (ver o fim do `.cartao` em
+   `DetalheConta`, abaixo). Os totais por bloco "Até hoje"/"Dias futuros" que
+   existiam MEIO da lista foram removidos — essa informação passou a viver
+   só neste card único, no fim.
+
+   Logo abaixo, FORA de qualquer card, entram dois elementos NOVOS,
+   reorganizando os mesmos 3 números que já existiam ("Entradas do
+   período"/"Saídas do período"/"Movimento do mês", sem inventar número
+   nenhum): um card no MESMO formato de linha única (Entrada|Saída|Total, com
+   "Total" = movimento do período) e, abaixo dele, fora do card, só o rótulo
+   "Saldo".
+
+   BUG REAL corrigido nesta reorganização: o "Saldo" mostrado aqui embaixo
+   (antes `saldoFinal = saldoInicial + entradasPeriodo - saidasPeriodo`, sobre
+   o PERÍODO inteiro, incluindo lançamento com data FUTURA dentro do mesmo
+   mês) podia divergir do "Total" do card "ATÉ HOJE" (que sempre respeitou
+   `dataCompetencia <= hoje`) — a mesma classe de bug já documentada em
+   `valorDoCard` (Carteira, lista de cards) antes desta rodada. Agora os dois
+   usam a MESMA fonte (`saldoAteHoje`, calculada uma vez em `DetalheConta` a
+   partir de TODO o histórico da conta/cofrinho até hoje, nunca limitada ao
+   mês selecionado) — a igualdade entre "Total" (ATÉ HOJE) e "Saldo" (fora do
+   card) é garantida por construção, não por coincidência de fórmula. */
+function BlocoPeriodoESaldo({
+  itensPeriodo,
+  saldoAteHoje,
   isCartao,
   totalFatura,
 }: {
-  saldoInicial: number
-  entradasPeriodo: number
-  saidasPeriodo: number
-  saldoFinal: number
+  itensPeriodo: { valor: number }[]
+  saldoAteHoje: number
   isCartao: boolean
   totalFatura: number
 }) {
-  /* ORDEM CRONOLÓGICA (build 066, pedido do Rafael): primeiro o que aconteceu
-     NO MÊS (entrou · saiu · movimento), depois o que veio de ANTES, e só então
-     o total grande. Ele leu a ordem antiga como invertida — e estava: começava
-     pelo saldo herdado, que é o mais distante do que a lista acima mostra.
-
-     Os dois números continuam os mesmos e continuam significando coisas
-     diferentes: "movimento do mês" é quanto a conta andou, "saldo" é onde ela
-     está. O que mudou é que agora um leva ao outro, em degraus. */
-  const movimento = entradasPeriodo - saidasPeriodo
   return (
-    <div className="total-geral">
-      <div className="linha" style={{ border: 'none', padding: '2px 0' }}>
-        <span className="texto-fraco">Entradas do período</span>
-        <strong className="valor-pos">+{fmtBRL(entradasPeriodo)}</strong>
+    <>
+      <div className="total-geral">
+        {/* Item 1 (16/09/2026, rodada seguinte): neste SEGUNDO card de totais
+            os três rótulos passaram a conter "Total" — "Entrada Total",
+            "Saída Total" e "Total do Mês" — pedido literal do Rafael ("a
+            segunda linha de totais"). O primeiro card ("ATÉ HOJE") continua
+            com Entrada/Saída/Total. Caixa alta é do CSS
+            (`.totais-faixa-chave { text-transform: uppercase }`), não do
+            texto aqui. */}
+        <TotaisEntradaSaida
+          itens={itensPeriodo}
+          rotulos={{ entrada: 'Entrada Total', saida: 'Saída Total', total: 'Total do Mês' }}
+        />
+        {isCartao && (
+          <div className="linha" style={{ border: 'none', padding: '8px 0 0', borderTop: '1px solid var(--borda)', marginTop: 8 }}>
+            <span>Total desta fatura</span>
+            <strong className="valor-neg" style={{ fontSize: 16 }}>
+              {fmtBRL(totalFatura)}
+            </strong>
+          </div>
+        )}
       </div>
-      <div className="linha" style={{ border: 'none', padding: '2px 0' }}>
-        <span className="texto-fraco">Saídas do período</span>
-        <strong className="valor-neg">-{fmtBRL(saidasPeriodo)}</strong>
-      </div>
-      <div
-        className="linha"
-        style={{ border: 'none', padding: '6px 0 0', borderTop: '1px solid var(--borda)', marginTop: 4 }}
-        data-testid="movimento-do-mes"
-      >
-        <span className="texto-fraco">Movimento do mês</span>
-        <strong className={movimento >= 0 ? 'valor-pos' : 'valor-neg'}>{fmtBRLComSinal(movimento)}</strong>
-      </div>
-      <div className="linha" style={{ border: 'none', padding: '6px 0 0' }}>
-        <span className="texto-fraco">Herdado do mês anterior</span>
-        <strong className={saldoInicial >= 0 ? 'valor-pos' : 'valor-neg'}>{fmtBRLComSinal(saldoInicial)}</strong>
-      </div>
-      <div className="linha" style={{ border: 'none', padding: '6px 0 0', borderTop: '1px solid var(--borda)', marginTop: 4 }}>
-        <span>Saldo final do período</span>
-        <strong className={saldoFinal >= 0 ? 'valor-pos' : 'valor-neg'} style={{ fontSize: 16 }}>
-          {fmtBRLComSinal(saldoFinal)}
+      {/* FORA do card acima, de propósito — pedido explícito do Rafael. */}
+      <div className="linha" style={{ border: 'none', padding: '8px 4px 0' }} data-testid="saldo-fora-do-card">
+        <span>Saldo</span>
+        <strong className={saldoAteHoje >= 0 ? 'valor-pos' : 'valor-neg'} style={{ fontSize: 16 }}>
+          {fmtBRLComSinal(saldoAteHoje)}
         </strong>
       </div>
-      {isCartao && (
-        <div className="linha" style={{ border: 'none', padding: '8px 0 0', borderTop: '1px solid var(--borda)', marginTop: 8 }}>
-          <span>Total desta fatura</span>
-          <strong className="valor-neg" style={{ fontSize: 16 }}>
-            {fmtBRL(totalFatura)}
-          </strong>
-        </div>
-      )}
-    </div>
+    </>
   )
 }
 
@@ -448,17 +442,35 @@ function DetalheConta({
   todosLancamentos: Lancamento[]
 }) {
   const isCartao = conta?.tipo === 'cartao'
-  const janela = isCartao
-    ? janelaFatura(conta?.diaFechamento ?? 9, mes)
-    : { inicio: `${mes}-01`, fim: `${mes}-31` }
 
   const [ordemDesc, setOrdemDesc] = useState(true)
-  const [busca, setBusca] = useState('')
   const [buscaAberta, setBuscaAberta] = useState(false)
   const [filtrosAbertos, setFiltrosAbertos] = useState(false)
   /* Edição em massa (14/09/2026) — a MESMA peça da tela de Lançamentos. */
   const [massaAberta, setMassaAberta] = useState(false)
+  /* Busca e filtros ANTES do hook de período: voltar pro modo mês limpa os
+     dois, exatamente como em Lançamentos. */
+  const [busca, setBusca] = useState('')
   const [filtros, setFiltros] = useState<FiltrosAvancados>(FILTROS_VAZIOS)
+
+  /* Item 2 (16/09/2026, rodada seguinte à build 077): este drill-in passou a
+     ter o MESMO topo da tela de Lançamentos — o nome do mês abre o popup de
+     "período ou mês" (`SeletorMes` + `usePeriodoLista`, a MESMA peça, nunca
+     uma segunda implementação; ver `src/components/periodoLista.ts`). */
+  const { modoPeriodo, periodoDe, periodoAte, propsSeletor } = usePeriodoLista(mes, aoMudarMes, () => {
+    setFiltros(FILTROS_VAZIOS)
+    setBusca('')
+  })
+
+  /* Com período ativo a janela é o intervalo escolhido, para TODO tipo de
+     conta — inclusive cartão: o pedido é "ver de tal data a tal data", então
+     o ciclo de fatura (e o `faturaOverride`, que só existe para dizer em qual
+     CICLO um lançamento cai) não se aplica; a data manda, direta. */
+  const janela = modoPeriodo
+    ? { inicio: periodoDe, fim: periodoAte }
+    : isCartao
+      ? janelaFatura(conta?.diaFechamento ?? 9, mes)
+      : { inicio: `${mes}-01`, fim: `${mes}-31` }
 
   // Item 1 da lista pendente (15/09/2026): `faturaOverride` puxa um lançamento
   // de cartão pro ciclo VIZINHO ao que a data indicaria — ex.: uma compra feita
@@ -470,7 +482,7 @@ function DetalheConta({
   const dentroDaJanela = (l: Lancamento, j: { inicio: string; fim: string }) =>
     l.dataCompetencia >= j.inicio && l.dataCompetencia <= j.fim
   const doPeriodoBruto = lancamentosDoLugar.filter((l) => {
-    if (!isCartao) return dentroDaJanela(l, janela)
+    if (modoPeriodo || !isCartao) return dentroDaJanela(l, janela)
     const override = l.faturaOverride
     // 'proxima' = o lançamento pertence à fatura SEGUINTE à da data dele, então
     // pra aparecer na fatura ANTERIOR (a que ele foi puxado pra dentro) é a
@@ -479,13 +491,26 @@ function DetalheConta({
     if (override === 'anterior') return dentroDaJanela(l, janelaSeguinte)
     return dentroDaJanela(l, janela)
   })
-  const antesDoPeriodo = lancamentosDoLugar.filter((l) => l.dataCompetencia < janela.inicio)
-
-  const saldoInicial = (conta?.saldoInicial ?? 0) + antesDoPeriodo.reduce((s, l) => s + l.valor, 0)
   const entradasPeriodo = doPeriodoBruto.filter((l) => l.valor > 0).reduce((s, l) => s + l.valor, 0)
   const saidasPeriodo = doPeriodoBruto.filter((l) => l.valor < 0).reduce((s, l) => s - l.valor, 0)
-  const saldoFinal = saldoInicial + entradasPeriodo - saidasPeriodo
   const totalFatura = saidasPeriodo - entradasPeriodo
+
+  // Item 1 (16/09/2026) — "Saldo até hoje", calculado sobre TODO o histórico
+  // da conta/cofrinho (`lancamentosDoLugar`, nunca limitado ao mês
+  // selecionado, e nunca somado duas vezes em cima de um "saldo herdado"
+  // parcial), respeitando `dataCompetencia <= hoje` de verdade — mesma
+  // definição de "Saldo atual" já usada pelos cards da lista de Carteira
+  // (`valorDoCard`, acima): saldo-base da conta + tudo que já aconteceu até
+  // hoje, ponto. É a MESMA fonte usada tanto no card "ATÉ HOJE" (fim da
+  // lista) quanto no "Saldo" mostrado fora do card logo abaixo — os dois
+  // números são garantidos iguais por construção, nunca por coincidência de
+  // duas fórmulas parecidas (a divergência que motivou esta correção).
+  const hojeISO = hojeEfetivoISO()
+  const saldoInicialConta = conta?.saldoInicial ?? 0
+  const itensAteHojeGeral = lancamentosDoLugar.filter((l) => l.dataCompetencia <= hojeISO)
+  const itensAteHojeComBase =
+    saldoInicialConta !== 0 ? [...itensAteHojeGeral, { valor: saldoInicialConta }] : itensAteHojeGeral
+  const saldoAteHoje = somarTotais(itensAteHojeComBase).total
 
   const doPeriodoFiltrado = aplicarFiltros(doPeriodoBruto, busca, filtros, categoriaPorId, contaPorId)
   const doPeriodo = [...doPeriodoFiltrado].sort((a, b) =>
@@ -597,7 +622,7 @@ function DetalheConta({
   const ajustesDoMes = (vinculadosInformativos ?? []).filter((l) => l.dataCompetencia.startsWith(mes))
   const totalAjustesDoMes = ajustesDoMes.reduce((s, l) => s + Math.abs(l.valor), 0)
 
-  const totaisProps = { saldoInicial, entradasPeriodo, saidasPeriodo, saldoFinal, isCartao, totalFatura }
+  const totaisProps = { itensPeriodo: doPeriodoBruto, saldoAteHoje, isCartao, totalFatura }
 
   return (
     <>
@@ -622,7 +647,7 @@ function DetalheConta({
             filtrosAtivos: contarFiltrosAtivos(filtros),
           }}
         />
-        <SeletorMes mes={mes} onMudar={aoMudarMes} />
+        <SeletorMes mes={mes} onMudar={aoMudarMes} periodo={propsSeletor} />
         {(buscaAberta || busca !== '') && (
           <CampoBusca busca={busca} onBuscaChange={setBusca} onFechar={() => setBuscaAberta(false)} />
         )}
@@ -653,8 +678,17 @@ function DetalheConta({
           }}
         />
       )}
-      {isCartao && (
-        <p className="texto-fraco" style={{ marginTop: -10, marginBottom: 14 }}>
+      {/* Item 2 (16/09/2026, rodada seguinte): com PERÍODO ativo esta linha não
+          aparece — o recorte deixou de ser um ciclo de fatura e virou o
+          intervalo de datas escolhido; anunciar "Fatura de … a …" ali diria uma
+          coisa que a lista não está mostrando. */}
+      {isCartao && !modoPeriodo && (
+        // Item 15 (16/09/2026): esse parágrafo tinha `marginTop: -10`, que o
+        // puxava por baixo do `.cabecalho-fixo` (sticky, fundo sólido) —
+        // ficava com o topo cortado/escondido atrás do cabeçalho. Removida a
+        // margem negativa; o respiro entre o cabeçalho e o texto já vem do
+        // próprio `.cabecalho-fixo`.
+        <p className="texto-fraco" style={{ marginTop: 10, marginBottom: 14 }}>
           Fatura de {formatarDataCurta(janela.inicio)} a {formatarDataCurta(janela.fim)}
           {conta?.diaVencimento ? ` · vence dia ${conta.diaVencimento}` : ''}
         </p>
@@ -691,7 +725,7 @@ function DetalheConta({
       )}
 
       {/* Duplo totalizador (só cartão, ponto 6) — topo E rodapé. */}
-      {isCartao && <BlocoTotais {...totaisProps} />}
+      {isCartao && <BlocoPeriodoESaldo {...totaisProps} />}
 
       {isCartao && (
         <div className="cartao" style={{ marginTop: 10, marginBottom: 10 }}>
@@ -781,25 +815,36 @@ function DetalheConta({
                 {sessao.itens.map((l) => linhaDe(l))}
               </div>
             ))}
-            {!selecao.ativa && blocos.length > 1 && b.itens.length > 0 && (
-              <div style={{ padding: '8px 0 12px' }}>
-                <TotaisEntradaSaida itens={b.itens} rotulo={b.titulo} />
-              </div>
-            )}
+            {/* Item 1 (16/09/2026): os totais por bloco ("Até hoje"/"Dias
+                futuros") que apareciam AQUI, no meio/topo da lista, saíram —
+                viraram o card único "Até hoje" no FIM da lista, logo abaixo. */}
           </div>
         ))}
+        {/* Item 1 (16/09/2026): o card "ATÉ HOJE" (Entrada/Saída/Total numa
+            linha só) — movido pra cá, o ÚLTIMO elemento da lista de
+            lançamentos, calculado sobre TODO o histórico da conta/cofrinho
+            até hoje (`itensAteHojeComBase`), nunca só os itens visíveis no
+            período selecionado. */}
+        {doPeriodoBruto.length > 0 && !selecao.ativa && (
+          <div style={{ padding: '8px 0 4px' }}>
+            <TotaisEntradaSaida itens={itensAteHojeComBase} rotulo="Até hoje" />
+          </div>
+        )}
       </div>
 
-      {/* Totalizador de rodapé — sempre presente (todo tipo de conta); no
-          cartão é a segunda cópia do bloco de cima (duplo totalizador). */}
+      {/* Card reorganizado (Entradas do período/Saídas do período/Movimento
+          do mês, agora numa linha só) + "Saldo" fora dele — sempre presente
+          (todo tipo de conta); no cartão é a segunda cópia do bloco de cima
+          (duplo totalizador). O "Saldo" aqui é garantidamente o MESMO número
+          do "Total" do card "ATÉ HOJE" acima (mesma fonte, `saldoAteHoje`). */}
       <div style={{ marginTop: 12 }}>
-        <BlocoTotais {...totaisProps} />
+        <BlocoPeriodoESaldo {...totaisProps} />
       </div>
 
       {/* Entrada · Saída · Total da lista, FIXO no rodapé (10/09/2026). Vem
           por ÚLTIMO de propósito: um elemento `sticky` com fundo opaco esconde
           o que vier depois dele quando a rolagem passa — o bloco de saldo do
-          período (`BlocoTotais`, acima) ficaria inalcançável.
+          período (`BlocoPeriodoESaldo`, acima) ficaria inalcançável.
 
           BUILD 066: aqui ela só aparece com RECORTE ATIVO (busca, filtro ou
           seleção). Sem recorte, ela repetia exatamente o "movimento do mês" do

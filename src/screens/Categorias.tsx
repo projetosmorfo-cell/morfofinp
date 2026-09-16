@@ -630,22 +630,24 @@ export default function Categorias(_props: TelaProps & { aoVoltar: () => void })
                     "Restaurar ícone padrão" causava (medido no relatório de
                     04/09/2026). */}
                 {confirmandoExclusaoGrupoId === g.id ? (
-                  <>
+                  /* Item 5 (16/09/2026) — mesma correção da linha de
+                     categoria, acima: de texto solto pra botões de verdade. */
+                  <div className="confirmacao-inline-linha">
                     <button
                       type="button"
-                      style={{ background: 'none', border: 'none', color: 'var(--vermelho)', cursor: 'pointer', padding: 0 }}
+                      className="botao-mini-perigo"
                       onClick={() => excluirGrupo(g.id!)}
                     >
                       Confirmar
                     </button>
                     <button
                       type="button"
-                      style={{ background: 'none', border: 'none', color: 'var(--texto-fraco)', cursor: 'pointer', padding: 0 }}
+                      className="botao-mini-secundario"
                       onClick={() => setConfirmandoExclusaoGrupoId(null)}
                     >
                       Cancelar
                     </button>
-                  </>
+                  </div>
                 ) : (
                   <MenuLinha
                     aberto={menuGrupoAberto === g.id}
@@ -922,7 +924,16 @@ export default function Categorias(_props: TelaProps & { aoVoltar: () => void })
                 </span>
               )}
             </div>
-            <div className="cartao">
+            {/* Item 4 (16/09/2026): no modo "Todas abertas" os cartões de
+                categoria ficavam colados um no outro — cada um usava o MESMO
+                `--bg-elevado` do `.cartao` que os envolve, com 10px de margem,
+                então a borda entre dois cartões praticamente sumia e não dava
+                pra ver onde um terminava. Nesse modo o contêiner deixa de ser
+                um cartão (`.lista-cats-abertas` zera fundo/borda/padding) e
+                cada categoria passa a ser um cartão de verdade sobre o fundo da
+                página — mesmo contraste que `.cartao` tem em todo o resto do
+                app. O modo compacto continua exatamente como era. */}
+            <div className={modoCategorias === 'abertas' ? 'cartao lista-cats-abertas' : 'cartao'}>
               {doGrupo.map((c) => {
                 const temLancamentos = (contagemPorCategoria.get(c.id!) ?? 0) > 0
 
@@ -988,6 +999,17 @@ export default function Categorias(_props: TelaProps & { aoVoltar: () => void })
                       </div>
 
                       <fieldset className="campos-travaveis" disabled={inativa}>
+                      {/* Item 11 (16/09/2026): o seletor de ícone passou a
+                          vir logo abaixo do Nome, antes de Grupo/Natureza/
+                          demais campos — antes ficava por último. */}
+                      <div style={{ marginTop: 0, marginBottom: 8 }}>
+                        <SeletorIcone
+                          icone={c.icone ?? 'outros'}
+                          estilo={(c.iconeEstilo ?? 'colorido') as EstiloIcone}
+                          cor={c.iconeCor ?? '#3b82f6'}
+                          onChange={(v) => void atualizarCampoCategoria(c, { icone: v.icone, iconeEstilo: v.estilo, iconeCor: v.estilo === 'colorido' ? undefined : v.cor })}
+                        />
+                      </div>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                         <div>
                           <label htmlFor={`cat-grupo-${c.id}`}>Grupo</label>
@@ -1067,14 +1089,6 @@ export default function Categorias(_props: TelaProps & { aoVoltar: () => void })
                         </>
                       )}
 
-                      <div style={{ marginTop: 8 }}>
-                        <SeletorIcone
-                          icone={c.icone ?? 'outros'}
-                          estilo={(c.iconeEstilo ?? 'colorido') as EstiloIcone}
-                          cor={c.iconeCor ?? '#3b82f6'}
-                          onChange={(v) => void atualizarCampoCategoria(c, { icone: v.icone, iconeEstilo: v.estilo, iconeCor: v.estilo === 'colorido' ? undefined : v.cor })}
-                        />
-                      </div>
                       </fieldset>
 
                       {confirmandoExclusaoId === c.id && (
@@ -1125,7 +1139,17 @@ export default function Categorias(_props: TelaProps & { aoVoltar: () => void })
                             style={{ opacity: c.ativa ? 1 : 0.5 }}
                           />
                         )}
-                        <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {/* Item 9 (16/09/2026), bug real corrigido: faltava
+                            `white-space: nowrap` aqui — sem ele,
+                            `text-overflow: ellipsis` não tem efeito nenhum
+                            (a especificação CSS exige as duas juntas) e o
+                            texto QUEBRA em 2+ linhas em vez de truncar com
+                            "…". Duplicar uma categoria acrescenta " (cópia)"
+                            ao nome, que é o suficiente pra estourar a largura
+                            disponível na lista compacta — a linha duplicada
+                            (e só ela) ficava mais alta/desalinhada, dando a
+                            impressão de que a lista inteira tinha quebrado. */}
+                        <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>
                           {c.nome}
                           <span className="texto-fraco" style={{ fontSize: 11.5 }}>
                             {' · '}{c.natureza}
@@ -1158,22 +1182,28 @@ export default function Categorias(_props: TelaProps & { aoVoltar: () => void })
                         </span>
                       )}
                       {confirmandoExclusaoId === c.id ? (
-                        <>
+                        /* Item 5 (16/09/2026): eram dois links de texto solto
+                           ("Confirmar"/"Cancelar", sem fundo nem borda) — viraram
+                           botões de verdade, pequenos, em harmonia com a linha
+                           compacta (mesmo padrão de "dupla confirmação" já usado
+                           em Manutenção/apagar-dados, só em versão mini pra caber
+                           numa única linha em vez de um bloco cheio). */
+                        <div className="confirmacao-inline-linha">
                           <button
                             type="button"
-                            style={{ background: 'none', border: 'none', color: 'var(--vermelho)', cursor: 'pointer', padding: 0, fontSize: 12 }}
+                            className="botao-mini-perigo"
                             onClick={() => excluir(c.id!)}
                           >
                             Confirmar
                           </button>
                           <button
                             type="button"
-                            style={{ background: 'none', border: 'none', color: 'var(--texto-fraco)', cursor: 'pointer', padding: 0, fontSize: 12 }}
+                            className="botao-mini-secundario"
                             onClick={() => setConfirmandoExclusaoId(null)}
                           >
                             Cancelar
                           </button>
-                        </>
+                        </div>
                       ) : (
                         <>
                           <button

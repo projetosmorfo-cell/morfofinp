@@ -6,7 +6,15 @@ import { fmtBRL, formatarMoeda, aplicarMascaraValor, paraNumero } from '../forma
 import SeletorCategoriaComIcone from './SeletorCategoriaComIcone'
 import MemoriaDescricao from './MemoriaDescricao'
 import { lerDoAmbiente, marcaDoAmbiente } from '../ambiente'
+import { hojeEfetivoISO } from '../hojeSimulado'
+import { janelaFatura } from '../faturaCiclo'
 
+// `hoje()` continua na data REAL do aparelho, de propósito (decisão da Etapa
+// 7: prefill de formulário fica fora da simulação de data, só status/
+// recorrência/mês respeitam `hojeEfetivoISO()`). O dia do mês padrão de uma
+// recorrência fixa (item 7, abaixo) usa `hojeEfetivoISO()` diretamente — é
+// mais consistente com a ferramenta de simulação usá-lo ali, sem alterar o
+// comportamento já documentado da data do próprio lançamento.
 function hoje() {
   return new Date().toISOString().slice(0, 10)
 }
@@ -131,6 +139,16 @@ export default function DetalheLancamento({
   const [categoriaOrigemId, setCategoriaOrigemId] = useState<number | ''>('')
   const [categoriaDestinoId, setCategoriaDestinoId] = useState<number | ''>('')
   const [pago, setPago] = useState(true)
+  /* Item 13 (16/09/2026): o padrão de "já foi pago/recebido" passa a
+     considerar a DATA (e a conta, se é cartão) em vez de ser sempre `true` —
+     mas só enquanto a pessoa não mexer manualmente no checkbox, e só na
+     CRIAÇÃO (nunca sobrescreve o valor de um lançamento existente sendo
+     editado). Data anterior a hoje (retroativa) ou de hoje mesmo → pago/
+     recebido/concluído por padrão (inclusive pago por cartão, que vira
+     "No cartão" pela derivação de `statusPagamento.ts` — aqui só decidimos
+     o booleano `pago`, o rótulo "No cartão" é derivado à parte). Data futura
+     → não pago por padrão (ainda é só um compromisso). */
+  const [pagoTocadoManualmente, setPagoTocadoManualmente] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
   // F-10b da revisão de UI (04/09/2026): a mensagem de erro já nomeia o
   // campo em texto, mas não realçava a borda dele — este id identifica qual
@@ -140,7 +158,13 @@ export default function DetalheLancamento({
   const [recorrencia, setRecorrencia] = useState<'unico' | 'fixo' | 'parcelado'>('unico')
   const [periodicidade, setPeriodicidade] = useState<Periodicidade>('mensal')
   const [tipoRegra, setTipoRegra] = useState<TipoRegraUI>('diaFixo')
-  const [diaFixo, setDiaFixo] = useState('5')
+  // Item 7 (16/09/2026): o dia do mês de uma recorrência fixa nova (dia
+  // fixo) sugeria sempre "5" — agora sugere o dia do mês de HOJE (usando
+  // `hojeEfetivoISO()`, a mesma data simulada que o app já respeita em
+  // recorrência/status), então uma pessoa cadastrando um fixo hoje já vê o
+  // dia mais provável pré-selecionado, em vez de precisar trocar manualmente
+  // toda vez.
+  const [diaFixo, setDiaFixo] = useState(() => String(Number(hojeEfetivoISO().slice(8, 10))))
   const [diaUtil, setDiaUtil] = useState('1')
   const [diaSemana, setDiaSemana] = useState('1')
   const [parcelaN, setParcelaN] = useState('2')
@@ -151,14 +175,33 @@ export default function DetalheLancamento({
      — antes excluía sempre só aquele registro, mesmo sendo parte de uma
      série, sem opção de apagar os futuros ou a série inteira junto. */
   const [escopoExclusao, setEscopoExclusao] = useState<'este' | 'futuros' | 'serie'>('este')
+  /* Item 12 (16/09/2026): um lançamento de categoria "Pagamento de fatura"
+     precisa dizer qual cartão e qual mês/ciclo de fatura está pagando — sem
+     isso, o pagamento entrava no fluxo de caixa mas nenhum lançamento do
+     cartão ficava marcado como pago (diferente do fluxo "Pagar esta fatura"
+     dentro do drill-in da Carteira, que já pergunta isso implicitamente por
+     já estar dentro daquele card específico). Só aparece quando a categoria
+     escolhida tem essa natureza; some/reseta se trocar de categoria. */
+  const [cartaoFaturaId, setCartaoFaturaId] = useState<number | ''>('')
+  const [mesFaturaEscolhido, setMesFaturaEscolhido] = useState(() => hoje().slice(0, 7))
 
-  // Preenche o formulário quando o lançamento a editar carrega (só uma vez).
-  // Se for perna de transferência, espera o PAR carregar também antes de
-  // preencher — senão mostraria só metade da operação (só a conta/categoria
-  // de origem ou só a de destino) por um instante.
-  if (editando && original && !carregado && (!ehTransferenciaExistente || parTransferencia)) {
+  // Preenche o formulário quando o lançamento a editar/clonar carrega (só
+  // uma vez). Se for perna de transferência, espera o PAR carregar também
+  // antes de preencher — senão mostraria só metade da operação (só a conta/
+  // categoria de origem ou só a de destino) por um instante.
+  //
+  // Item 6 (16/09/2026), bug real corrigido: esta condição usava `editando`
+  // (que é `alvoId != null && !clonando`) — então abrir DIRETO em modo
+  // clone (`abrirClonando: true`, o atalho "Duplicar" da linha) tinha
+  // `editando` sempre `false` e o formulário nunca era preenchido: "Duplicar"
+  // abria um formulário em branco. Trocado para `alvoId != null`, que cobre
+  // os dois casos (editando OU clonando a partir de um `alvoId`).
+  if (alvoId != null && original && !carregado && (!ehTransferenciaExistente || parTransferencia)) {
     setData(original.dataCompetencia)
-    setDescricao(original.descricao)
+    // Item 6: ao clonar, a descrição ganha o sufixo " - Copia" — pré-preenche
+    // tudo e não exige reentrada de nenhum dado pra salvar como um novo
+    // lançamento independente do original.
+    setDescricao(clonando ? `${original.descricao} - Copia` : original.descricao)
     setValor(formatarMoeda(original.valor))
     setPago(original.pago !== false)
     setFaturaOverride(original.faturaOverride ?? 'atual')
@@ -207,6 +250,11 @@ export default function DetalheLancamento({
   if (editando && ehTransferenciaExistente && parTransferencia === undefined) return null // ainda carregando o par
 
   const categoriaAtual = original ? categorias?.find((c) => c.id === original.categoriaId) : undefined
+  // Item 12: categoria escolhida AGORA no formulário (não a do original) —
+  // é ela que decide se os campos de cartão/mês da fatura aparecem.
+  const categoriaEscolhida = categorias?.find((c) => c.id === categoriaId)
+  const ehPagamentoFatura = categoriaEscolhida?.natureza === 'Pagamento de fatura'
+  const cartoesDisponiveis = (contas ?? []).filter((c) => c.tipo === 'cartao')
   // Recorrência já definida (série existente) — mexer nisso na edição seria
   // arriscado (poderia confundir a geração automática das próximas
   // ocorrências), então fica travado, só editável na criação. Um lançamento
@@ -614,7 +662,7 @@ export default function DetalheLancamento({
       return
     }
 
-    await db.lancamentos.add({
+    const novoId = await db.lancamentos.add({
       ...marcaDoAmbiente(),
       dataCompetencia: data,
       dataCaixa: data,
@@ -628,6 +676,30 @@ export default function DetalheLancamento({
       pago,
       ...patchFaturaOverride,
     })
+
+    // Item 12: quita o ciclo escolhido — mesma mecânica de "Pagar esta
+    // fatura" (Carteira.tsx): todo lançamento do cartão dentro da janela
+    // fechada do mês escolhido vira `pago: true` + `faturaId` apontando pro
+    // pagamento recém-criado (exceto outros "Pagamento de fatura", pra não
+    // encadear quitação em quitação).
+    if (ehPagamentoFatura && !editando && cartaoFaturaId !== '') {
+      const cartao = (contas ?? []).find((c) => c.id === cartaoFaturaId)
+      if (cartao) {
+        const { inicio, fim } = janelaFatura(cartao.diaFechamento ?? 9, mesFaturaEscolhido)
+        const doCiclo = await lerDoAmbiente(
+          db.lancamentos
+            .where('contaId')
+            .equals(cartaoFaturaId)
+            .filter((l) => l.dataCompetencia >= inicio && l.dataCompetencia <= fim)
+            .toArray(),
+        )
+        const idsParaQuitar = doCiclo
+          .filter((l) => categorias?.find((c) => c.id === l.categoriaId)?.natureza !== 'Pagamento de fatura')
+          .map((l) => l.id!)
+        await Promise.all(idsParaQuitar.map((id) => db.lancamentos.update(id, { pago: true, faturaId: novoId })))
+      }
+    }
+
     fecharAposSalvar()
   }
 
@@ -742,13 +814,12 @@ export default function DetalheLancamento({
         )}
 
         <form onSubmit={salvar}>
-          {/* ORDEM DOS CAMPOS (10/09/2026, pedido do Rafael, ao pé da letra):
-              valor (já com o foco) → o que → categoria (com ícones) → pago
-              com → data → o resto como já era. Antes desta rodada a ordem era
-              data → o que → categoria → pago com → valor: o campo que a pessoa
-              mais digita ficava por último, e o que ela quase nunca muda (a
-              data, que já nasce em hoje) ficava em primeiro. Nenhum campo foi
-              adicionado nem removido aqui — só a sequência mudou. */}
+          {/* ORDEM DOS CAMPOS: valor (já com o foco) → data → o que →
+              categoria (com ícones) → pago com → o resto como já era. Item 4
+              (16/09/2026, pedido do Rafael): a Data passou a vir logo depois
+              do Valor, em todos os tipos (saída/entrada/transferência) — antes
+              (10/09/2026) vinha depois de categoria/conta/fatura, quase no
+              fim do formulário. */}
           <label htmlFor="dl-valor">Valor (R$)</label>
           <input
             id="dl-valor"
@@ -759,6 +830,23 @@ export default function DetalheLancamento({
             value={valor}
             onChange={(e) => setValor(aplicarMascaraValor(e.target.value))}
             className={campoComErro === 'valor' ? 'campo-com-erro' : undefined}
+          />
+
+          <label htmlFor="dl-data">Data</label>
+          <input
+            id="dl-data"
+            type="date"
+            value={data}
+            onChange={(e) => {
+              const novaData = e.target.value
+              setData(novaData)
+              // Item 13: recalcula o padrão de "já pago" só na criação e só
+              // se a pessoa ainda não mexeu manualmente no checkbox.
+              if (!editando && !pagoTocadoManualmente) {
+                setPago(novaData <= hojeEfetivoISO())
+              }
+            }}
+            className={campoComErro === 'data' ? 'campo-com-erro' : undefined}
           />
 
           <label htmlFor="dl-descricao">O que Foi</label>
@@ -904,21 +992,52 @@ export default function DetalheLancamento({
                   </select>
                 </>
               )}
+
+              {/* Item 12 (16/09/2026): lançar diretamente na categoria
+                  "Pagamento de fatura" (fora do fluxo "Pagar esta fatura" da
+                  Carteira) agora pergunta cartão + mês — sem isso o pagamento
+                  entrava no fluxo de caixa mas nada do cartão ficava marcado
+                  como pago. Só na criação (não editando um pagamento já
+                  existente, pra não requitar/perder vínculo de um já feito). */}
+              {ehPagamentoFatura && !editando && (
+                <>
+                  <label htmlFor="dl-fatura-cartao">Cartão desta fatura</label>
+                  <select
+                    id="dl-fatura-cartao"
+                    value={cartaoFaturaId}
+                    onChange={(e) => setCartaoFaturaId(e.target.value ? Number(e.target.value) : '')}
+                  >
+                    <option value="">Escolha…</option>
+                    {cartoesDisponiveis.map((c) => (
+                      <option key={c.id} value={c.id}>{c.nome}</option>
+                    ))}
+                  </select>
+                  <label htmlFor="dl-fatura-mes">Mês da fatura</label>
+                  <input
+                    id="dl-fatura-mes"
+                    type="month"
+                    value={mesFaturaEscolhido}
+                    onChange={(e) => setMesFaturaEscolhido(e.target.value)}
+                  />
+                  <p className="texto-fraco" style={{ marginTop: 4, marginBottom: 0, fontSize: 12 }}>
+                    Ao salvar, todos os lançamentos deste cartão nesse ciclo são marcados como pagos.
+                  </p>
+                </>
+              )}
             </>
           )}
 
-
-          <label htmlFor="dl-data">Data</label>
-          <input
-            id="dl-data"
-            type="date"
-            value={data}
-            onChange={(e) => setData(e.target.value)}
-            className={campoComErro === 'data' ? 'campo-com-erro' : undefined}
-          />
-
           <label htmlFor="dl-pago" style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 14 }}>
-            <input id="dl-pago" type="checkbox" checked={pago} onChange={(e) => setPago(e.target.checked)} style={{ width: 'auto' }} />
+            <input
+              id="dl-pago"
+              type="checkbox"
+              checked={pago}
+              onChange={(e) => {
+                setPagoTocadoManualmente(true)
+                setPago(e.target.checked)
+              }}
+              style={{ width: 'auto' }}
+            />
             <span style={{ color: 'var(--texto)', fontSize: 14 }}>
               {tipo === 'saida' ? 'Já foi pago' : tipo === 'entrada' ? 'Já foi recebido' : 'Já foi concluída'}
             </span>
@@ -1056,7 +1175,17 @@ export default function DetalheLancamento({
             <button
               type="button"
               style={{ background: 'none', border: '1px solid var(--borda)', borderRadius: 10, color: 'var(--texto)', padding: '10px 14px', cursor: 'pointer', fontWeight: 600 }}
-              onClick={() => { setErro(null); setCampoComErro(null); setConfirmandoExclusao(false); setClonando(true) }}
+              onClick={() => {
+                setErro(null)
+                setCampoComErro(null)
+                setConfirmandoExclusao(false)
+                setClonando(true)
+                // Item 6: os campos já estão preenchidos (vieram da edição) —
+                // só falta acrescentar o sufixo na descrição, já que o efeito
+                // de carregamento acima não roda de novo (`carregado` já é
+                // `true` neste ponto).
+                setDescricao((atual) => (atual.endsWith(' - Copia') ? atual : `${atual} - Copia`))
+              }}
             >
               Clonar este lançamento
             </button>
@@ -1068,61 +1197,86 @@ export default function DetalheLancamento({
 
         {editando && (
           <div style={{ marginTop: 16, borderTop: '1px solid var(--borda)', paddingTop: 12 }}>
-            {confirmandoExclusao ? (
-              <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
-                {ehTransferenciaExistente && (
-                  <p className="texto-fraco" style={{ width: '100%', margin: '0 0 4px' }}>
-                    Isso exclui os dois lados da transferência.
-                  </p>
-                )}
-                {!ehTransferenciaExistente && original?.serieId && (
-                  <div style={{ width: '100%', margin: '0 0 4px', display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    <p className="texto-fraco" style={{ margin: 0 }}>
-                      Este lançamento faz parte de uma série. O que excluir?
-                    </p>
-                    {(['este', 'futuros', 'serie'] as const).map((opcao) => (
-                      <label key={opcao} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
-                        <input
-                          type="radio"
-                          name="escopo-exclusao"
-                          checked={escopoExclusao === opcao}
-                          onChange={() => setEscopoExclusao(opcao)}
-                        />
-                        {opcao === 'este' && 'Só este lançamento'}
-                        {opcao === 'futuros' && 'Este e os futuros da série'}
-                        {opcao === 'serie' && 'Toda a série (incluindo os já passados)'}
-                      </label>
-                    ))}
-                  </div>
-                )}
-                <button
-                  type="button"
-                  style={{ background: 'none', border: 'none', color: 'var(--vermelho)', cursor: 'pointer', padding: 0 }}
-                  onClick={excluir}
-                  data-testid="confirmar-exclusao"
-                >
-                  Confirmar exclusão
-                </button>
-                <button
-                  type="button"
-                  style={{ background: 'none', border: 'none', color: 'var(--texto-fraco)', cursor: 'pointer', padding: 0 }}
-                  onClick={() => setConfirmandoExclusao(false)}
-                >
-                  Cancelar
-                </button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                style={{ background: 'none', border: 'none', color: 'var(--vermelho)', cursor: 'pointer', padding: 0 }}
-                onClick={() => { setEscopoExclusao('este'); setConfirmandoExclusao(true) }}
-              >
-                Excluir lançamento
-              </button>
-            )}
+            <button
+              type="button"
+              style={{ background: 'none', border: 'none', color: 'var(--vermelho)', cursor: 'pointer', padding: 0 }}
+              onClick={() => { setEscopoExclusao('este'); setConfirmandoExclusao(true) }}
+            >
+              Excluir lançamento
+            </button>
           </div>
         )}
       </div>
+
+      {/* Item 8 (16/09/2026): a pergunta de escopo de exclusão (série
+          fixa/parcelada) virava um bloco inline no rodapé da tela — agora é
+          um popup de verdade, no mesmo padrão `.modal-fundo`/`.modal-conteudo`
+          já usado em outras confirmações do app (ex.: `ItemLancamentoAcoes`). */}
+      {editando && confirmandoExclusao && (
+        <div className="modal-fundo" onClick={() => setConfirmandoExclusao(false)} style={{ alignItems: 'center' }}>
+          <div className="modal-conteudo" style={{ borderRadius: 16 }} onClick={(e) => e.stopPropagation()}>
+            <p style={{ margin: 0 }}>Excluir este lançamento? Essa ação não pode ser desfeita.</p>
+            {ehTransferenciaExistente && (
+              <p className="texto-fraco" style={{ margin: '8px 0 0' }}>
+                Isso exclui os dois lados da transferência.
+              </p>
+            )}
+            {!ehTransferenciaExistente && original?.serieId && (
+              <div style={{ margin: '10px 0 0' }}>
+                <p className="texto-fraco" style={{ margin: '0 0 6px' }}>
+                  Este lançamento faz parte de uma série. O que excluir?
+                </p>
+                {/* Item 4 (16/09/2026): reescrito no mesmo padrão visual das
+                    listas de escolha já existentes no app (`.folha-escolha-item`)
+                    — linha inteira clicável, radio e rótulo imediatamente
+                    adjacentes. Antes o radio herdava `width: 100%` da regra
+                    genérica `input, select { width: 100% }` (index.css) dentro
+                    de um `label` flex, esticando-se e empurrando o texto pra
+                    longe — corrigido com `.opcao-escopo-item input` (largura
+                    fixa, `flex: 0 0 auto`). */}
+                <div className="lista-opcoes-escopo">
+                  {(['este', 'futuros', 'serie'] as const).map((opcao) => (
+                    <label
+                      key={opcao}
+                      className={`opcao-escopo-item${escopoExclusao === opcao ? ' ativo' : ''}`}
+                    >
+                      <input
+                        type="radio"
+                        name="escopo-exclusao"
+                        checked={escopoExclusao === opcao}
+                        onChange={() => setEscopoExclusao(opcao)}
+                      />
+                      <span>
+                        {opcao === 'este' && 'Só este lançamento'}
+                        {opcao === 'futuros' && 'Este e os futuros da série'}
+                        {opcao === 'serie' && 'Toda a série (incluindo os já passados)'}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div className="acoes-modal" style={{ marginTop: 12 }}>
+              <button
+                type="button"
+                className="secundario"
+                onClick={() => setConfirmandoExclusao(false)}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="perigo"
+                style={{ width: 'auto', marginTop: 0 }}
+                onClick={excluir}
+                data-testid="confirmar-exclusao"
+              >
+                Confirmar exclusão
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

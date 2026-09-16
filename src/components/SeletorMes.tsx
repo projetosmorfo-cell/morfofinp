@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { ArrowPathIcon } from '@heroicons/react/24/outline'
-import { formatarMes, mesAtualISO, somarMes } from '../mes'
+import { formatarMesCurto, mesAtualISO, somarMes } from '../mes'
 import { gerarRecorrentesAteFimDoMes } from '../recorrencia'
 
 // Destaque de "fora do mês atual" (10/09/2026, pedido do Rafael: "destacar
@@ -28,18 +28,36 @@ const MESES_A_FRENTE = 12
 // na própria rotina); é só pra não trabalhar à toa.
 const jaGerouNaSessao = new Set<string>()
 
+function formatarDataCurta(dataISO: string) {
+  const [, mes, dia] = dataISO.split('-')
+  return `${dia}/${mes}`
+}
+
+export interface SeletorPeriodo {
+  /** Estamos em modo período (De/Até) em vez de mês fechado. */
+  ativo: boolean
+  de: string
+  ate: string
+  onAplicarPeriodo: (de: string, ate: string) => void
+  /** Volta pro modo mês normal, num mês específico. */
+  onEscolherMes: (mes: string) => void
+}
+
 export default function SeletorMes({
   mes,
   onMudar,
-  aoClicarNome,
+  periodo,
 }: {
   mes: string
   onMudar: (mes: string) => void
-  /* Item 6 da lista pendente (15/09/2026): quando presente, torna o NOME do
-     mês clicável — usado só em Lançamentos, pra alternar pro filtro por
-     período (data de/até). Opcional e sem efeito em quem não passa a prop —
-     as outras 4 telas que usam este seletor continuam exatamente iguais. */
-  aoClicarNome?: () => void
+  /* Item 2 (16/09/2026): quando presente, o nome do mês (ou o período, se
+     `periodo.ativo`) vira clicável e abre um POPUP pra escolher um intervalo
+     de datas (De/Até) ou voltar pra um mês específico fechado — usado só em
+     Lançamentos (o único lugar com o pedido). Opcional e sem efeito em quem
+     não passa a prop — as outras 4 telas que usam este seletor continuam
+     exatamente iguais. Revoga o `aoClicarNome`/toggle inline que existia
+     antes (o Rafael reclamou que ficava "fixo na tela"). */
+  periodo?: SeletorPeriodo
 }) {
   const mesAtual = mesAtualISO()
   const limiteFrente = somarMes(mesAtual, MESES_A_FRENTE)
@@ -48,6 +66,10 @@ export default function SeletorMes({
   const [processando, setProcessando] = useState(false)
   const [aviso, setAviso] = useState('')
   const montado = useRef(true)
+  const [popupAberto, setPopupAberto] = useState(false)
+  const [rascunhoDe, setRascunhoDe] = useState(periodo?.de ?? `${mes}-01`)
+  const [rascunhoAte, setRascunhoAte] = useState(periodo?.ate ?? `${mes}-31`)
+  const [rascunhoMes, setRascunhoMes] = useState(mes)
 
   useEffect(() => {
     montado.current = true
@@ -74,64 +96,157 @@ export default function SeletorMes({
     setTimeout(() => { if (montado.current) setAviso('') }, 4000)
   }
 
+  function abrirPopup() {
+    setRascunhoDe(periodo?.ativo ? periodo.de : `${mes}-01`)
+    setRascunhoAte(periodo?.ativo ? periodo.ate : `${mes}-31`)
+    setRascunhoMes(mes)
+    setPopupAberto(true)
+  }
+
+  function aplicarPeriodo() {
+    periodo?.onAplicarPeriodo(rascunhoDe, rascunhoAte)
+    setPopupAberto(false)
+  }
+
+  function aplicarMesEspecifico() {
+    periodo?.onEscolherMes(rascunhoMes)
+    setPopupAberto(false)
+  }
+
+  const rotuloCentro = periodo?.ativo
+    ? `${formatarDataCurta(periodo.de)} – ${formatarDataCurta(periodo.ate)}`
+    : formatarMesCurto(mes)
+
   return (
     <>
-      <div className={`seletor-mes ${foraDoMesAtual ? 'seletor-mes-fora' : ''}`}>
-        <button type="button" onClick={() => onMudar(somarMes(mes, -1))} aria-label="Mês anterior">
+      {/* Item 2 (16/09/2026): setas SEMPRE nas bordas absolutas
+          (`justify-content: space-between`), com tudo o mais (nome do mês,
+          rótulo de período, "Hoje", reprocessar) centralizado numa área do
+          MEIO com largura fixa (`.seletor-mes-centro`, ver index.css) — nunca
+          mais um layout que empurra a seta pra perto do texto quando um botão
+          extra (ex.: "Hoje") aparece do lado. */}
+      <div className={`seletor-mes ${foraDoMesAtual && !periodo?.ativo ? 'seletor-mes-fora' : ''}`}>
+        <button type="button" onClick={() => onMudar(somarMes(mes, -1))} aria-label="Mês anterior" disabled={!!periodo?.ativo}>
           ‹
         </button>
-        {aoClicarNome ? (
-          <button
-            type="button"
-            className="seletor-mes-nome-botao"
-            onClick={aoClicarNome}
-            data-testid="seletor-mes-nome-clicavel"
-            title="Ver por período (data de/até)"
-          >
-            {formatarMes(mes)}
-          </button>
-        ) : (
-          <strong title={foraDoMesAtual ? 'Você não está no mês atual' : undefined}>
-            {formatarMes(mes)}
-          </strong>
-        )}
-        {/* Volta pro mês corrente em um toque (build 063). Só existe quando há
-            pra onde voltar — no mês atual ele não teria função e só ocuparia
-            espaço na linha. Pequeno e sem destaque de propósito: o destaque
-            desta linha é a tarja amarela do nome do mês, que já avisa que a
-            tela está fora do mês atual; um segundo elemento gritando ao lado
-            competiria com ela. */}
-        {foraDoMesAtual && (
-          <button
-            type="button"
-            className="seletor-mes-hoje"
-            onClick={() => onMudar(mesAtual)}
-            data-testid="seletor-mes-hoje"
-            title="Voltar para o mês atual"
-          >
-            Hoje
-          </button>
-        )}
-        <button
-          type="button"
-          className="seletor-mes-reprocessar"
-          onClick={() => void reprocessar()}
-          disabled={processando}
-          aria-label="Reprocessar recorrentes e parcelas deste mês"
-          title="Reprocessar recorrentes e parcelas deste mês"
-        >
-          <ArrowPathIcon width={16} height={16} className={processando ? 'girando' : undefined} />
-        </button>
+        <div className="seletor-mes-centro">
+          {periodo ? (
+            <button
+              type="button"
+              className="seletor-mes-nome-botao"
+              onClick={abrirPopup}
+              data-testid="seletor-mes-nome-clicavel"
+              title="Escolher mês ou período"
+            >
+              {rotuloCentro}
+            </button>
+          ) : (
+            <strong title={foraDoMesAtual ? 'Você não está no mês atual' : undefined}>
+              {rotuloCentro}
+            </strong>
+          )}
+          {/* Volta pro mês corrente em um toque (build 063). Só existe quando há
+              pra onde voltar — no mês atual ele não teria função e só ocuparia
+              espaço na linha. */}
+          {foraDoMesAtual && !periodo?.ativo && (
+            <button
+              type="button"
+              className="seletor-mes-hoje"
+              onClick={() => onMudar(mesAtual)}
+              data-testid="seletor-mes-hoje"
+              title="Voltar para o mês atual"
+            >
+              Hoje
+            </button>
+          )}
+          {!periodo?.ativo && (
+            <button
+              type="button"
+              className="seletor-mes-reprocessar"
+              onClick={() => void reprocessar()}
+              disabled={processando}
+              aria-label="Reprocessar recorrentes e parcelas deste mês"
+              title="Reprocessar recorrentes e parcelas deste mês"
+            >
+              <ArrowPathIcon width={16} height={16} className={processando ? 'girando' : undefined} />
+            </button>
+          )}
+        </div>
         <button
           type="button"
           onClick={() => onMudar(somarMes(mes, 1))}
-          disabled={!podeAvancar}
+          disabled={!podeAvancar || !!periodo?.ativo}
           aria-label="Próximo mês"
         >
           ›
         </button>
       </div>
       {aviso && <p className="texto-fraco" style={{ margin: '2px 0 0', fontSize: 11.5, textAlign: 'center' }}>{aviso}</p>}
+
+      {/* Item 2 (16/09/2026): popup de verdade (`.modal-fundo`/`.modal-conteudo`)
+          no lugar do toggle inline que ficava "fixo na tela" — escolher um
+          período (De/Até) OU voltar pra um mês específico, os dois aplicando
+          e fechando o popup sozinhos. */}
+      {popupAberto && periodo && (
+        <div className="modal-fundo" onClick={() => setPopupAberto(false)}>
+          <div className="modal-conteudo" onClick={(e) => e.stopPropagation()}>
+            <h2 style={{ marginTop: 0 }}>Ver por período ou por mês</h2>
+
+            <label htmlFor="periodo-popup-de">De</label>
+            <input
+              id="periodo-popup-de"
+              type="date"
+              value={rascunhoDe}
+              onChange={(e) => setRascunhoDe(e.target.value)}
+              data-testid="periodo-popup-de"
+            />
+            <label htmlFor="periodo-popup-ate">Até</label>
+            <input
+              id="periodo-popup-ate"
+              type="date"
+              value={rascunhoAte}
+              onChange={(e) => setRascunhoAte(e.target.value)}
+              data-testid="periodo-popup-ate"
+            />
+            <button
+              type="button"
+              className="primario"
+              onClick={aplicarPeriodo}
+              data-testid="periodo-popup-aplicar"
+            >
+              Ver este período
+            </button>
+
+            <div style={{ margin: '16px 0 8px', borderTop: '1px solid var(--borda)', paddingTop: 12 }}>
+              <label htmlFor="periodo-popup-mes">Ou escolher um mês fechado</label>
+              <input
+                id="periodo-popup-mes"
+                type="month"
+                value={rascunhoMes}
+                onChange={(e) => setRascunhoMes(e.target.value)}
+                data-testid="periodo-popup-mes"
+              />
+              <button
+                type="button"
+                className="secundario"
+                onClick={aplicarMesEspecifico}
+                data-testid="periodo-popup-usar-mes"
+              >
+                Usar este mês
+              </button>
+            </div>
+
+            <button
+              type="button"
+              className="secundario"
+              style={{ marginTop: 12 }}
+              onClick={() => setPopupAberto(false)}
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
     </>
   )
 }

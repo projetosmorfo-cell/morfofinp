@@ -121,6 +121,16 @@ return (
         value={rascunho.nome}
         onChange={(e) => setRascunho((r) => ({ ...r, nome: e.target.value }))}
       />
+      {/* Item 11 (16/09/2026): o seletor de ícone passou a vir logo abaixo
+          do Nome — antes vinha por último, depois de Tipo/Comportamento. */}
+      <div style={{ marginTop: 8 }}>
+        <SeletorIcone
+          icone={rascunho.icone}
+          estilo={rascunho.iconeEstilo}
+          cor={rascunho.iconeCor}
+          onChange={({ icone, estilo, cor }) => setRascunho((r) => ({ ...r, icone, iconeEstilo: estilo, iconeCor: cor }))}
+        />
+      </div>
       <span style={{ display: 'block', fontSize: 12, color: 'var(--texto-fraco)', margin: '10px 0 6px' }}>Tipo</span>
       <div style={{ display: 'flex', gap: 8 }}>
         {(['saida', 'entrada'] as TipoGrupo[]).map((t) => (
@@ -187,12 +197,6 @@ return (
           </div>
         </>
       )}
-      <SeletorIcone
-        icone={rascunho.icone}
-        estilo={rascunho.iconeEstilo}
-        cor={rascunho.iconeCor}
-        onChange={({ icone, estilo, cor }) => setRascunho((r) => ({ ...r, icone, iconeEstilo: estilo, iconeCor: cor }))}
-      />
     </>
   )
 }
@@ -281,6 +285,16 @@ export function CamposCategoria({
         value={rasc.nome}
         onChange={(e) => setRasc((r) => ({ ...r, nome: e.target.value }))}
       />
+      {/* Item 11 (16/09/2026): o seletor de ícone passou a vir logo abaixo
+          do Nome — antes vinha por último, depois de Natureza/Grupo/etc. */}
+      <div style={{ marginTop: 8 }}>
+        <SeletorIcone
+          icone={rasc.icone}
+          estilo={rasc.iconeEstilo}
+          cor={rasc.iconeCor}
+          onChange={({ icone, estilo, cor }) => setRasc((r) => ({ ...r, icone, iconeEstilo: estilo, iconeCor: cor }))}
+        />
+      </div>
       <label htmlFor="cat-natureza">Natureza</label>
       <SeletorComExplicacao<Natureza>
         id="cat-natureza"
@@ -335,12 +349,6 @@ export function CamposCategoria({
           </p>
         </>
       )}
-      <SeletorIcone
-        icone={rasc.icone}
-        estilo={rasc.iconeEstilo}
-        cor={rasc.iconeCor}
-        onChange={({ icone, estilo, cor }) => setRasc((r) => ({ ...r, icone, iconeEstilo: estilo, iconeCor: cor }))}
-      />
     </>
   )
 }

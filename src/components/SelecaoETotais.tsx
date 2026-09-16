@@ -142,10 +142,18 @@ export function BarraSelecao({ selecao, total, onAlterar }: {
   )
 }
 
-export function TotaisEntradaSaida({ itens, rotulo, destaque, recolhivel }: {
+export function TotaisEntradaSaida({ itens, rotulo, destaque, recolhivel, rotulos }: {
   itens: { valor: number }[]
   rotulo?: string
   destaque?: boolean
+  /* Item 1 (16/09/2026): os três rótulos da faixa são "Entrada"/"Saída"/
+     "Total" em todo lugar, MENOS no segundo card de totais do drill-in da
+     Carteira, onde o Rafael pediu "Entrada Total"/"Saída Total"/"Total do
+     Mês" (ver `BlocoPeriodoESaldo`, Carteira.tsx). É uma prop opcional em vez
+     de um segundo componente porque a lógica é literalmente a mesma — só o
+     texto muda. Escrito em caixa normal aqui de propósito: quem põe em caixa
+     alta é o `text-transform` de `.totais-faixa-chave` (index.css). */
+  rotulos?: { entrada: string; saida: string; total: string }
   /* Faixa que nasce RECOLHIDA, mostrando só o Total (10/09/2026, pedido do
      Rafael: "estreite mais o rodapé com os números totais, permitir recolher,
      trazer por padrão recolhido e com total"). Recolhida ela é uma linha só;
@@ -195,15 +203,15 @@ export function TotaisEntradaSaida({ itens, rotulo, destaque, recolhivel }: {
         </span>
       )}
       <span className="totais-faixa-item">
-        <span className="totais-faixa-chave">Entrada</span>
+        <span className="totais-faixa-chave">{rotulos?.entrada ?? 'Entrada'}</span>
         <strong className="valor-pos">{fmtBRL(t.entrada)}</strong>
       </span>
       <span className="totais-faixa-item">
-        <span className="totais-faixa-chave">Saída</span>
+        <span className="totais-faixa-chave">{rotulos?.saida ?? 'Saída'}</span>
         <strong className="valor-neg">{fmtBRL(t.saida)}</strong>
       </span>
       <span className="totais-faixa-item">
-        <span className="totais-faixa-chave">Total</span>
+        <span className="totais-faixa-chave">{rotulos?.total ?? 'Total'}</span>
         {valorTotal}
       </span>
     </div>

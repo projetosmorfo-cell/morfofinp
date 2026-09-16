@@ -360,34 +360,68 @@ export function CampoBusca({ busca, onBuscaChange, onFechar }: {
 }) {
   return (
     <div className="barra-busca-filtros" style={{ marginBottom: 10 }}>
-      <div style={{ position: 'relative' }}>
+      {/* Item 5 (16/09/2026): o contêiner precisa ser `flex`, não um `div`
+          comum. BUG REAL que isso corrige: `<input>` é um elemento de linha, e
+          num contêiner de bloco ele se apoia na linha de base do texto — a
+          caixa do contêiner fica alguns pixels MAIS ALTA que o campo, com essa
+          folga toda embaixo. O "×" é posicionado contra o CONTÊINER
+          (`top: 0; bottom: 0`), então ele herdava essa folga: a área dele não
+          batia com a do campo e o glifo ficava abaixo do centro real — o
+          "sobra espaço em cima e embaixo" que o Rafael continuou vendo depois
+          da correção da build 077 (que só mediu a altura do botão, nunca a do
+          campo nem a do contêiner). Com `flex` a caixa do contêiner passa a ter
+          EXATAMENTE a altura do campo, e aí `top: 0; bottom: 0` é o campo
+          inteiro, de borda a borda. */}
+      <div style={{ position: 'relative', display: 'flex' }}>
         <input
           type="text"
           autoFocus
           placeholder="Buscar por descrição, categoria ou conta…"
           value={busca}
           onChange={(e) => onBuscaChange(e.target.value)}
-          style={{ paddingRight: 32 }}
+          style={{ paddingRight: 40 }}
         />
+        {/* Item 7 (16/09/2026): o "×" era pequeno e centralizado, com folga ao
+            redor — alvo de toque ruim. Agora ocupa a ALTURA INTEIRA da linha
+            do campo (`top:0; bottom:0`, sem `transform`), só a largura é
+            fixa (36px) — um tap target bem maior, mais fácil de acertar.
+            Item 5 (16/09/2026, rodada seguinte): `lineHeight: 1` deixava a
+            caixa do glifo com a altura de UMA linha de texto dentro de um botão
+            de 40px — o que se via como "sobra em cima e embaixo" do próprio
+            desenho do ×. Agora o botão é ele mesmo um `flex` que estica
+            (`alignSelf: 'stretch'`, `height: 'auto'`) e o glifo herda a altura
+            inteira (`lineHeight: 0` + `alignItems: center` centram o desenho no
+            meio exato do campo, sem depender da métrica da fonte). */}
         <button
           type="button"
           aria-label={busca ? 'Limpar busca' : 'Fechar busca'}
           onClick={() => { onBuscaChange(''); onFechar() }}
+          data-testid="limpar-busca"
           style={{
             position: 'absolute',
-            right: 8,
-            top: '50%',
-            transform: 'translateY(-50%)',
+            right: 0,
+            top: 0,
+            bottom: 0,
+            height: 'auto',
+            alignSelf: 'stretch',
+            width: 36,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
             background: 'none',
             border: 'none',
             color: 'var(--texto-fraco)',
-            fontSize: 18,
-            lineHeight: 1,
+            /* 26px: o glifo ocupa a maior parte da altura útil do campo (40px
+               menos as bordas) — em 20/22px ele lia como um símbolo pequeno
+               solto no meio, que é a reclamação original. */
+            fontSize: 26,
+            lineHeight: 0,
             cursor: 'pointer',
             padding: 0,
+            margin: 0,
           }}
         >
-          ×
+          <span aria-hidden style={{ display: 'block', lineHeight: 0 }}>×</span>
         </button>
       </div>
     </div>

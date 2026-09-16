@@ -347,23 +347,6 @@ export default function Planejamento({ mes, aoMudarMes, aoAbrirLancamento, aoAbr
     )
   }
 
-  /* O RÓTULO acompanha o sinal (13/09/2026). "Sobra planejada −R$ 16.717" é
-     uma contradição escrita: se o número é negativo, não é sobra, é falta.
-     Ele perguntou exatamente isso — "quero entender como esses textos vão
-     explicar se ele muda dependendo se for negativo ou positivo". */
-  function linhaFechamento(quando: string, valor: number) {
-    const rotulo = `${valor >= 0 ? 'Sobra' : 'Falta'} ${quando}`
-    return (
-      <div className="linha" style={{ border: 'none', padding: '4px 0' }}>
-        <span>{rotulo}</span>
-        <strong className={valor >= 0 ? 'valor-pos' : 'valor-neg'}>
-          {valor >= 0 ? '+' : '-'}
-          {fmt(valor)}
-        </strong>
-      </div>
-    )
-  }
-
   const blocoVeredito = modoVisaoAtual === 'ideal' ? (() => {
         const proj = calcularProjecao({
           lancamentos: lancamentosTodos ?? [],
@@ -503,10 +486,29 @@ export default function Planejamento({ mes, aoMudarMes, aoAbrirLancamento, aoAbr
       <div className="cartao" data-testid="card-mes-planejamento">
         <div className="total-geral">{linhaTotais('Entradas', 'entrada', totalEntradas)}</div>
         <div className="total-geral" style={{ marginTop: 10 }}>{linhaTotais('Saídas', 'saida', totalSaidas)}</div>
-        <div className="total-geral" style={{ marginTop: 10 }}>
-          {linhaFechamento('planejada', sobraPlanejada)}
-          {linhaFechamento('até agora', sobraAteAgora)}
-          {linhaFechamento('projetada', sobraProjetada)}
+        {/* Item 10 (16/09/2026), pedido do Rafael: o card de 3 linhas
+            "planejada/até agora/projetada" saiu — virou uma legenda de cor,
+            explicando o que cada cor das barras de Entradas/Saídas acima
+            representa (mesmo vocabulário de cor de `BarraIdeal`/da régua do
+            Planejamento: realizado azul, comprometido âmbar, o que sobra da
+            meta é o trilho — margem —, vermelho quando estoura). */}
+        <div className="legenda-cores-planejamento" style={{ marginTop: 10 }}>
+          <span className="legenda-cores-item">
+            <span className="legenda-cores-bolinha" style={{ background: 'var(--azul)' }} />
+            Já realizado
+          </span>
+          <span className="legenda-cores-item">
+            <span className="legenda-cores-bolinha" style={{ background: 'var(--ideal-ambar)' }} />
+            Comprometido, ainda não realizado
+          </span>
+          <span className="legenda-cores-item">
+            <span className="legenda-cores-bolinha" style={{ background: 'var(--borda)' }} />
+            Margem — ainda cabe na meta
+          </span>
+          <span className="legenda-cores-item">
+            <span className="legenda-cores-bolinha" style={{ background: 'var(--vermelho)' }} />
+            Estourou a meta
+          </span>
         </div>
         {totalEntradas.planejado === 0 && (
           /* TEXTO CORRIGIDO (13/09/2026). O anterior dizia "falta dizer quanto

@@ -65,8 +65,7 @@ export default function GrupoReordenavel({
     }
   }
 
-  function onPointerDownAlca(id: number, e: React.PointerEvent) {
-    e.stopPropagation()
+  function onPointerDownLinha(id: number, e: React.PointerEvent) {
     limparTimer()
     const alvo = e.currentTarget
     const pointerId = e.pointerId
@@ -137,21 +136,12 @@ export default function GrupoReordenavel({
             data-linha-id={id}
             data-testid={`linha-reordenavel-${id}`}
             className={`linha-selecionavel linha-reordenavel ${emArrasto === id ? 'em-arrasto' : ''}`}
+            onPointerDown={selecao.ativa ? undefined : (e) => onPointerDownLinha(id, e)}
+            onPointerUp={limparTimer}
+            onPointerLeave={limparTimer}
           >
             {selecao.ativa && (
               <MarcadorLinha marcado={selecao.estaMarcado(l.id!)} onAlternar={() => selecao.alternar(l.id!)} />
-            )}
-            {!selecao.ativa && (
-              <span
-                className="alca-arrastar"
-                aria-label="Segurar e arrastar para reordenar"
-                data-testid={`alca-arrastar-${id}`}
-                onPointerDown={(e) => onPointerDownAlca(id, e)}
-                onPointerUp={limparTimer}
-                onPointerLeave={limparTimer}
-              >
-                ⠿
-              </span>
             )}
             <ItemLancamentoAcoes
               lancamento={l}

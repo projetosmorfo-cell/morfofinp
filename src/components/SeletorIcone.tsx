@@ -109,11 +109,19 @@ export default function SeletorIcone({
 
   return (
     <>
-      <button type="button" className="linha-selecionar-icone" onClick={() => setModalAberto(true)}>
+      <button
+        type="button"
+        className="linha-selecionar-icone"
+        onClick={() => setModalAberto(true)}
+        aria-label={`Ícone atual: ${nomeIconeAtual}. Alterar.`}
+      >
         {previaIcone}
         <span className="linha-selecionar-icone-texto">
+          {/* Item 11 (16/09/2026): o nome INTERNO do ícone (usado só pra
+              busca dentro da grade, `nomeIconeAtual`) não é mais mostrado
+              aqui — a pré-visualização do próprio ícone já cumpre o papel de
+              "qual está selecionado". */}
           <span className="texto-fraco">Ícone</span>
-          <strong>{nomeIconeAtual}</strong>
         </span>
         <span className="linha-selecionar-icone-acao">Alterar ›</span>
       </button>

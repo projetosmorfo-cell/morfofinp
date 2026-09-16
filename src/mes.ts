@@ -36,8 +36,26 @@ const NOMES_MES = [
 
 export function formatarMes(mesISO: string): string {
   const [ano, mes] = mesISO.split('-').map(Number)
+  return `${nomeDoMes(mes)} de ${ano}`
+}
+
+function nomeDoMes(mes: number): string {
   const nome = NOMES_MES[mes - 1]
-  return `${nome[0].toUpperCase()}${nome.slice(1)} de ${ano}`
+  return `${nome[0].toUpperCase()}${nome.slice(1)}`
+}
+
+// Só o nome do mês, sem o ano — item 2 (16/09/2026, pedido do Rafael: "tira o
+// ano do mês em todas as telas de lançamento"). É esta que a barra de mês
+// (`SeletorMes`, usada por Resumo, Situação/Hoje, Lançamentos, Carteira e
+// Planejamento) usa.
+//
+// `formatarMes` (COM ano) continua existindo e NÃO foi trocada nos outros dois
+// pontos de uso, porque neles o ano é a informação: a tarja de pendências de
+// `App.tsx` lista meses que já viraram (pode cruzar o ano) e a referência
+// histórica da Calibragem mostra um intervalo de até 6 meses fechados.
+export function formatarMesCurto(mesISO: string): string {
+  const [, mes] = mesISO.split('-').map(Number)
+  return nomeDoMes(mes)
 }
 
 // Mês inicial pra abrir o app: sempre o mês atual DE VERDADE.

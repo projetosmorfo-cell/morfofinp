@@ -6,6 +6,7 @@ import SeletorMes from '../components/SeletorMes'
 import EdicaoEmMassa from '../components/EdicaoEmMassa'
 import GrupoReordenavel from '../components/GrupoReordenavel'
 import { compararDentroDoDia } from '../lancamentosUtil'
+import { usePeriodoLista } from '../components/periodoLista'
 import { CampoBusca, FolhaFiltros, FILTROS_VAZIOS, aplicarFiltros, contarFiltrosAtivos, type FiltrosAvancados } from '../components/BuscaEFiltros'
 import { formatarCabecalhoData } from '../formatoData'
 import { fmtBRL } from '../formatoMoeda'
@@ -30,13 +31,21 @@ import {
 // sem coluna de data (a sessão já é o agrupador). Ganhou busca + filtros
 // avançados no topo (ver BuscaEFiltros) — pontos 1, 8, 9 e 10 do feedback.
 export default function Lancamentos({ mes, aoMudarMes, aoAbrirLancamento }: TelaProps) {
+  /* Busca e filtros declarados ANTES do hook de período logo abaixo: voltar
+     pro modo mês limpa os dois, então o hook precisa dos dois setters. */
+  const [busca, setBusca] = useState('')
+  const [filtros, setFiltros] = useState<FiltrosAvancados>(FILTROS_VAZIOS)
   // Item 6 da lista pendente (15/09/2026): filtro por período (data de/até),
-  // alternável clicando no nome do mês — clicar de novo volta pro mês e limpa
-  // os filtros. Só existe nesta tela (pedido explícito); as outras telas de
-  // mês continuam com `SeletorMes` do jeito de sempre.
-  const [modoPeriodo, setModoPeriodo] = useState(false)
-  const [periodoDe, setPeriodoDe] = useState(`${mes}-01`)
-  const [periodoAte, setPeriodoAte] = useState(`${mes}-31`)
+  // aberto pelo popup do nome do mês.
+  //
+  // 16/09/2026 (rodada seguinte à build 077): o estado que ficava aqui dentro
+  // virou o hook compartilhado `usePeriodoLista` — o drill-in da Carteira
+  // passou a ter o MESMO topo, e nada disso pode existir em duas cópias (ver
+  // `src/components/periodoLista.ts`).
+  const { modoPeriodo, periodoDe, periodoAte, propsSeletor } = usePeriodoLista(mes, aoMudarMes, () => {
+    setFiltros(FILTROS_VAZIOS)
+    setBusca('')
+  })
   const lancamentosDoMes = useLiveQuery(
     () =>
       modoPeriodo
@@ -55,12 +64,10 @@ export default function Lancamentos({ mes, aoMudarMes, aoAbrirLancamento }: Tela
   // re-render (ex.: trocar de mês).
   useHojeSimuladoISO()
   const [ordemDesc, setOrdemDesc] = useState(true)
-  const [busca, setBusca] = useState('')
   const [buscaAberta, setBuscaAberta] = useState(false)
   const [filtrosAbertos, setFiltrosAbertos] = useState(false)
   /* Edição em massa (14/09/2026) — ver `EdicaoEmMassa.tsx`. */
   const [massaAberta, setMassaAberta] = useState(false)
-  const [filtros, setFiltros] = useState<FiltrosAvancados>(FILTROS_VAZIOS)
   /* G44 regra 11b — hook ANTES do guard de carregamento logo abaixo. Ficou
      depois dele na 1ª versão e derrubou a tela inteira (React #310, "mais
      hooks que no render anterior"): a tela renderiza uma vez com os dados
@@ -137,47 +144,12 @@ export default function Lancamentos({ mes, aoMudarMes, aoAbrirLancamento }: Tela
             filtrosAtivos: contarFiltrosAtivos(filtros),
           }}
         />
-        {modoPeriodo ? (
-          <div className="periodo-filtro" data-testid="periodo-filtro">
-            <input
-              type="date"
-              value={periodoDe}
-              onChange={(e) => setPeriodoDe(e.target.value)}
-              aria-label="De"
-              data-testid="periodo-de"
-            />
-            <span className="texto-fraco">até</span>
-            <input
-              type="date"
-              value={periodoAte}
-              onChange={(e) => setPeriodoAte(e.target.value)}
-              aria-label="Até"
-              data-testid="periodo-ate"
-            />
-            <button
-              type="button"
-              className="secundario"
-              data-testid="voltar-modo-mes"
-              onClick={() => {
-                setModoPeriodo(false)
-                setFiltros(FILTROS_VAZIOS)
-                setBusca('')
-              }}
-            >
-              ‹ Voltar ao mês
-            </button>
-          </div>
-        ) : (
-          <SeletorMes
-            mes={mes}
-            onMudar={aoMudarMes}
-            aoClicarNome={() => {
-              setPeriodoDe(`${mes}-01`)
-              setPeriodoAte(`${mes}-31`)
-              setModoPeriodo(true)
-            }}
-          />
-        )}
+        {/* Item 2 (16/09/2026): o toggle inline (que ficava "fixo na tela",
+            reclamação do Rafael) virou um POPUP dentro do próprio
+            `SeletorMes` — clicar no nome do mês (ou no rótulo "De – Até",
+            quando já em modo período) abre o popup; aplicar De/Até ou
+            escolher um mês fecha o popup sozinho e já troca o cabeçalho. */}
+        <SeletorMes mes={mes} onMudar={aoMudarMes} periodo={propsSeletor} />
         {(buscaAberta || busca !== '') && (
           <CampoBusca busca={busca} onBuscaChange={setBusca} onFechar={() => setBuscaAberta(false)} />
         )}

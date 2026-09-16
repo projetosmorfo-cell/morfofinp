@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import ResumoDoMes from './screens/ResumoDoMes'
 import Situacao from './screens/Situacao'
 import Hoje from './screens/Hoje'
@@ -430,6 +430,35 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: ModoConsultaN
     }
   }
 
+  // Item 14 (16/09/2026): puxar pra baixo no topo do `<main>` (único
+  // contêiner com rolagem do app) dispara a MESMA ação de "Atualizar" do
+  // "⋮" — nunca uma lógica própria. Só arma o gesto quando o toque começa
+  // com `scrollTop === 0` (senão um puxão dentro de uma lista rolada
+  // dispararia a atualização por engano); solta acima do limiar chama
+  // `atualizarAgora()`, abaixo dele só recolhe sem fazer nada.
+  const mainRef = useRef<HTMLElement>(null)
+  const [puxando, setPuxando] = useState(0)
+  const puxadoRef = useRef<{ y0: number; ativo: boolean } | null>(null)
+  const LIMIAR_PUXAR = 64
+  const onTouchStartMain = (e: React.TouchEvent<HTMLElement>) => {
+    const el = mainRef.current
+    if (!el || el.scrollTop > 0 || atualizando) { puxadoRef.current = null; return }
+    puxadoRef.current = { y0: e.touches[0].clientY, ativo: true }
+  }
+  const onTouchMoveMain = (e: React.TouchEvent<HTMLElement>) => {
+    const ref = puxadoRef.current
+    if (!ref || !ref.ativo) return
+    const dy = e.touches[0].clientY - ref.y0
+    if (dy <= 0) { setPuxando(0); return }
+    setPuxando(Math.min(dy, LIMIAR_PUXAR * 1.6))
+  }
+  const onTouchEndMain = () => {
+    const dy = puxando
+    puxadoRef.current = null
+    setPuxando(0)
+    if (dy >= LIMIAR_PUXAR) void atualizarAgora()
+  }
+
   // Tour guiado (05/09/2026, Roteiro de Parametrização Morfo, Etapa 6) —
   // aberto manualmente via Manutenção → "Ver tour guiado" (ver
   // `src/kit/GuidedTour.tsx`). Fecha qualquer tela de configuração aberta
@@ -536,6 +565,24 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: ModoConsultaN
 
   /* ver a nota logo abaixo: a aba MOSTRADA é derivada, não corrigida por efeito */
   const telaAtiva: Tela = telasVisiveis.includes(tela) ? tela : (telasVisiveis[0] ?? 'resumo')
+
+  /* Item 3 (16/09/2026): toda troca de TELA abre no topo.
+     BUG REAL que isso corrige: `<main>` é o ÚNICO contêiner com rolagem do app
+     (regra da build 050), e ele NÃO desmonta quando o conteúdo dentro dele
+     troca — então a rolagem de onde a pessoa estava continuava valendo na tela
+     seguinte. Abrir "Configurações" a partir do "⋮" depois de rolar qualquer
+     lista caía no meio da lista de configurações; o mesmo valia pra toda tela
+     de configuração e pra troca de aba.
+     O gatilho é a tela EXIBIDA (`configAberta ?? telaAtiva`) mais `resetTela`
+     (o contador que o toque no rodapé incrementa) — então tocar na aba já ativa
+     continua voltando pro topo dela, como sempre. O que NÃO entra aqui é o
+     passo de DENTRO de uma tela (conta aberta na Carteira, categoria expandida,
+     modal de lançamento): nada disso muda `tela`/`configAberta`, então o estado
+     e a posição de leitura de um drill-in seguem preservados. */
+  const telaExibida = configAberta ?? telaAtiva
+  useEffect(() => {
+    mainRef.current?.scrollTo({ top: 0 })
+  }, [telaExibida, resetTela])
 
   // Ordem do menu de engrenagem personalizável (08/09/2026, correção
   // pós-G59, "Layout do menu de configurações" em Manutencao.tsx) — mesma
@@ -1009,7 +1056,25 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: ModoConsultaN
           </button>
         </div>
       )}
-      <main>
+      <main
+        ref={mainRef}
+        onTouchStart={onTouchStartMain}
+        onTouchMove={onTouchMoveMain}
+        onTouchEnd={onTouchEndMain}
+      >
+        {(puxando > 0 || atualizando) && (
+          <div
+            data-testid="puxar-para-atualizar"
+            style={{
+              display: 'flex', justifyContent: 'center', alignItems: 'center',
+              height: atualizando ? 36 : Math.min(puxando, LIMIAR_PUXAR),
+              overflow: 'hidden', color: 'var(--texto-fraco)', fontSize: 12,
+              transition: atualizando ? 'height 0.15s' : 'none',
+            }}
+          >
+            {atualizando ? 'Atualizando…' : puxando >= LIMIAR_PUXAR ? 'Solte pra atualizar' : 'Puxe pra atualizar'}
+          </div>
+        )}
         {configAberta ? (
           configAberta === 'configuracoes' ? (
             <>
