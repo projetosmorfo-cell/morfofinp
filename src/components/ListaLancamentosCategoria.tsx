@@ -1,5 +1,5 @@
 import { type Categoria, type Lancamento } from '../db'
-import { statusDoLancamento, ROTULO_STATUS, CLASSE_STATUS, FUNDO_STATUS } from '../statusPagamento'
+import { statusDoLancamento, ROTULO_STATUS, CLASSE_STATUS, FUNDO_STATUS, fundoDaLinhaDeData } from '../statusPagamento'
 import { alternarPago } from '../lancamentosUtil'
 import { formatarCabecalhoData } from '../formatoData'
 import { fmtBRL } from '../formatoMoeda'
@@ -81,7 +81,7 @@ export default function ListaLancamentosCategoria({
     <div className="bloco-lista-simples">
       {sessoes.map((sessao) => (
         <div key={sessao.data}>
-          <div className="sessao-data-simples">{formatarCabecalhoData(sessao.data)}</div>
+          <div className={`sessao-data-simples ${fundoDaLinhaDeData(sessao.itens)}`}>{formatarCabecalhoData(sessao.data)}</div>
           <table className="tabela-lancamentos-simples">
             <tbody>
               {sessao.itens.map((l) => {

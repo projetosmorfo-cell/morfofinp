@@ -7,7 +7,10 @@ import SeletorCategoriaComIcone from './SeletorCategoriaComIcone'
 import MemoriaDescricao from './MemoriaDescricao'
 import { lerDoAmbiente, marcaDoAmbiente } from '../ambiente'
 import { hojeEfetivoISO } from '../hojeSimulado'
-import { janelaFatura } from '../faturaCiclo'
+import { DIA_FECHAMENTO_PADRAO, mesFaturaDaData, rotuloFatura, situacaoDaFatura } from '../faturaCiclo'
+import { reavaliarQuitacao } from '../faturaPagamento'
+import { obterOuCriarCategoriaPagamentoFatura } from '../categoriasSistema'
+import { somarMes, type PagamentoFaturaAbertura } from '../mes'
 import { desvincularLancamento } from '../vinculoNotificacao'
 
 // `hoje()` continua na data REAL do aparelho, de propósito (decisão da Etapa
@@ -53,9 +56,18 @@ export default function DetalheLancamento({
   sugestao,
   aoSalvarComSucesso,
   abrirClonando,
+  pagamentoFatura,
   onFechar,
 }: {
   alvoId?: number
+  /* Build 090 (decisão do Rafael, 17/09/2026): o formulário abre já como
+     PAGAMENTO de uma fatura — vindo do botão "Pagar esta fatura" da Carteira.
+     Cartão, fatura e categoria ficam decididos (mostrados num bloco fixo, não
+     em campos); a pessoa só confere conta, valor e data. Na EDIÇÃO de um
+     pagamento existente o mesmo bloco aparece, lido de
+     `original.faturaCartaoId`/`faturaMes` — inclusão e edição são a mesma
+     tela. */
+  pagamentoFatura?: PagamentoFaturaAbertura
   categoriaIdSugerida?: number
   contaIdSugerida?: number
   // Item 11 (15/09/2026): abre já em modo "clonando" — mesmo efeito de abrir
@@ -132,6 +144,16 @@ export default function DetalheLancamento({
     [original?.transferenciaId],
   )
 
+  /* Modo PAGAMENTO DE FATURA (build 090). `cartaoIdFatura`/`mesFatura` vêm
+     da abertura (criação) ou do próprio registro (edição). */
+  const cartaoIdFatura = pagamentoFatura?.cartaoId ?? original?.faturaCartaoId
+  const mesFatura = pagamentoFatura?.mesFatura ?? original?.faturaMes
+  const modoPagamentoFatura = cartaoIdFatura != null && !!mesFatura
+  const todosParaFatura = useLiveQuery(
+    () => (modoPagamentoFatura ? lerDoAmbiente(db.lancamentos.toArray()) : Promise.resolve(undefined)),
+    [modoPagamentoFatura],
+  )
+
   /* Clonar (10/09/2026, pedido do Rafael: "ter opção de clonar e já abrir o
      clone pra edição e salvar, permitindo cancelar a clonagem"). Não abre
      outro modal nem duplica nada no banco na hora: o MESMO formulário deixa
@@ -206,15 +228,10 @@ export default function DetalheLancamento({
      — antes excluía sempre só aquele registro, mesmo sendo parte de uma
      série, sem opção de apagar os futuros ou a série inteira junto. */
   const [escopoExclusao, setEscopoExclusao] = useState<'este' | 'futuros' | 'serie'>('este')
-  /* Item 12 (16/09/2026): um lançamento de categoria "Pagamento de fatura"
-     precisa dizer qual cartão e qual mês/ciclo de fatura está pagando — sem
-     isso, o pagamento entrava no fluxo de caixa mas nenhum lançamento do
-     cartão ficava marcado como pago (diferente do fluxo "Pagar esta fatura"
-     dentro do drill-in da Carteira, que já pergunta isso implicitamente por
-     já estar dentro daquele card específico). Só aparece quando a categoria
-     escolhida tem essa natureza; some/reseta se trocar de categoria. */
-  const [cartaoFaturaId, setCartaoFaturaId] = useState<number | ''>('')
-  const [mesFaturaEscolhido, setMesFaturaEscolhido] = useState(() => hoje().slice(0, 7))
+  /* Pré-preenchimento do PAGAMENTO DE FATURA na criação (build 090) — roda
+     uma vez, assim que as contas carregam: descrição, valor que falta, saída,
+     conta de pagamento padrão do cartão (ou a primeira que não é cartão). */
+  const [preenchidoFatura, setPreenchidoFatura] = useState(false)
 
   // Preenche o formulário quando o lançamento a editar/clonar carrega (só
   // uma vez). Se for perna de transferência, espera o PAR carregar também
@@ -277,15 +294,46 @@ export default function DetalheLancamento({
     setContaOrigemId(contaId)
   }
 
+  if (pagamentoFatura && !preenchidoFatura && contas && alvoId == null) {
+    const cartao = contas.find((c) => c.id === pagamentoFatura.cartaoId)
+    setDescricao(`Pagamento fatura ${cartao?.nome ?? ''}`.trim())
+    setValor(pagamentoFatura.valorSugerido > 0 ? formatarMoeda(pagamentoFatura.valorSugerido) : '')
+    setTipo('saida')
+    setRecorrencia('unico')
+    const origem =
+      cartao?.contaPagamentoPadraoId ?? contas.find((c) => c.ativa && c.tipo !== 'cartao' && c.id !== cartao?.id)?.id ?? ''
+    setContaId(origem)
+    setPreenchidoFatura(true)
+  }
+
   if (editando && original === undefined) return null // ainda carregando
   if (editando && ehTransferenciaExistente && parTransferencia === undefined) return null // ainda carregando o par
 
   const categoriaAtual = original ? categorias?.find((c) => c.id === original.categoriaId) : undefined
   // Item 12: categoria escolhida AGORA no formulário (não a do original) —
   // é ela que decide se os campos de cartão/mês da fatura aparecem.
-  const categoriaEscolhida = categorias?.find((c) => c.id === categoriaId)
-  const ehPagamentoFatura = categoriaEscolhida?.natureza === 'Pagamento de fatura'
-  const cartoesDisponiveis = (contas ?? []).filter((c) => c.tipo === 'cartao')
+  const cartaoDaFatura = modoPagamentoFatura ? (contas ?? []).find((c) => c.id === cartaoIdFatura) : undefined
+  const situacaoFatura =
+    modoPagamentoFatura && cartaoDaFatura && todosParaFatura && categorias
+      ? situacaoDaFatura(todosParaFatura, (id) => categorias.find((c) => c.id === id), cartaoDaFatura, mesFatura!)
+      : null
+  /* Fora do modo pagamento, a categoria "Pagamento de fatura" NÃO é
+     escolhível à mão (decisão do Rafael, build 090): quem quer pagar uma
+     fatura usa o botão dela na Carteira. Se um registro antigo já está nessa
+     categoria, ela continua aparecendo pra ele (pra dar pra ver e trocar). */
+  const categoriasEscolhiveis = (categorias ?? []).filter(
+    (c) => (c.ativa || c.id === categoriaAtual?.id) && (c.natureza !== 'Pagamento de fatura' || c.id === categoriaAtual?.id),
+  )
+  const contaSelecionada = (contas ?? []).find((c) => c.id === (contaEmBranco ? contaId : contaId || contas?.[0]?.id))
+  const contaSelecionadaEhCartao = contaSelecionada?.tipo === 'cartao'
+  /* "Em qual fatura" com nome de gente (build 090): a data da compra decide
+     a fatura "pela data" (`mesFaturaDaData`), e as opções são as três
+     vizinhas em ordem cronológica, cada uma chamada pelo mês em que fecha e
+     pela data de vencimento. */
+  const mesFaturaPelaData =
+    contaSelecionadaEhCartao && data
+      ? mesFaturaDaData(contaSelecionada!.diaFechamento ?? DIA_FECHAMENTO_PADRAO, data)
+      : undefined
   // Recorrência já definida (série existente) — mexer nisso na edição seria
   // arriscado (poderia confundir a geração automática das próximas
   // ocorrências), então fica travado, só editável na criação. Um lançamento
@@ -300,7 +348,7 @@ export default function DetalheLancamento({
      preenchido com o que está gravado, e salvar reprocessa a série a partir
      desta ocorrência (ver `reprocessarSerieAPartirDe` em `recorrencia.ts`:
      nunca mexe no que já foi pago, nunca duplica). */
-  const podeEscolherRecorrencia = tipo !== 'transferencia'
+  const podeEscolherRecorrencia = tipo !== 'transferencia' && !modoPagamentoFatura
 
   function trocarAba(novaAba: TipoLancamento) {
     if (novaAba === 'transferencia' && contaOrigemId === '') {
@@ -362,7 +410,9 @@ export default function DetalheLancamento({
      conta"). O formulário não sabe nada sobre de/para de propósito: ele só
      relata a escolha, e quem aprende é `App.tsx` (ver `ensinarDePara`). */
   function fecharAposSalvar() {
-    aoMudarMes?.(data.slice(0, 7))
+    /* No pagamento de fatura a tela de origem (Carteira) está olhando a
+       FATURA, não o mês da data do pagamento — fica onde está. */
+    aoMudarMes?.(modoPagamentoFatura ? mesFatura! : data.slice(0, 7))
     aoSalvarComSucesso?.({
       descricao,
       categoriaId: categoriaId === '' ? undefined : Number(categoriaId),
@@ -485,8 +535,18 @@ export default function DetalheLancamento({
     }
 
     const contaEscolhidaId = contaEmBranco ? contaId : contaId || contas?.[0]?.id
-    if (!categoriaId) {
-      erroCampo('categoria', 'Escolha uma categoria.')
+    let categoriaFinal: number
+    if (modoPagamentoFatura) {
+      categoriaFinal = await obterOuCriarCategoriaPagamentoFatura()
+    } else {
+      if (!categoriaId) {
+        erroCampo('categoria', 'Escolha uma categoria.')
+        return
+      }
+      categoriaFinal = Number(categoriaId)
+    }
+    if (modoPagamentoFatura && contaEscolhidaId === cartaoIdFatura) {
+      erroCampo('conta', 'A fatura não pode ser paga com o próprio cartão.')
       return
     }
     if (!contaEscolhidaId) {
@@ -506,6 +566,10 @@ export default function DetalheLancamento({
     const contaEhCartao = (contas ?? []).find((c) => c.id === contaEscolhidaId)?.tipo === 'cartao'
     const patchFaturaOverride =
       contaEhCartao && faturaOverride !== 'atual' ? { faturaOverride } : { faturaOverride: undefined }
+    /* Build 090: o pagamento carrega qual fatura está pagando. */
+    const patchPagamentoFatura = modoPagamentoFatura
+      ? { faturaCartaoId: cartaoIdFatura, faturaMes: mesFatura }
+      : {}
 
     if (editando && alvoId != null) {
       if (jaTemSerie) {
@@ -530,7 +594,7 @@ export default function DetalheLancamento({
           dataCaixa: data,
           descricao: descricao || '(sem descrição)',
           valor: valorComSinal,
-          categoriaId: Number(categoriaId),
+          categoriaId: categoriaFinal,
           contaId: contaEscolhidaId,
           pago,
           recorrencia: recorrenciaFinal,
@@ -545,7 +609,7 @@ export default function DetalheLancamento({
             valor: valorComSinal,
             descricao: descricao || '(sem descrição)',
             descricaoOriginal: original.descricaoOriginal,
-            categoriaId: Number(categoriaId),
+            categoriaId: categoriaFinal,
             contaId: contaEscolhidaId,
             pagoPor: original.pagoPor,
             recorrencia: recorrenciaFinal,
@@ -570,7 +634,7 @@ export default function DetalheLancamento({
           dataCaixa: primeira.data,
           descricao: descricao || '(sem descrição)',
           valor: tipo === 'saida' ? -primeira.valor : primeira.valor,
-          categoriaId: Number(categoriaId),
+          categoriaId: categoriaFinal,
           contaId: contaEscolhidaId,
           pago,
           recorrencia: 'parcelado',
@@ -590,7 +654,7 @@ export default function DetalheLancamento({
               valor: tipo === 'saida' ? -p.valor : p.valor,
               contaId: contaEscolhidaId,
               pagoPor: 'conta' as const,
-              categoriaId: Number(categoriaId),
+              categoriaId: categoriaFinal,
               status: 'manual' as const,
               recorrencia: 'parcelado' as const,
               serieId,
@@ -617,7 +681,7 @@ export default function DetalheLancamento({
           dataCaixa: data,
           descricao: descricao || '(sem descrição)',
           valor: valorComSinal,
-          categoriaId: Number(categoriaId),
+          categoriaId: categoriaFinal,
           contaId: contaEscolhidaId,
           pago,
           recorrencia: 'fixo',
@@ -635,11 +699,13 @@ export default function DetalheLancamento({
         dataCaixa: data,
         descricao: descricao || '(sem descrição)',
         valor: valorComSinal,
-        categoriaId: Number(categoriaId),
+        categoriaId: categoriaFinal,
         contaId: contaEscolhidaId,
         pago,
         ...patchFaturaOverride,
+        ...patchPagamentoFatura,
       })
+      if (modoPagamentoFatura) await reavaliarQuitacao(cartaoIdFatura!, mesFatura!)
       fecharAposSalvar()
       return
     }
@@ -659,7 +725,7 @@ export default function DetalheLancamento({
           valor: tipo === 'saida' ? -p.valor : p.valor,
           contaId: contaEscolhidaId,
           pagoPor: 'conta' as const,
-          categoriaId: Number(categoriaId),
+          categoriaId: categoriaFinal,
           status: 'manual' as const,
           recorrencia: 'parcelado' as const,
           serieId,
@@ -689,7 +755,7 @@ export default function DetalheLancamento({
         valor: valorComSinal,
         contaId: contaEscolhidaId,
         pagoPor: 'conta',
-        categoriaId: Number(categoriaId),
+        categoriaId: categoriaFinal,
         status: 'manual',
         recorrencia: 'fixo',
         serieId: gerarIdSerie(),
@@ -702,7 +768,7 @@ export default function DetalheLancamento({
       return
     }
 
-    const novoId = await db.lancamentos.add({
+    await db.lancamentos.add({
       ...marcaDoAmbiente(),
       dataCompetencia: data,
       dataCaixa: data,
@@ -711,34 +777,17 @@ export default function DetalheLancamento({
       valor: valorComSinal,
       contaId: contaEscolhidaId,
       pagoPor: 'conta',
-      categoriaId: Number(categoriaId),
+      categoriaId: categoriaFinal,
       status: 'manual',
       pago,
       ...patchFaturaOverride,
+      ...patchPagamentoFatura,
     })
 
-    // Item 12: quita o ciclo escolhido — mesma mecânica de "Pagar esta
-    // fatura" (Carteira.tsx): todo lançamento do cartão dentro da janela
-    // fechada do mês escolhido vira `pago: true` + `faturaId` apontando pro
-    // pagamento recém-criado (exceto outros "Pagamento de fatura", pra não
-    // encadear quitação em quitação).
-    if (ehPagamentoFatura && !editando && cartaoFaturaId !== '') {
-      const cartao = (contas ?? []).find((c) => c.id === cartaoFaturaId)
-      if (cartao) {
-        const { inicio, fim } = janelaFatura(cartao.diaFechamento ?? 9, mesFaturaEscolhido)
-        const doCiclo = await lerDoAmbiente(
-          db.lancamentos
-            .where('contaId')
-            .equals(cartaoFaturaId)
-            .filter((l) => l.dataCompetencia >= inicio && l.dataCompetencia <= fim)
-            .toArray(),
-        )
-        const idsParaQuitar = doCiclo
-          .filter((l) => categorias?.find((c) => c.id === l.categoriaId)?.natureza !== 'Pagamento de fatura')
-          .map((l) => l.id!)
-        await Promise.all(idsParaQuitar.map((id) => db.lancamentos.update(id, { pago: true, faturaId: novoId })))
-      }
-    }
+    /* Build 090: gravou um pagamento de fatura → reavalia a fatura. Quitada
+       (nada mais a pagar) marca as compras do ciclo como pagas; pagar uma
+       parte não marca nada — ver `faturaPagamento.ts`. */
+    if (modoPagamentoFatura) await reavaliarQuitacao(cartaoIdFatura!, mesFatura!)
 
     fecharAposSalvar()
   }
@@ -761,6 +810,9 @@ export default function DetalheLancamento({
     } else {
       await db.lancamentos.delete(alvoId)
     }
+    /* Build 090: excluir um pagamento reabre a fatura na Carteira (o que
+       falta pagar volta a contar esse valor). */
+    if (modoPagamentoFatura) await reavaliarQuitacao(cartaoIdFatura!, mesFatura!)
     onFechar()
   }
 
@@ -776,7 +828,11 @@ export default function DetalheLancamento({
     <div className="modal-fundo" onClick={onFechar}>
       <div className="modal-conteudo" onClick={(e) => e.stopPropagation()}>
         <div className="linha" style={{ border: 'none', padding: 0, marginBottom: 8 }}>
-          <h2 style={{ margin: 0 }}>{clonando ? 'Clonar lançamento' : editando ? 'Editar lançamento' : 'Novo lançamento'}</h2>
+          <h2 style={{ margin: 0 }}>
+            {modoPagamentoFatura
+              ? editando ? 'Editar pagamento de fatura' : 'Pagar fatura'
+              : clonando ? 'Clonar lançamento' : editando ? 'Editar lançamento' : 'Novo lançamento'}
+          </h2>
           <button
             type="button"
             onClick={onFechar}
@@ -814,8 +870,33 @@ export default function DetalheLancamento({
           </p>
         )}
 
+        {/* Build 090 — o que já está decidido no pagamento de fatura fica num
+            bloco fixo, não em campos: cartão, qual fatura, quanto falta e que
+            é "Pagamento de fatura" (fora de Entrou/Saiu). Inclusão e edição
+            mostram o MESMO bloco. */}
+        {modoPagamentoFatura && (
+          <div className="bloco-fatura-pagamento" data-testid="bloco-fatura">
+            <strong data-testid="bloco-fatura-cartao">{cartaoDaFatura?.nome ?? 'Cartão'}</strong>
+            <div data-testid="bloco-fatura-nome">{cartaoDaFatura ? rotuloFatura(cartaoDaFatura, mesFatura!) : ''}</div>
+            {situacaoFatura && (
+              <div className="texto-fraco" style={{ fontSize: 12.5, marginTop: 4 }} data-testid="bloco-fatura-situacao">
+                Total {fmtBRL(situacaoFatura.total)}
+                {situacaoFatura.pago > 0 ? ` · já pago ${fmtBRL(situacaoFatura.pago)}` : ''}
+                {situacaoFatura.quitada
+                  ? ' · fatura paga'
+                  : ` · falta ${fmtBRL(situacaoFatura.restante)}`}
+              </div>
+            )}
+            <div className="texto-fraco" style={{ fontSize: 12, marginTop: 4 }}>
+              Entra como <strong>Pagamento de fatura</strong>: fica fora de Entrou/Saiu, porque cada compra já
+              contou quando foi feita. Pode pagar uma parte — a fatura só fecha quando não falta nada.
+            </div>
+          </div>
+        )}
+
         {/* Abas de tipo (31/08/2026, rodada seguinte, ponto 12) — substitui o
             <select> antigo; só os campos da aba ativa aparecem abaixo. */}
+        {!modoPagamentoFatura && (
         <div
           role="tablist"
           style={{ display: 'flex', gap: 4, background: 'var(--bg)', borderRadius: 10, padding: 4, marginTop: 4 }}
@@ -844,6 +925,7 @@ export default function DetalheLancamento({
             </button>
           ))}
         </div>
+        )}
 
         {tipo === 'transferencia' && (
           <p className="texto-fraco" style={{ marginTop: 8 }}>
@@ -980,20 +1062,25 @@ export default function DetalheLancamento({
             </>
           ) : (
             <>
-              <label htmlFor="dl-categoria">Categoria</label>
-              {/* Deixou de ser `<select>` nativo (10/09/2026): `<option>` só
-                  aceita texto, então ícone não aparecia, e o menu que ele abre
-                  é do sistema — não respeitava claro/escuro. Ver
-                  `SeletorCategoriaComIcone.tsx`. Mesmo filtro de antes: só
-                  categorias ativas, mais a já escolhida ainda que inativa. */}
-              <SeletorCategoriaComIcone
-                id="dl-categoria"
-                categorias={(categorias ?? []).filter((c) => c.ativa || c.id === categoriaAtual?.id)}
-                valor={categoriaId}
-                onEscolher={(id) => setCategoriaId(id)}
-                onLimpar={() => setCategoriaId('')}
-                comErro={campoComErro === 'categoria'}
-              />
+              {!modoPagamentoFatura && (
+                <>
+                  <label htmlFor="dl-categoria">Categoria</label>
+                  {/* Deixou de ser `<select>` nativo (10/09/2026): `<option>` só
+                      aceita texto, então ícone não aparecia, e o menu que ele abre
+                      é do sistema — não respeitava claro/escuro. Ver
+                      `SeletorCategoriaComIcone.tsx`. Só categorias ativas (mais a
+                      já escolhida ainda que inativa) e, desde a build 090, sem
+                      "Pagamento de fatura" — ver `categoriasEscolhiveis`. */}
+                  <SeletorCategoriaComIcone
+                    id="dl-categoria"
+                    categorias={categoriasEscolhiveis}
+                    valor={categoriaId}
+                    onEscolher={(id) => setCategoriaId(id)}
+                    onLimpar={() => setCategoriaId('')}
+                    comErro={campoComErro === 'categoria'}
+                  />
+                </>
+              )}
 
               <label htmlFor="dl-conta">Pago com</label>
               <select
@@ -1004,7 +1091,7 @@ export default function DetalheLancamento({
               >
                 {contaEmBranco && <option value="">Escolha a conta</option>}
                 {(contas ?? [])
-                  .filter((c) => c.ativa || c.id === original?.contaId)
+                  .filter((c) => (c.ativa || c.id === original?.contaId) && !(modoPagamentoFatura && c.id === cartaoIdFatura))
                   .map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.nome} {c.tipo === 'cartao' ? '(cartão)' : c.tipo === 'cofre' ? '(cofrinho)' : ''}
@@ -1019,49 +1106,27 @@ export default function DetalheLancamento({
                   compra cai numa fatura diferente da que a data indicaria. Só
                   aparece pra conta tipo cartão; some/reseta pra "atual" se a
                   pessoa trocar pra uma conta que não é cartão. */}
-              {(contas ?? []).find((c) => c.id === (contaEmBranco ? contaId : contaId || contas?.[0]?.id))?.tipo === 'cartao' && (
+              {contaSelecionadaEhCartao && mesFaturaPelaData && (
                 <>
                   <label htmlFor="dl-fatura-override">Em qual fatura</label>
+                  {/* Build 090 (decisão do Rafael): cada opção diz QUAL fatura é
+                      — "Fatura de outubro (fecha 09/out · vence 15/out)" — em
+                      ordem cronológica, com a da data já marcada. Antes eram
+                      "Nesta fatura (pela data) / Fatura anterior / Próxima
+                      fatura", que não diziam nada pra quem sabe que o cartão
+                      fecha dia 9. */}
                   <select
                     id="dl-fatura-override"
                     value={faturaOverride}
                     onChange={(e) => setFaturaOverride(e.target.value as typeof faturaOverride)}
                   >
-                    <option value="atual">Nesta fatura (pela data)</option>
-                    <option value="anterior">Fatura anterior</option>
-                    <option value="proxima">Próxima fatura</option>
+                    <option value="anterior">{rotuloFatura(contaSelecionada!, somarMes(mesFaturaPelaData, -1))}</option>
+                    <option value="atual">{rotuloFatura(contaSelecionada!, mesFaturaPelaData)}</option>
+                    <option value="proxima">{rotuloFatura(contaSelecionada!, somarMes(mesFaturaPelaData, 1))}</option>
                   </select>
-                </>
-              )}
-
-              {/* Item 12 (16/09/2026): lançar diretamente na categoria
-                  "Pagamento de fatura" (fora do fluxo "Pagar esta fatura" da
-                  Carteira) agora pergunta cartão + mês — sem isso o pagamento
-                  entrava no fluxo de caixa mas nada do cartão ficava marcado
-                  como pago. Só na criação (não editando um pagamento já
-                  existente, pra não requitar/perder vínculo de um já feito). */}
-              {ehPagamentoFatura && !editando && (
-                <>
-                  <label htmlFor="dl-fatura-cartao">Cartão desta fatura</label>
-                  <select
-                    id="dl-fatura-cartao"
-                    value={cartaoFaturaId}
-                    onChange={(e) => setCartaoFaturaId(e.target.value ? Number(e.target.value) : '')}
-                  >
-                    <option value="">Escolha…</option>
-                    {cartoesDisponiveis.map((c) => (
-                      <option key={c.id} value={c.id}>{c.nome}</option>
-                    ))}
-                  </select>
-                  <label htmlFor="dl-fatura-mes">Mês da fatura</label>
-                  <input
-                    id="dl-fatura-mes"
-                    type="month"
-                    value={mesFaturaEscolhido}
-                    onChange={(e) => setMesFaturaEscolhido(e.target.value)}
-                  />
-                  <p className="texto-fraco" style={{ marginTop: 4, marginBottom: 0, fontSize: 12 }}>
-                    Ao salvar, todos os lançamentos deste cartão nesse ciclo são marcados como pagos.
+                  <p className="texto-fraco" style={{ marginTop: 4, marginBottom: 0, fontSize: 12 }} data-testid="ajuda-fatura">
+                    Pela data, esta compra entra na {rotuloFatura(contaSelecionada!, mesFaturaPelaData).replace('Fatura', 'fatura').split(' (')[0]}.
+                    Troque só se o banco lançou em outra.
                   </p>
                 </>
               )}
@@ -1331,7 +1396,7 @@ export default function DetalheLancamento({
         {/* Clonar — só faz sentido num lançamento que já existe e enquanto
             não se está clonando. Não grava nada: só troca o formulário pro
             modo "criar", com os campos já preenchidos (ver `clonando`). */}
-        {editando && !ehTransferenciaExistente && (
+        {editando && !ehTransferenciaExistente && !modoPagamentoFatura && (
           <div style={{ marginTop: 14, borderTop: '1px solid var(--borda)', paddingTop: 12 }}>
             <button
               type="button"

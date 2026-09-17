@@ -91,7 +91,7 @@ function mesAnteriorISO() {
 // recolhíveis com lançamentos (aqui a categoria é o cadastro em si, não um
 // total pra explorar — ver Resumo do Mês e Situação pra isso).
 export default function Categorias(_props: TelaProps & { aoVoltar: () => void }) {
-  const { aoVoltar } = _props
+  const { aoVoltar, aoAbrirCalibragem } = _props
   const categorias = useLiveQuery(() => lerDoAmbiente(db.categorias.toArray()), [])
   const lancamentos = useLiveQuery(() => lerDoAmbiente(db.lancamentos.toArray()), [])
   const metas = useLiveQuery(() => lerDoAmbiente(db.metas.toArray()), [])
@@ -483,6 +483,27 @@ export default function Categorias(_props: TelaProps & { aoVoltar: () => void })
       <p className="texto-fraco">
         Cadastro central — a natureza de uma categoria só muda aqui, nunca lançamento a lançamento.
       </p>
+
+      {/* Build 090 (17/09/2026), pedido do Rafael: "Tela de calibrar, mostrar
+          no topo da tela de parametrização > Categorias e Grupos sob título
+          'Só Calibrar Metas - Tela Rápida'". É um ATALHO — a Calibragem
+          continua sendo a mesma tela (`Calibragem.tsx`), aberta pelo mesmo
+          `aoAbrirCalibragem` que a tela Hoje e o Planejamento já usam. */}
+      {aoAbrirCalibragem && (
+        <button
+          type="button"
+          className="faixa-percentuais atalho-calibragem"
+          onClick={aoAbrirCalibragem}
+          data-testid="atalho-calibragem"
+        >
+          <span style={{ flex: 1, minWidth: 0 }}>
+            <strong>Só Calibrar Metas - Tela Rápida</strong>
+            <br />
+            Percentuais dos grupos e metas das categorias, tudo numa tela só.
+          </span>
+          <span aria-hidden="true" style={{ fontSize: 18 }}>›</span>
+        </button>
+      )}
 
       {/* F-06/F-07 da revisão de UI (04/09/2026): as 6 seções desta tela
           viviam numa rolagem única de ~5.000px, na ordem em que foram

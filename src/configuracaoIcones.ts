@@ -146,6 +146,9 @@ export function useConfiguracaoIcones(): Required<
     | 'pacoteIconesEscolhido'
     | 'pacoteIconesCorCategorias'
     | 'pacoteIconesCorGrupos'
+    | 'pacoteIconesCores'
+    | 'pacoteIconesVersaoAplicada'
+    | 'iconeVariavelRevisado'
   >
 > {
   const config = useLiveQuery(() => db.configuracoes.get(1), [])

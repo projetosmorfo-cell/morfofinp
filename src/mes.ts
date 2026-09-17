@@ -88,10 +88,24 @@ export function mesInicial(): string {
 // Objetivos/Segurança) do zero cada uma — ele agora vive só em Planejamento,
 // e as duas linkam pra lá com este atalho, em vez de duplicar a barra e
 // arriscar os números divergirem entre telas (ver nota em Planejamento.tsx).
+/** Abrir a tela de lançamento já como PAGAMENTO de uma fatura (build 090):
+ *  cartão + fatura ("yyyy-mm", o mês em que ela fecha) + o valor que falta. */
+export interface PagamentoFaturaAbertura {
+  cartaoId: number
+  mesFatura: string
+  valorSugerido: number
+}
+
 export interface TelaProps {
   mes: string
   aoMudarMes: (mes: string) => void
-  aoAbrirLancamento: (opcoes?: { id?: number; categoriaIdSugerida?: number; contaIdSugerida?: number; abrirClonando?: boolean }) => void
+  aoAbrirLancamento: (opcoes?: {
+    id?: number
+    categoriaIdSugerida?: number
+    contaIdSugerida?: number
+    abrirClonando?: boolean
+    pagamentoFatura?: PagamentoFaturaAbertura
+  }) => void
   aoAbrirPlanejamento: () => void
   /** Abre a tela de Calibragem (build 059) — os percentuais vistos juntos. */
   aoAbrirCalibragem?: () => void

@@ -296,6 +296,17 @@ export interface Lancamento {
   // início, sem uso até agora). Setado em massa por `pagarFatura` (Carteira.tsx)
   // em todo lançamento do ciclo ao quitar a fatura — junto com `pago: true`.
   faturaId?: number
+  // Do lado do PAGAMENTO (build 090, 17/09/2026): qual cartão e qual fatura
+  // ("yyyy-mm", o mês em que ela fecha) este lançamento de "Pagamento de
+  // fatura" está pagando. Até a 089 essa relação só existia invertida
+  // (`faturaId` acima, do filho pro pagamento) e só nascia na quitação total
+  // — por isso "Fatura ainda não paga" nunca descontava o que já tinha sido
+  // pago e pagar uma parte quitava a fatura inteira. Campos aditivos,
+  // opcionais, lidos por `.filter()` (sem bump de schema). Pagamentos
+  // antigos ganham os dois na abertura do app, deduzidos dos filhos
+  // (`vincularPagamentosAntigos`, `src/faturaPagamento.ts`).
+  faturaCartaoId?: number
+  faturaMes?: string
 
   // Em qual fatura este lançamento de CARTÃO entra (15/09/2026, item 1 da
   // lista pendente do Rafael) — campo aditivo, opcional, lido só via
@@ -563,6 +574,20 @@ export interface ConfiguracaoIcones {
      desenho e de estilo. */
   pacoteIconesCorCategorias?: string
   pacoteIconesCorGrupos?: string
+  /* Build 090 (17/09/2026), defeito real: as duas cores acima eram UM par só,
+     aplicado por cima de QUALQUER pacote — quem mudou a cor do "Apenas
+     borda" no N1 nunca mais via a cor que o N0 publicava para o "Preenchido"
+     (era o que o Rafael leu como "o N0 não salva a cor"). Agora a cor
+     personalizada é POR PACOTE; os dois campos antigos ficam só para ler o
+     que já foi gravado (valem para o pacote que estava escolhido) e nenhum
+     caminho novo escreve neles. */
+  pacoteIconesCores?: Partial<Record<'borda' | 'preenchido', { categorias?: string; grupos?: string }>>
+  /* Build 090: qual `versao` do pacote publicado pelo N0 já foi aplicada em
+     cada ambiente (marca por ambiente, como `padraoCatVersaoAplicada`). */
+  pacoteIconesVersaoAplicada?: Record<string, number>
+  /* Build 090: marca da migração do ícone do grupo Variável (ver
+     `migrarIconeVariavel`, `gruposUtil.ts`). */
+  iconeVariavelRevisado?: boolean
   // Aviso de permissões da notificação bancária (12/09/2026, pedido do
   // Rafael: "ao abrir o app, apareça um popup com esses dados e os 2 botões,
   // enquanto não forem fornecidas as permissões [...] com a opção de lembrar

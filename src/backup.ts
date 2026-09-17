@@ -22,6 +22,7 @@
    Dexie, data e contagem por tabela). O cabeçalho é o que permite a
    restauração recusar um arquivo que não é deste app antes de apagar
    qualquer coisa. */
+import { vincularPagamentosAntigos } from './faturaPagamento'
 import { db } from './db'
 
 export const VERSAO_ARQUIVO_BACKUP = 1
@@ -207,6 +208,11 @@ export async function restaurarBackup(arquivo: ArquivoBackup): Promise<Record<st
       aplicados[nome] = linhas.length
     }
   })
+  /* Build 090: um backup de antes da 090 traz pagamentos de fatura sem
+     `faturaCartaoId`/`faturaMes` — a mesma dedução que roda na abertura do
+     app roda aqui, senão a fatura só voltaria a "saber" que foi paga depois
+     de fechar e abrir o app. */
+  await vincularPagamentosAntigos()
   return aplicados
 }
 

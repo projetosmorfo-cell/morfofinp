@@ -86,3 +86,13 @@ export const CLASSE_STATUS: Record<StatusPagamento, string> = {
   a_receber: 'status-pill-pendente',
   no_cartao: 'status-pill-cartao',
 }
+
+/* Build 090 (17/09/2026), pedido do Rafael: "a linha de data sempre deve ter
+   a mesma cor de fundo do lançamento imediatamente abaixo dela". A linha de
+   data é o cabeçalho do primeiro item da sessão — ela veste o fundo DELE,
+   pela mesma tabela `FUNDO_STATUS` (nunca uma segunda regra de cor). Sessão
+   vazia cai no fundo de "feito", o caso normal. */
+export function fundoDaLinhaDeData(itens: Pick<Lancamento, 'valor' | 'pago' | 'dataCompetencia' | 'contaId'>[]): string {
+  const primeiro = itens[0]
+  return primeiro ? FUNDO_STATUS[statusDoLancamento(primeiro)] : FUNDO_STATUS.pago
+}

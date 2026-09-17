@@ -688,9 +688,13 @@ nav.rodape {
   color: var(--texto-fraco);
 }
 .param-exemplo {
-  font-style: italic;
-  opacity: 0.92;
+  /* Build 090: o exemplo deixou de ser itálico apagado — o Rafael pediu
+     exemplo em todo texto de regra, então ele precisa ser visto. O prefixo
+     "Exemplo:" em negrito é o que o destaca do texto de ajuda logo acima. */
+  color: var(--texto);
+  opacity: 0.85;
 }
+.param-exemplo b { font-weight: 700; }
 .param-marca {
   font-weight: 400;
   color: var(--texto-fraco);
@@ -740,6 +744,27 @@ nav.rodape {
   border-color: var(--azul);
   color: #fff;
 }
+/* Build 090: a MESMA grade no painel N0 (`ParametrosNotificacaoN0.tsx`), só
+   com a paleta escura do painel — a tela do cliente e a da Morfo são a mesma
+   peça, mudam as cores. Tudo que é campo/botão aqui lê o roxo do painel
+   (`--mloc-dev-accent`), nunca o azul do app. */
+.param-dark .param-linha { border-bottom-color: rgba(255,255,255,0.12); }
+.param-dark .param-rotulo { color: #fff; }
+.param-dark .param-ajuda { color: #9B96A8; }
+.param-dark .param-exemplo { color: #C9C4D4; opacity: 1; }
+.param-dark .param-controle input,
+.param-dark .param-controle select {
+  background: rgba(255,255,255,0.05); border: 1.5px solid rgba(255,255,255,0.18);
+  border-radius: 10px; color: #fff;
+}
+.param-dark .param-simnao button {
+  background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.18); color: #9B96A8;
+}
+.param-dark .param-simnao button.ativo {
+  background: var(--mloc-dev-accent, #6C3FFF); border-color: var(--mloc-dev-accent, #6C3FFF); color: #fff;
+}
+/* Linha cujo controle não cabe na coluna (lista de marcadores): vira coluna. */
+.param-linha.param-linha-coluna { flex-direction: column; align-items: stretch; gap: 8px; }
 
 .barra {
   height: 8px;
@@ -1391,8 +1416,8 @@ nav.rodape {
   line-height: 1.1;
   color: var(--texto-fraco);
   letter-spacing: 0.02em;
-  /* Item 3 (16/09/2026) — mesmo motivo/correção de `.sessao-data`, acima. */
-  background: var(--fundo-feito);
+  /* Build 090: o fundo vem da classe `status-fundo-*` do PRIMEIRO lançamento
+     da sessão (`fundoDaLinhaDeData`), não daqui — ver `.sessao-data`. */
 }
 
 /* Fundo diferenciado pra lançamento não pago/atrasado — pago/recebido fica
@@ -1479,9 +1504,13 @@ nav.rodape {
      normais (`--fundo-feito`, ver `FUNDO_STATUS`/`statusPagamento.ts`) — a
      linha de data aparecia mais escura que o restante da lista, sem nenhum
      motivo de status. A ÚNICA variação de fundo permitida nestas listas é a
-     de `FUNDO_STATUS`; a linha de data usa o mesmo fundo de um lançamento
-     "feito" (a maioria dos casos), nunca o do `.cartao`. */
-  background: var(--fundo-feito);
+     de `FUNDO_STATUS`.
+     Build 090 (17/09/2026), pedido do Rafael: a linha de data veste o fundo
+     do lançamento IMEDIATAMENTE ABAIXO dela — a classe `status-fundo-*` do
+     primeiro item da sessão entra no próprio elemento
+     (`fundoDaLinhaDeData`, `statusPagamento.ts`). Por isso NÃO há
+     `background` aqui: a regra da classe é quem pinta, e um fundo fixo neste
+     seletor (declarado depois) venceria a classe. */
 }
 
 .botao-ordem {
@@ -2587,27 +2616,68 @@ html[data-mloc-tema="escuro"] body {
   min-width: 0;
 }
 
-/* Item 12 (15/09/2026) — alça de arrastar-pra-reordenar (press-and-hold),
-   ver `GrupoReordenavel.tsx`. `touch-action: none` impede o navegador de
-   interpretar o toque contínuo como rolagem da página enquanto a pessoa
-   segura a alça. */
-.alca-arrastar {
-  flex-shrink: 0;
-  width: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--texto-fraco);
-  font-size: 16px;
-  cursor: grab;
-  touch-action: none;
+/* Arrastar-pra-reordenar (press-and-hold), ver `GrupoReordenavel.tsx`.
+   Build 090 (17/09/2026), defeito real relatado pelo Rafael: "clicar, segurar
+   e mover pra reposicionar não funciona — seleciona o texto da tela".
+   CAUSA: na build 076 a alça ⠿ saiu e o gesto passou a nascer na própria
+   linha, mas o `user-select: none` ficou na classe da alça (`.alca-arrastar`),
+   que não existe mais em JSX nenhum — a linha que recebe o `pointerdown`
+   ficava sem proteção nenhuma, e os 400ms de espera do long-press são
+   exatamente o tempo em que o navegador começa a selecionar texto (mouse) ou
+   abre os pegadores de seleção/menu de contexto (toque). A regra migrou pra
+   linha. Nada visível muda: selecionar texto numa lista de lançamentos nunca
+   foi um recurso. O scroll continua livre (`touch-action` fica no `pan-y` do
+   `html`); quem bloqueia a rolagem SÓ durante o arrasto é o listener nativo de
+   `touchmove` do componente. */
+.linha-reordenavel {
   user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
 .linha-reordenavel.em-arrasto {
   opacity: 0.6;
   background: var(--bg-elevado);
   border-radius: 8px;
+  cursor: grabbing;
+}
+
+/* ==========================================================================
+   NOTIFICAÇÕES BANCÁRIAS — um card por notificação (build 090, 17/09/2026).
+   Ver o cabeçalho de `NotificacoesBancarias.tsx`. As três seções de um card
+   têm rótulo em caixa alta pequena; o texto ORIGINAL do banco fica num bloco
+   próprio, com fundo e filete, pra ninguém confundir o que o banco disse com
+   o que o app entendeu. Os botões são os do app (`.primario`/`.secundario`),
+   só que compactos — dentro de uma lista de cards o bloco cheio de 12px era o
+   "botão enorme" da reclamação.
+   ========================================================================== */
+.notif-card { padding: 12px 14px; }
+.notif-cabecalho { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
+.notif-nome { font-weight: 700; font-size: 14px; min-width: 0; overflow-wrap: anywhere; }
+.notif-quando { font-size: 12px; color: var(--texto-fraco); white-space: nowrap; flex-shrink: 0; }
+.notif-valor { font-size: 18px; font-weight: 700; margin-top: 2px; }
+.notif-secao-rotulo {
+  font-size: 10.5px; letter-spacing: 0.3px; text-transform: uppercase; font-weight: 700;
+  color: var(--texto-fraco); margin: 10px 0 4px;
+}
+.notif-entendido { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; font-size: 12.5px; margin: 0; }
+.notif-entendido dt { color: var(--texto-fraco); }
+.notif-entendido dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.notif-texto-original {
+  font-size: 12px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere;
+  background: var(--bg); border-left: 3px solid var(--borda); border-radius: 6px;
+  padding: 8px 10px; margin: 0; color: var(--texto);
+}
+.notif-alerta { font-size: 12px; margin-top: 6px; color: var(--ideal-ambar-txt); }
+.notif-acoes { display: flex; gap: 8px; margin-top: 12px; }
+.notif-acoes button.primario, .notif-acoes button.secundario, button.botao-compacto {
+  margin-top: 0; flex: 1; padding: 10px 8px; font-size: 13px; width: auto;
+}
+button.botao-compacto { width: 100%; }
+.notif-candidatos { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--borda); }
+.notif-link {
+  display: block; background: none; border: none; padding: 0; margin-top: 10px;
+  font-size: 12px; color: var(--texto-fraco); text-decoration: underline; cursor: pointer;
 }
 
 /* ---- Rodapé fixo com o totalizador da lista (10/09/2026, pedido do Rafael:
@@ -2965,7 +3035,10 @@ html[data-mloc-tema='claro'] .tarja-inativa {
    nunca coloridos por sinal — pedido explícito do Rafael. */
 .bloco-numero:not(.rio-verde):not(.rio-ambar):not(.rio-vermelho) .ideal-t1 { color: var(--texto); }
 .bloco-numero-rotulo {
-  display: flex; align-items: center; gap: 2px; flex-wrap: nowrap;
+  /* Build 090 (17/09/2026): o "i" ficava colado no texto (gap de 2px, e o
+     desenho de 16px ocupa a caixa de 16px inteira — não sobra respiro). Um
+     espaço de 6px, ainda pequeno, separa o ícone da última palavra. */
+  display: flex; align-items: center; gap: 6px; flex-wrap: nowrap;
   font-size: 10.5px; letter-spacing: 0.3px; text-transform: uppercase;
   color: var(--texto-fraco);
   /* Build 082 — ver o bloco `.bloco-numero-rotulo > [role='button']` acima:
@@ -3076,6 +3149,11 @@ html[data-mloc-tema='claro'] .tarja-inativa {
   font-weight: 600; cursor: pointer;
 }
 .faixa-percentuais.alerta strong { color: inherit; }
+/* Build 090: o atalho "Só Calibrar Metas - Tela Rápida" no topo de Categorias,
+   Grupos e Metas — mesma faixa com cara de botão da Calibragem (build 067),
+   só que sempre clicável. */
+.faixa-percentuais.atalho-calibragem { cursor: pointer; margin-top: 4px; }
+.faixa-percentuais.atalho-calibragem strong { display: block; margin-bottom: 2px; }
 
 /* Cabeçalho A1 do card de grupo (build 059): o percentual é o número grande,
    o R$ é a consequência dele, e a contagem de categorias desce pra segunda
@@ -3532,10 +3610,20 @@ html[data-mloc-tema='claro'] .tarja-inativa {
    as linhas do card de detalhe. NENHUMA COR de segmento é escrita neste
    arquivo: o arco lê os tokens de `legendaBarras.ts`, que é a mesma fonte da
    amostra da legenda. */
-.medidor-area { display: flex; justify-content: center; }
-.medidor-svg { max-width: 100%; height: auto; }
-.medidor-fatia { cursor: pointer; transition: stroke-width .12s ease, opacity .12s ease; }
-.medidor-alvo { cursor: pointer; pointer-events: stroke; }
+.medidor-area { display: flex; justify-content: center; padding: 6px 0; }
+/* Build 090 (17/09/2026), defeito real: ao tocar numa fatia, uma "borda
+   laranja" aparecia em volta e saía cortada. É o anel de FOCO nativo do
+   Android (laranja no WebView), desenhado no RETÂNGULO envolvente do `<path>`
+   — maior que o arco — e recortado pelo `overflow: hidden` padrão do `<svg>`.
+   Três coisas: o svg deixa de recortar (`overflow: visible`), o anel nativo
+   de toque/clique sai (`:focus` sem outline, e sem o realce de toque do
+   WebView) e o anel de TECLADO continua (`:focus-visible`), agora com espaço
+   pra ser desenhado inteiro. O sinal de "fatia aberta" que vale é o do
+   próprio desenho: a fatia engorda e as outras esmaecem. */
+.medidor-svg { max-width: 100%; height: auto; overflow: visible; }
+.medidor-fatia { cursor: pointer; transition: stroke-width .12s ease, opacity .12s ease; -webkit-tap-highlight-color: transparent; }
+.medidor-alvo { cursor: pointer; pointer-events: stroke; -webkit-tap-highlight-color: transparent; }
+.medidor-fatia:focus { outline: none; }
 .medidor-fatia:focus-visible { outline: 2px solid var(--texto); outline-offset: 2px; }
 .medidor-rotulo { fill: var(--texto-fraco); font-size: 11px; }
 .medidor-manchete { fill: var(--texto); font-size: 18px; font-weight: 700; }

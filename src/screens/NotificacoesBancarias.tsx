@@ -70,7 +70,46 @@ import { useContasCartao } from '../contasCartao'
  *   • FASE 4 — o par de notificações de uma transferência aparece como UMA
  *     proposta no topo, com os dois textos crus lado a lado, e só vira
  *     transferência depois de confirmada.
+ *
+ * BUILD 090 (17/09/2026) — o Rafael achou a tela feia e nomeou os defeitos:
+ *   • "botões enormes fora do padrão do app" — eram `.primario` (bloco cheio
+ *     de 12px) ao lado de botões SEM CLASSE (texto puro, sem caixa), dois
+ *     registros visuais na mesma linha. Toda ação de card virou o par
+ *     `.primario` + `.secundario` compacto (`.notif-acoes`), e ação rara vira
+ *     link discreto (`.notif-link`) — nada de botão inventado.
+ *   • "o texto da notificação deve ficar nitidamente separado, com título
+ *     indicando que é o texto original, abaixo da análise do motor" — cada
+ *     card tem duas seções rotuladas: O QUE O APP ENTENDEU (a análise, em
+ *     pares rótulo/valor) e TEXTO ORIGINAL DA NOTIFICAÇÃO (o cru, num bloco
+ *     próprio). Antes tudo saía empilhado no mesmo `<div>`, com a mesma fonte.
+ *   • "um card pra cada notificação" — a lista deixou de ser linhas soltas
+ *     dentro de UM `.cartao`; cada notificação é o seu `.cartao`.
+ *   • "os títulos dos botões estão confusos, pense que o usuário é leigo" —
+ *     ver `ROTULO_ACAO`: uma tabela só, pra ninguém reescrever um rótulo à
+ *     mão em outro lugar.
  */
+
+/* Os rótulos de TODA ação desta tela, em linguagem de quem não é técnico
+   (build 090). Um lugar só: rótulo repetido à mão em dois pontos diverge na
+   primeira edição. */
+const ROTULO_ACAO = {
+  lancar: 'Lançar no app',
+  ignorar: 'Ignorar esta',
+  eEste: 'É este lançamento',
+  procurarMaisAtras: 'Procurar mais atrás',
+  criarNovo: 'Criar lançamento novo',
+  voltar: 'Voltar',
+  trazerDeVolta: 'Trazer de volta',
+  lancarMesmoAssim: 'Lançar mesmo assim',
+  abrirLancamento: 'Abrir o lançamento',
+  voltarALerApp: 'Voltar a ler este app',
+  naoLerMais: (app: string) => `Não ler mais notificações do ${app}`,
+  ajustarRegras: 'Ajustar as regras de leitura',
+  testeNotificacao: 'Criar uma notificação de teste',
+  testeTransferencia: 'Criar um par de teste (transferência)',
+  simTransferencia: 'Sim, é transferência',
+  naoTransferencia: 'Não, são separadas',
+} as const
 export default function NotificacoesBancarias({
   aoVoltar,
   aoConfirmar,
@@ -185,7 +224,8 @@ export default function NotificacoesBancarias({
       {aba === 'pendentes' && (
         <>
           <p className="texto-fraco" style={{ fontSize: 13 }}>
-            Cada movimentação detectada espera a sua confirmação — nada vira lançamento sozinho.
+            Cada movimentação detectada espera você: nada vira lançamento sozinho. Em cada card, "{ROTULO_ACAO.lancar}"
+            grava no app e "{ROTULO_ACAO.ignorar}" manda pra aba Ignoradas (dá pra trazer de volta).
           </p>
 
           {pares.map((par) => (
@@ -198,12 +238,12 @@ export default function NotificacoesBancarias({
             />
           ))}
 
-          <div className="cartao" data-testid="notif-pendentes">
+          <div data-testid="notif-pendentes">
             {soltas.length === 0 && pares.length === 0 && (
-              <p className="texto-fraco" style={{ margin: 0 }}>Nenhuma notificação pendente.</p>
+              <div className="cartao"><p className="texto-fraco" style={{ margin: 0 }}>Nenhuma notificação pendente.</p></div>
             )}
             {soltas.map((n) => (
-              <LinhaNotificacao
+              <CartaoNotificacao
                 key={n.id}
                 n={n}
                 contas={contas}
@@ -230,10 +270,10 @@ export default function NotificacoesBancarias({
             O que não pareceu movimentação de dinheiro (propaganda, aviso do app) e o que você descartou.
             <b> Nada foi apagado</b> — toda linha daqui volta em um toque.
           </p>
-          <div className="cartao" data-testid="notif-ignoradas">
-            {ignoradasTodas.length === 0 && <p className="texto-fraco" style={{ margin: 0 }}>Nada ignorado.</p>}
+          <div data-testid="notif-ignoradas">
+            {ignoradasTodas.length === 0 && <div className="cartao"><p className="texto-fraco" style={{ margin: 0 }}>Nada ignorado.</p></div>}
             {ignoradasTodas.map((n) => (
-              <LinhaIgnorada key={n.id} n={n} contas={contas} params={params} dataHora={dataHora} aoConfirmar={aoConfirmar} />
+              <CartaoIgnorada key={n.id} n={n} contas={contas} params={params} dataHora={dataHora} aoConfirmar={aoConfirmar} />
             ))}
           </div>
 
@@ -250,11 +290,11 @@ export default function NotificacoesBancarias({
                   <span style={{ fontSize: 13 }}>{p}</span>
                   <button
                     type="button"
-                    style={{ padding: '4px 10px' }}
+                    className="botao-mini-secundario"
                     data-testid="notif-ouvir-de-novo"
                     onClick={async () => { await deixarDeIgnorarPacote(p); setIgnorados(await obterPacotesIgnorados()) }}
                   >
-                    Ouvir de novo
+                    {ROTULO_ACAO.voltarALerApp}
                   </button>
                 </div>
               ))
@@ -266,40 +306,40 @@ export default function NotificacoesBancarias({
       {aba === 'historico' && (
         <>
           <p className="texto-fraco" style={{ fontSize: 13 }}>
-            O que já virou lançamento. Nada é apagado: toque em "Ver lançamento" pra abrir o registro que nasceu daqui.
+            O que já virou lançamento. Nada é apagado: toque em "{ROTULO_ACAO.abrirLancamento}" pra ver o registro que nasceu daqui.
           </p>
-          <div className="cartao" data-testid="notif-historico">
-            {(confirmadas?.length ?? 0) === 0 && <p className="texto-fraco" style={{ margin: 0 }}>Nada no histórico.</p>}
+          <div data-testid="notif-historico">
+            {(confirmadas?.length ?? 0) === 0 && <div className="cartao"><p className="texto-fraco" style={{ margin: 0 }}>Nada no histórico.</p></div>}
             {confirmadas?.map((n) => {
               const a = analisarNotificacao(n, params)
               return (
-                <div key={n.id} className="linha" style={{ display: 'block', padding: '10px 0' }} data-testid="notif-historico-item">
-                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
-                    <span style={{ fontWeight: 700, fontSize: 13 }}>{a.contraparte ?? n.app}</span>
-                    <span className={a.tipo === 'entrada' ? 'valor-pos' : 'valor-neg'} style={{ fontWeight: 700 }}>
-                      {n.valor != null ? fmtBRL(n.valor) : '—'}
-                    </span>
+                <div key={n.id} className="cartao notif-card" data-testid="notif-historico-item">
+                  <div className="notif-cabecalho">
+                    <span className="notif-nome">{a.contraparte ?? n.app}</span>
+                    <span className="notif-quando">{dataHora(n.recebidoEm)}</span>
                   </div>
-                  <div className="texto-fraco" style={{ fontSize: 12, marginTop: 2 }}>
-                    {n.app} · {dataHora(n.recebidoEm)}
+                  <div className={`notif-valor ${a.tipo === 'entrada' ? 'valor-pos' : 'valor-neg'}`}>
+                    {n.valor != null ? fmtBRL(n.valor) : '—'}
                   </div>
-                  <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+                  <div className="notif-secao-rotulo">Texto original da notificação</div>
+                  <p className="notif-texto-original">{[n.titulo, n.texto].filter(Boolean).join(' — ')}</p>
+                  <div className="notif-acoes">
                     {n.lancamentoId != null && aoAbrirLancamento && (
                       <button
                         type="button"
-                        style={{ flex: 1 }}
+                        className="primario"
                         data-testid="notif-ver-lancamento"
                         onClick={() => aoAbrirLancamento(n.lancamentoId!)}
                       >
-                        Ver lançamento
+                        {ROTULO_ACAO.abrirLancamento}
                       </button>
                     )}
                     <button
                       type="button"
-                      style={{ flex: 1 }}
+                      className="secundario"
                       onClick={() => n.id != null && voltarParaPendentes(n.id)}
                     >
-                      Voltar pra pendentes
+                      {ROTULO_ACAO.trazerDeVolta}
                     </button>
                   </div>
                 </div>
@@ -330,8 +370,8 @@ export default function NotificacoesBancarias({
             As regras da leitura (janela de repetição, tolerância de valor, filtro de propaganda, de/para aprendido)
             ficam em Configurações → Regras de Notificação Bancária.
           </p>
-          <button type="button" style={{ width: '100%' }} data-testid="notif-abrir-parametros" onClick={aoAbrirParametros}>
-            Abrir as regras
+          <button type="button" className="secundario" style={{ marginTop: 0 }} data-testid="notif-abrir-parametros" onClick={aoAbrirParametros}>
+            {ROTULO_ACAO.ajustarRegras}
           </button>
         </div>
       )}
@@ -342,11 +382,11 @@ export default function NotificacoesBancarias({
           Cria notificações falsas, no mesmo formato que o celular geraria, pra validar o fluxo sem depender do banco.
           Some da versão de produção (BACKLOG item 030).
         </p>
-        <button type="button" style={{ width: '100%' }} data-testid="notif-teste" onClick={() => criarNotificacaoDeTeste()}>
-          Simular notificação do banco
+        <button type="button" className="secundario" style={{ marginTop: 0 }} data-testid="notif-teste" onClick={() => criarNotificacaoDeTeste()}>
+          {ROTULO_ACAO.testeNotificacao}
         </button>
-        <button type="button" style={{ width: '100%', marginTop: 8 }} data-testid="notif-teste-transferencia" onClick={() => criarParTransferenciaDeTeste()}>
-          Simular transferência (duas notificações)
+        <button type="button" className="secundario" style={{ marginTop: 8 }} data-testid="notif-teste-transferencia" onClick={() => criarParTransferenciaDeTeste()}>
+          {ROTULO_ACAO.testeTransferencia}
         </button>
       </div>
     </>
@@ -361,7 +401,7 @@ const ROTULO_ABA: Record<Aba, string> = { pendentes: 'Pendentes', ignoradas: 'Ig
    única fonte de verdade. A análise é recalculada na exibição, nunca lida de
    um campo gravado — notificação capturada por build antiga ganha a leitura
    nova de graça (ver cabeçalho de `parseNotificacao.ts`). */
-function LinhaNotificacao({
+function CartaoNotificacao({
   n, contas, lancamentos, contasCartao, aprendizados, params, repeticao, dataHora, dataCurta,
   aoConfirmar, podeIgnorarApp, aoIgnorarApp, aoAvisar,
 }: {
@@ -435,47 +475,61 @@ function LinhaNotificacao({
   }
 
   return (
-    <div className="linha" style={{ display: 'block', padding: '10px 0' }} data-testid="notif-item">
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'baseline' }}>
-        <span style={{ fontWeight: 700 }} data-testid="notif-nome">{dePara?.descricao ?? a.contraparte ?? n.app}</span>
-        <span className="texto-fraco" style={{ fontSize: 12, whiteSpace: 'nowrap' }}>{dataHora(n.recebidoEm)}</span>
+    <div className="cartao notif-card" data-testid="notif-item">
+      <div className="notif-cabecalho">
+        <span className="notif-nome" data-testid="notif-nome">{dePara?.descricao ?? a.contraparte ?? n.app}</span>
+        <span className="notif-quando">{dataHora(n.recebidoEm)}</span>
       </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'baseline', marginTop: 2 }}>
-        <span className="texto-fraco" style={{ fontSize: 13 }} data-testid="notif-movimento">
+      <div className={`notif-valor ${a.tipo === 'entrada' ? 'valor-pos' : 'valor-neg'}`}>
+        {a.valor != null ? fmtBRL(a.valor) : 'valor não reconhecido'}
+      </div>
+
+      {/* Build 090 — o que o app ENTENDEU, em pares rótulo/valor. É a análise
+          do motor (`parseNotificacao.ts`), recalculada na exibição. */}
+      <div className="notif-secao-rotulo">O que o app entendeu</div>
+      <dl className="notif-entendido" data-testid="notif-entendido">
+        <dt>Movimento</dt>
+        <dd data-testid="notif-movimento">
           {ROTULO_MOVIMENTO[a.movimento]}
           {a.agendado ? ' · agendado' : a.concluido ? ' · concluído' : ''}
-        </span>
-        <span className={a.tipo === 'entrada' ? 'valor-pos' : 'valor-neg'} style={{ fontWeight: 700 }}>
-          {a.valor != null ? fmtBRL(a.valor) : 'valor não reconhecido'}
-        </span>
-      </div>
-      <div className="texto-fraco" style={{ fontSize: 12, marginTop: 2 }} data-testid="notif-conta">
-        {conta ? `Conta: ${conta.nome}` : 'Conta não identificada — escolha ao confirmar'}
-        {' · '}
-        {n.app}
-      </div>
-      {dePara && (
-        <div className="texto-fraco" style={{ fontSize: 12, marginTop: 2 }} data-testid="notif-depara">
-          De/para aprendido: {dePara.rotulo} → {dePara.descricao ?? '(sem nome)'}
-        </div>
-      )}
+        </dd>
+        <dt>Conta</dt>
+        <dd data-testid="notif-conta">{conta ? conta.nome : 'não identificada — você escolhe ao lançar'}</dd>
+        <dt>App</dt>
+        <dd>{n.app}</dd>
+        {dePara && (
+          <>
+            <dt>De/para</dt>
+            <dd data-testid="notif-depara">{dePara.rotulo} → {dePara.descricao ?? '(sem nome)'}</dd>
+          </>
+        )}
+      </dl>
       {repeticao && (
-        <div style={{ fontSize: 12, marginTop: 4 }} data-testid="notif-repeticao">
+        <div className="notif-alerta" data-testid="notif-repeticao">
           ⚠ Possível repetição do agendamento de {dataCurta(repeticao.recebidoEm)} — confira antes de gravar duas vezes.
         </div>
       )}
-      <p className="texto-fraco" style={{ fontSize: 12, margin: '6px 0 8px', whiteSpace: 'pre-wrap' }}>
+
+      {/* Build 090 — o texto CRU, separado e rotulado: é a única fonte de
+          verdade, e a pessoa precisa conseguir conferir a análise contra ele. */}
+      <div className="notif-secao-rotulo">Texto original da notificação</div>
+      <p className="notif-texto-original" data-testid="notif-texto-original">
         {[n.titulo, n.texto].filter(Boolean).join(' — ')}
       </p>
 
       {msg && <p className="texto-fraco" style={{ fontSize: 12 }} data-testid="notif-msg-vinculo">{msg}</p>}
+      {!escolhendo && candidatos.length > 0 && (
+        <p className="notif-alerta" data-testid="notif-parecidos">
+          {candidatos.length === 1 ? 'Já existe 1 lançamento parecido' : `Já existem ${candidatos.length} lançamentos parecidos`} — ao
+          lançar, o app pergunta se é um deles antes de criar outro.
+        </p>
+      )}
 
       {!escolhendo ? (
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div className="notif-acoes">
           <button
             type="button"
             className="primario"
-            style={{ marginTop: 0, flex: 1 }}
             data-testid="notif-confirmar"
             /* Confirmar SEMPRE passa pelo passo de escolha, mesmo com zero
                candidatos (build 081). Antes ele pulava direto pro formulário de
@@ -489,17 +543,17 @@ function LinhaNotificacao({
                primário do passo. */
             onClick={() => setEscolhendo(true)}
           >
-            {candidatos.length > 0 ? `Confirmar (${candidatos.length} já previsto)` : 'Confirmar / editar'}
+            {ROTULO_ACAO.lancar}
           </button>
-          <button type="button" style={{ flex: 1 }} data-testid="notif-descartar" onClick={() => n.id != null && descartarNotificacao(n.id)}>
-            Descartar
+          <button type="button" className="secundario" data-testid="notif-descartar" onClick={() => n.id != null && descartarNotificacao(n.id)}>
+            {ROTULO_ACAO.ignorar}
           </button>
         </div>
       ) : (
-        <div data-testid="notif-candidatos">
+        <div data-testid="notif-candidatos" className="notif-candidatos">
           <p className="texto-fraco" style={{ fontSize: 12, marginTop: 0 }}>
-            Isto já pode estar lançado. Vincular atualiza o lançamento existente com o valor real e{' '}
-            <b>coloca nele a data da notificação</b> — sem criar outro.
+            Isto já pode estar lançado. Se for um destes, toque em "{ROTULO_ACAO.eEste}": o app atualiza o
+            lançamento que já existe com o valor real e <b>coloca nele a data da notificação</b> — sem criar outro.
           </p>
           <p className="texto-fraco" style={{ fontSize: 11, margin: '0 0 6px' }} data-testid="notif-janela">
             Procurando em: {janela.rotulo}.
@@ -534,8 +588,8 @@ function LinhaNotificacao({
                   <span className={`status-pill ${CLASSE_STATUS[c.status]}`} style={{ fontSize: 10 }} data-testid="notif-candidato-status">
                     {ROTULO_STATUS[c.status]}
                   </span>
-                  <button type="button" style={{ padding: '4px 10px' }} data-testid="notif-vincular" onClick={() => vincular(c)}>
-                    Vincular
+                  <button type="button" className="botao-mini-secundario" data-testid="notif-vincular" onClick={() => vincular(c)}>
+                    {ROTULO_ACAO.eEste}
                   </button>
                 </div>
               ))}
@@ -544,36 +598,32 @@ function LinhaNotificacao({
           {mesesAtras < limiteMeses && (
             <button
               type="button"
-              style={{ width: '100%', marginTop: 8 }}
+              className="secundario"
+              style={{ marginTop: 8 }}
               data-testid="notif-ampliar-busca"
               onClick={() => setMesesAtras((v) => v + 1)}
             >
-              Procurar em meses anteriores
+              {ROTULO_ACAO.procurarMaisAtras}
             </button>
           )}
           {mesesAtras > 0 && (
             <p className="texto-fraco" style={{ fontSize: 11, margin: '4px 0 0' }}>
-              Vale só pra esta notificação. Vincular um lançamento de outro mês <b>muda a data dele</b> pra a da
+              Vale só pra esta notificação. Escolher um lançamento de outro mês <b>muda a data dele</b> pra a da
               notificação — ele sai daquele mês e entra neste.
             </p>
           )}
-          <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-            <button type="button" className="primario" style={{ marginTop: 0, flex: 1 }} data-testid="notif-criar-novo" onClick={() => aoConfirmar(n)}>
-              Criar lançamento novo
+          <div className="notif-acoes">
+            <button type="button" className="primario" data-testid="notif-criar-novo" onClick={() => aoConfirmar(n)}>
+              {ROTULO_ACAO.criarNovo}
             </button>
-            <button type="button" style={{ flex: 1 }} onClick={() => setEscolhendo(false)}>Voltar</button>
+            <button type="button" className="secundario" onClick={() => setEscolhendo(false)}>{ROTULO_ACAO.voltar}</button>
           </div>
         </div>
       )}
 
       {podeIgnorarApp && (
-        <button
-          type="button"
-          className="texto-fraco"
-          style={{ marginTop: 6, background: 'none', border: 'none', padding: 0, fontSize: 12, textDecoration: 'underline', cursor: 'pointer' }}
-          onClick={aoIgnorarApp}
-        >
-          Parar de ler notificações de "{n.app}"
+        <button type="button" className="notif-link" onClick={aoIgnorarApp}>
+          {ROTULO_ACAO.naoLerMais(n.app)}
         </button>
       )}
     </div>
@@ -592,7 +642,7 @@ function mesLegivel(iso: string): string {
 }
 
 /* Linha da aba Ignoradas — sempre com as DUAS voltas possíveis. */
-function LinhaIgnorada({
+function CartaoIgnorada({
   n, contas, params, dataHora, aoConfirmar,
 }: {
   n: NotificacaoPendente
@@ -604,28 +654,31 @@ function LinhaIgnorada({
   const a = analisarNotificacao(n, params)
   const conta = contas.find((c) => c.id === casarContaDaNotificacao(a, n, contas))
   return (
-    <div className="linha" style={{ display: 'block', padding: '10px 0' }} data-testid="notif-ignorada-item">
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
-        <span style={{ fontWeight: 700, fontSize: 13 }}>{a.contraparte ?? n.app}</span>
-        <span className="texto-fraco" style={{ fontSize: 12 }}>
-          {n.status === 'descartada' ? 'descartada por você' : 'não parece movimentação'} · {dataHora(n.recebidoEm)}
-        </span>
+    <div className="cartao notif-card" data-testid="notif-ignorada-item">
+      <div className="notif-cabecalho">
+        <span className="notif-nome">{a.contraparte ?? n.app}</span>
+        <span className="notif-quando">{dataHora(n.recebidoEm)}</span>
       </div>
-      <p className="texto-fraco" style={{ fontSize: 12, margin: '4px 0 8px', whiteSpace: 'pre-wrap' }}>
-        {[n.titulo, n.texto].filter(Boolean).join(' — ')}
-        {conta ? ` · ${conta.nome}` : ''}
-      </p>
-      <div style={{ display: 'flex', gap: 8 }}>
+      <div className="notif-secao-rotulo">O que o app entendeu</div>
+      <dl className="notif-entendido">
+        <dt>Motivo</dt>
+        <dd>{n.status === 'descartada' ? 'você mandou ignorar' : 'não parece movimentação de dinheiro'}</dd>
+        <dt>App</dt>
+        <dd>{n.app}{conta ? ` · conta ${conta.nome}` : ''}</dd>
+      </dl>
+      <div className="notif-secao-rotulo">Texto original da notificação</div>
+      <p className="notif-texto-original">{[n.titulo, n.texto].filter(Boolean).join(' — ')}</p>
+      <div className="notif-acoes">
+        <button type="button" className="primario" onClick={() => aoConfirmar(n)}>
+          {ROTULO_ACAO.lancarMesmoAssim}
+        </button>
         <button
           type="button"
-          style={{ flex: 1 }}
+          className="secundario"
           data-testid="notif-voltar-pendentes"
           onClick={() => n.id != null && voltarParaPendentes(n.id)}
         >
-          Voltar pra pendentes
-        </button>
-        <button type="button" className="primario" style={{ marginTop: 0, flex: 1 }} onClick={() => aoConfirmar(n)}>
-          Confirmar mesmo assim
+          {ROTULO_ACAO.trazerDeVolta}
         </button>
       </div>
     </div>
@@ -677,11 +730,12 @@ function PropostaTransferencia({
         ligados), nunca dois lançamentos soltos — mas só se você confirmar.
         {par.jaConfirmadoAntes && ' Você já confirmou este par de apps antes.'}
       </p>
+      <div className="notif-secao-rotulo">Textos originais das duas notificações</div>
       <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
         {[par.saida, par.entrada].map((n) => (
-          <div key={n.id} style={{ flex: 1, minWidth: 0, fontSize: 11 }} className="texto-fraco">
-            <b>{n.app}</b> · {dataHora(n.recebidoEm)}
-            <div style={{ whiteSpace: 'pre-wrap' }}>{[n.titulo, n.texto].filter(Boolean).join(' — ')}</div>
+          <div key={n.id} style={{ flex: 1, minWidth: 0 }}>
+            <div className="notif-quando" style={{ marginBottom: 4 }}><b>{n.app}</b> · {dataHora(n.recebidoEm)}</div>
+            <p className="notif-texto-original" style={{ fontSize: 11 }}>{[n.titulo, n.texto].filter(Boolean).join(' — ')}</p>
           </div>
         ))}
       </div>
@@ -703,12 +757,12 @@ function PropostaTransferencia({
         {catsTransf.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
       </select>
       {erro && <p className="valor-neg texto-quebra" style={{ fontSize: 12 }}>{erro}</p>}
-      <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-        <button type="button" className="primario" style={{ marginTop: 0, flex: 1 }} data-testid="notif-confirmar-transferencia" onClick={confirmar}>
-          Confirmar transferência
+      <div className="notif-acoes">
+        <button type="button" className="primario" data-testid="notif-confirmar-transferencia" onClick={confirmar}>
+          {ROTULO_ACAO.simTransferencia}
         </button>
-        <button type="button" style={{ flex: 1 }} data-testid="notif-recusar-transferencia" onClick={() => setPronto(true)}>
-          Não é transferência
+        <button type="button" className="secundario" data-testid="notif-recusar-transferencia" onClick={() => setPronto(true)}>
+          {ROTULO_ACAO.naoTransferencia}
         </button>
       </div>
     </div>

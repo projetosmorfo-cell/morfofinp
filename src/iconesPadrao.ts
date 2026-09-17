@@ -76,7 +76,11 @@ export const ICONES_PADRAO_CATEGORIA: Record<string, IconePadrao> = {
 
 export const ICONES_PADRAO_GRUPO: Record<string, IconePadrao> = {
   Fixo: { icone: 'cofreDigital', iconeEstilo: 'preenchido', iconeCor: '#3b82f6' },
-  Variável: { icone: 'cadeadoAberto', iconeEstilo: 'preenchido', iconeCor: '#3b82f6' },
+  /* Build 090 (17/09/2026), pedido do Rafael: "cadeado aberto COLORIDO, já
+     que o Fixo é cadeado fechado" — o par visual fecha (🔒 Fixo × 🔓
+     Variável). Quem já usa o app recebe pela migração `migrarIconeVariavel()`
+     (`gruposUtil.ts`), que só mexe no valor de fábrica antigo. */
+  Variável: { icone: 'cadeadoAberto', iconeEstilo: 'colorido', iconeCor: '#3b82f6' },
   /* 13/09/2026 (build 062): nasceu com o MESMO desenho do "Fixo"
      (`cofreDigital`) quando o grupo foi criado na migração para 50/30/20 —
      dois grupos com o mesmo ícone na mesma tela. Foi invenção minha; os dois

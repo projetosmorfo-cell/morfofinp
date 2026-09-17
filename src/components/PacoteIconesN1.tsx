@@ -39,9 +39,13 @@ export default function PacoteIconesN1() {
     /* Grava a preferência E pinta o cadastro na hora. Gravar sem pintar
        deixaria a tela dizendo uma coisa e o app mostrando outra — o defeito
        "parâmetro que ninguém lê" que a build 085 fechou. */
-    await salvarConfiguracaoIcones(
-      alvo === 'categorias' ? { pacoteIconesCorCategorias: cor } : { pacoteIconesCorGrupos: cor },
-    )
+    /* Build 090: a cor é guardada POR PACOTE — mudar a cor do "Apenas borda"
+       não pode esconder a cor que o N0 publica para o "Preenchido". */
+    const pid = id as 'borda' | 'preenchido'
+    const atuais = cfg?.pacoteIconesCores ?? {}
+    await salvarConfiguracaoIcones({
+      pacoteIconesCores: { ...atuais, [pid]: { ...(atuais[pid] ?? {}), [alvo]: cor } },
+    })
     if (id === selecionado && id === efetivo.id) {
       const n = await aplicarCorEmTodos(alvo, cor)
       setAviso(`Cor aplicada em ${n} ${alvo === 'categorias' ? 'categoria(s)' : 'grupo(s)'}.`)

@@ -310,3 +310,33 @@ export async function migrarTipoDosGrupos(): Promise<{ tipados: number; movidas:
 
   return resultado
 }
+
+/* Build 090 (17/09/2026): o ícone padrão do grupo "Variável" passou a ser o
+   cadeado aberto COLORIDO (par do 🔒 do Fixo). Mesma disciplina estreita de
+   `migrarPctGrupo()`/`corrigirIconeErrado()`: só troca quando o valor salvo é
+   o padrão de fábrica ANTIGO (`cadeadoAberto` preenchido) ou o genérico
+   (`outros`/vazio) — um ícone escolhido de propósito fica intocado. Marca
+   própria, roda uma vez. */
+export async function migrarIconeVariavel(): Promise<boolean> {
+  try {
+    const config = await db.configuracoes.get(1)
+    if (config?.iconeVariavelRevisado) return false
+    const amb = await ambienteDoBanco()
+    const grupos = doAmbiente(await db.grupos.toArray(), amb)
+    const variavel = grupos.find((g) => g.ativo !== false && semAcento(g.nome) === semAcento('Variável'))
+    const padrao = ICONES_PADRAO_GRUPO['Variável']
+    let mudou = false
+    if (variavel?.id != null && padrao) {
+      const eraFabricaAntiga = variavel.icone === 'cadeadoAberto' && variavel.iconeEstilo !== 'colorido'
+      const eraGenerico = !variavel.icone || variavel.icone === 'outros'
+      if (eraFabricaAntiga || eraGenerico) {
+        await db.grupos.update(variavel.id, { icone: padrao.icone, iconeEstilo: padrao.iconeEstilo, iconeCor: padrao.iconeCor })
+        mudou = true
+      }
+    }
+    await salvarConfiguracaoIcones({ iconeVariavelRevisado: true })
+    return mudou
+  } catch {
+    return false
+  }
+}

@@ -10,7 +10,7 @@ import { usePeriodoLista } from '../components/periodoLista'
 import { CampoBusca, FolhaFiltros, FILTROS_VAZIOS, aplicarFiltros, contarFiltrosAtivos, type FiltrosAvancados } from '../components/BuscaEFiltros'
 import { formatarCabecalhoData } from '../formatoData'
 import { fmtBRL } from '../formatoMoeda'
-import { statusDoLancamento } from '../statusPagamento'
+import { statusDoLancamento, fundoDaLinhaDeData } from '../statusPagamento'
 import { useHojeSimuladoISO } from '../hojeSimulado'
 import TituloTelaN1 from '../kit/CabecalhoN1'
 import { ExportSheet, type ExportRow } from '../kit/ExportSheet'
@@ -292,7 +292,7 @@ function SessoesDeData({ sessoes, categoriaPorId, contaPorId, aoAbrirLancamento,
     <>
       {sessoes.map((sessao) => (
         <div key={sessao.data}>
-          <div className="sessao-data">{formatarCabecalhoData(sessao.data)}</div>
+          <div className={`sessao-data ${fundoDaLinhaDeData(sessao.itens)}`}>{formatarCabecalhoData(sessao.data)}</div>
           {/* Item 12 (15/09/2026): um `GrupoReordenavel` por DIA — o arrasto de
               reordenar nunca cruza pra outro dia, porque cada dia é a própria
               instância do componente, com a própria lista de ids. */}

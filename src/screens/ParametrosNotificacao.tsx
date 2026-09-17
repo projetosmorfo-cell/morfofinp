@@ -93,7 +93,7 @@ export default function ParametrosNotificacao({ aoVoltar }: { aoVoltar: () => vo
                   {ehPersonalizado(k) && <span className="param-marca"> · alterado por você</span>}
                 </label>
                 <p className="param-ajuda" data-testid={`ajuda-${k}`}>{rot.ajuda}</p>
-                {exemplo && <p className="param-exemplo" data-testid={`exemplo-${k}`}>Ex.: {exemplo}</p>}
+                {exemplo && <p className="param-exemplo" data-testid={`exemplo-${k}`}><b>Exemplo:</b> {exemplo}</p>}
                 {ehPersonalizado(k) && (
                   <p className="param-exemplo">Padrão do app: {rotuloValor(k, padraoApp[k])}</p>
                 )}
@@ -155,7 +155,7 @@ export default function ParametrosNotificacao({ aoVoltar }: { aoVoltar: () => vo
       <div className="cartao">
         <p className="texto-fraco" style={{ marginTop: 0 }}>
           {personalizados
-            ? 'Você alterou algumas regras. "Restaurar padrão do app" volta todas pro valor que o app publica hoje — não pra um valor congelado de quando o app foi feito.'
+            ? 'Você alterou algumas regras. "Voltar ao padrão do app" devolve todas pro valor que o app publica hoje — não pra um valor congelado de quando o app foi feito.'
             : 'Nada foi alterado: todas as regras estão no padrão do app.'}
         </p>
         {!confirmandoRestauro ? (
@@ -166,7 +166,7 @@ export default function ParametrosNotificacao({ aoVoltar }: { aoVoltar: () => vo
             data-testid="notif-restaurar-padrao"
             onClick={() => setConfirmandoRestauro(true)}
           >
-            Restaurar padrão do app
+            Voltar ao padrão do app
           </button>
         ) : (
           <div className="acoes-modal">
@@ -176,7 +176,7 @@ export default function ParametrosNotificacao({ aoVoltar }: { aoVoltar: () => vo
               data-testid="notif-restaurar-confirmar"
               onClick={async () => { await restaurarPadraoDoApp(); setConfirmandoRestauro(false); setAviso('Regras de volta ao padrão do app.') }}
             >
-              Sim, restaurar
+              Sim, voltar ao padrão
             </button>
             <button type="button" className="secundario" onClick={() => setConfirmandoRestauro(false)}>Cancelar</button>
           </div>
@@ -187,8 +187,12 @@ export default function ParametrosNotificacao({ aoVoltar }: { aoVoltar: () => vo
       <h2>De/para aprendido</h2>
       <div className="cartao" data-testid="notif-depara-lista">
         <p className="texto-fraco" style={{ marginTop: 0 }}>
-          Cada vez que você confirma uma notificação, o app guarda o que aquele texto do banco significa pra você.
-          É isso que faz a próxima notificação do mesmo lugar já vir preenchida. Você manda aqui: editar ou apagar.
+          Cada vez que você lança uma notificação, o app guarda o que aquele texto do banco significa pra você.
+          É isso que faz a próxima notificação do mesmo lugar já vir preenchida. Você manda aqui: editar ou esquecer.
+        </p>
+        <p className="param-exemplo" style={{ margin: '0 0 8px' }}>
+          <b>Exemplo:</b> o banco manda "PAG*PJBANK"; você lança como "PJ Bank", em Serviços. A próxima "PAG*PJBANK"
+          já abre assim, sem digitar nada.
         </p>
         {dePara.length === 0 && <p className="texto-fraco" style={{ margin: 0 }}>Nada aprendido ainda.</p>}
         {dePara.map((a) => <LinhaDePara key={a.id} a={a} />)}
@@ -202,11 +206,15 @@ export default function ParametrosNotificacao({ aoVoltar }: { aoVoltar: () => vo
               Quando você confirma que duas notificações são uma transferência entre suas contas, o app lembra o par
               de apps — só pra sugerir com mais confiança da próxima vez. Nunca cria nada sozinho.
             </p>
+            <p className="param-exemplo" style={{ margin: '0 0 8px' }}>
+              <b>Exemplo:</b> Bradesco e C6 confirmados uma vez. Na próxima saída de um e entrada no outro, com o mesmo
+              valor e poucos minutos de diferença, a proposta de transferência já vem montada.
+            </p>
             {pares.map((a) => (
               <div key={a.id} className="linha">
                 <span style={{ minWidth: 0 }}>{a.rotulo} <span className="texto-fraco">· {a.vezes}×</span></span>
                 <div className="confirmacao-inline-linha">
-                  <button type="button" className="botao-mini-perigo" onClick={() => a.id != null && apagarAprendizado(a.id)}>Apagar</button>
+                  <button type="button" className="botao-mini-perigo" onClick={() => a.id != null && apagarAprendizado(a.id)}>Esquecer este par</button>
                 </div>
               </div>
             ))}
@@ -239,7 +247,7 @@ function LinhaDePara({ a }: { a: AprendizadoNotificacao }) {
         <div className="param-rotulo">
           {a.rotulo} → {a.descricao ?? '(sem nome)'}
         </div>
-        <p className="param-ajuda">Aprendido {a.vezes}× a partir das suas confirmações.</p>
+        <p className="param-ajuda">Aprendido {a.vezes}× a partir do que você lançou.</p>
         {editando && (
           <div style={{ marginTop: 8 }}>
             <label htmlFor={`dp-desc-${a.id}`}>Nome que vai pro lançamento</label>
@@ -280,7 +288,7 @@ function LinhaDePara({ a }: { a: AprendizadoNotificacao }) {
           {editando ? 'Fechar' : 'Editar'}
         </button>
         <button type="button" className="botao-mini-perigo" data-testid="notif-depara-apagar" onClick={() => a.id != null && apagarAprendizado(a.id)}>
-          Apagar
+          Esquecer
         </button>
       </div>
     </div>

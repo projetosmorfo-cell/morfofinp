@@ -47,9 +47,6 @@ const campo: React.CSSProperties = {
   border: '1.5px solid rgba(255,255,255,0.18)', borderRadius: 10, padding: '9px 11px',
   color: '#fff', fontSize: 13.5, outline: 'none',
 }
-const rotulo: React.CSSProperties = { display: 'block', fontSize: 11, color: DEV_TXT2, margin: '8px 0 4px', fontWeight: 700 }
-const ajudaStyle: React.CSSProperties = { fontSize: 11, color: DEV_TXT2, margin: '4px 0 0', lineHeight: 1.5 }
-const exemploStyle: React.CSSProperties = { ...ajudaStyle, fontStyle: 'italic', opacity: 0.92, margin: '2px 0 0' }
 
 /* Build 085 — pedido do Rafael: *"quero que pra todos os parametros criados
    tanto visiveis no N1 como no N0, tenha uma breve e rápido texto de explicação,
@@ -59,12 +56,22 @@ const exemploStyle: React.CSSProperties = { ...ajudaStyle, fontStyle: 'italic', 
    tela do cliente mostra — dois textos para o mesmo parâmetro divergiriam na
    primeira vez que alguém editasse um só. O exemplo é escrito com o valor que
    está NO CAMPO desta tela (não o de fábrica): quem está digitando 3 dias lê o
-   exemplo com 3 antes de publicar. */
+   exemplo com 3 antes de publicar.
+
+   BUILD 090 (17/09/2026) — o Rafael achou esta tela "horrível" ao lado da tela
+   do cliente ("a do N1 está bem mais bonita, organizada"). O que mudou: a tela
+   passou a usar EXATAMENTE a mesma grade da tela do cliente — `.param-linha`
+   (rótulo + explicação + exemplo à esquerda, o controle numa coluna FIXA de
+   132px à direita), o par Sim/Não (`.param-simnao`) no lugar do checkbox
+   solto, e um card por SEÇÃO em vez de um card por parâmetro. A única
+   diferença é a paleta: o modificador `.param-dark` troca as cores pra as do
+   painel N0. Peça única (Decisão 40): CSS compartilhado, nunca uma segunda
+   versão desenhada à mão aqui. */
 function AjudaParametro({ chave, valor, sufixo }: { chave: keyof ParametrosNotificacao; valor: unknown; sufixo?: string }) {
   const ex = exemploDoParametro(chave, valor)
   return <>
-    <p style={ajudaStyle}>{ROTULO_PARAMETRO[chave].ajuda}{sufixo ? ` ${sufixo}` : ''}</p>
-    {ex && <p style={exemploStyle} data-testid={`n0-exemplo-${chave}`}>Ex.: {ex}</p>}
+    <p className="param-ajuda">{ROTULO_PARAMETRO[chave].ajuda}{sufixo ? ` ${sufixo}` : ''}</p>
+    {ex && <p className="param-exemplo" data-testid={`n0-exemplo-${chave}`}><b>Exemplo:</b> {ex}</p>}
   </>
 }
 
@@ -136,52 +143,60 @@ export default function ParametrosNotificacaoN0({ notify }: { notify: (m: string
   const campoDe = (k: keyof ParametrosNotificacao) => {
     const v = valores[k]
     const rot = ROTULO_PARAMETRO[k]
-    if (typeof v === 'boolean') {
-      return (
-        <div key={k} style={{ background: DEV_CARD, borderRadius: 12, padding: 12, marginBottom: 8 }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#fff' }}>
-            <input type="checkbox" checked={v} onChange={(e) => set(k, e.target.checked)} />
-            {rot.titulo}
-          </label>
-          <AjudaParametro chave={k} valor={v} />
-        </div>
-      )
-    }
-    if (typeof v === 'string') {
-      /* Hoje só `janelaBuscaModo` cai aqui (build 081): parâmetro de ESCOLHA,
-         não número nem liga/desliga. As opções vêm do mesmo lugar que a tela do
-         usuário lê, pra os dois nunca divergirem. */
-      return (
-        <div key={k} style={{ background: DEV_CARD, borderRadius: 12, padding: 12, marginBottom: 8 }}>
-          <label style={rotulo}>{rot.titulo}</label>
-          <select style={campo} value={v} onChange={(e) => set(k, e.target.value)}>
-            {OPCOES_JANELA_BUSCA.map((o) => (
-              <option key={o.valor} value={o.valor} style={{ color: '#111' }}>{o.rotulo}</option>
-            ))}
-          </select>
-          <AjudaParametro chave={k} valor={v} />
-        </div>
-      )
-    }
+    const id = `n0-param-${k}`
     if (Array.isArray(v)) {
+      /* Lista de marcadores: o controle não cabe na coluna de 132px — a linha
+         vira coluna (rótulo/ajuda em cima, o campo na largura inteira). */
       return (
-        <div key={k} style={{ background: DEV_CARD, borderRadius: 12, padding: 12, marginBottom: 8 }}>
-          <label style={rotulo}>{rot.titulo}</label>
+        <div key={k} className="param-linha param-linha-coluna" data-testid={`n0-param-${k}`}>
+          <div className="param-texto">
+            <label className="param-rotulo" htmlFor={id}>{rot.titulo}</label>
+            <AjudaParametro chave={k} valor={v} sufixo="Separe por vírgula." />
+          </div>
           <textarea
+            id={id}
             style={{ ...campo, minHeight: 70, fontFamily: 'inherit' }}
             value={v.join(', ')}
             onChange={(e) => set(k, e.target.value.split(',').map((x) => x.trim().toLowerCase()).filter(Boolean))}
           />
-          <AjudaParametro chave={k} valor={v} sufixo="Separe por vírgula." />
         </div>
       )
     }
     return (
-      <div key={k} style={{ background: DEV_CARD, borderRadius: 12, padding: 12, marginBottom: 8 }}>
-        <label style={rotulo}>{rot.titulo}</label>
-        <input style={campo} type="number" min={0} step={k === 'toleranciaValorAbs' ? 0.5 : 1} value={String(v)}
-          onChange={(e) => set(k, Number(e.target.value) || 0)} />
-        <AjudaParametro chave={k} valor={v} />
+      <div key={k} className="param-linha" data-testid={`n0-param-${k}`}>
+        <div className="param-texto">
+          <label className="param-rotulo" htmlFor={id}>{rot.titulo}</label>
+          <AjudaParametro chave={k} valor={v} />
+        </div>
+        <div className="param-controle">
+          {typeof v === 'boolean' ? (
+            <div className="param-simnao" id={id} role="group" aria-label={rot.titulo}>
+              <button type="button" className={v ? 'ativo' : ''} aria-pressed={v} data-testid={`n0-param-${k}-sim`} onClick={() => set(k, true)}>
+                Sim
+              </button>
+              <button type="button" className={!v ? 'ativo' : ''} aria-pressed={!v} data-testid={`n0-param-${k}-nao`} onClick={() => set(k, false)}>
+                Não
+              </button>
+            </div>
+          ) : typeof v === 'string' ? (
+            /* Hoje só `janelaBuscaModo` cai aqui (build 081): parâmetro de
+               ESCOLHA. As opções vêm do mesmo lugar que a tela do usuário lê. */
+            <select id={id} value={v} onChange={(e) => set(k, e.target.value)}>
+              {OPCOES_JANELA_BUSCA.map((o) => (
+                <option key={o.valor} value={o.valor} style={{ color: '#111' }}>{o.rotulo}</option>
+              ))}
+            </select>
+          ) : (
+            <input
+              id={id}
+              type="number"
+              min={0}
+              step={k === 'toleranciaValorAbs' ? 0.5 : 1}
+              value={String(v)}
+              onChange={(e) => set(k, Number(e.target.value) || 0)}
+            />
+          )}
+        </div>
       </div>
     )
   }
@@ -194,10 +209,14 @@ export default function ParametrosNotificacaoN0({ notify }: { notify: (m: string
     </p>
 
     <SectionLabel dark>Regras que o cliente também vê</SectionLabel>
-    {TODAS_CHAVES.filter((k) => CHAVES_USUARIO.has(k)).map(campoDe)}
+    <div className="param-dark" style={{ background: DEV_CARD, borderRadius: 12, padding: '0 12px' }} data-testid="n0-notif-regras-cliente">
+      {TODAS_CHAVES.filter((k) => CHAVES_USUARIO.has(k)).map(campoDe)}
+    </div>
 
     <SectionLabel dark>Regras internas (só aqui)</SectionLabel>
-    {TODAS_CHAVES.filter((k) => !CHAVES_USUARIO.has(k)).map(campoDe)}
+    <div className="param-dark" style={{ background: DEV_CARD, borderRadius: 12, padding: '0 12px' }} data-testid="n0-notif-regras-internas">
+      {TODAS_CHAVES.filter((k) => !CHAVES_USUARIO.has(k)).map(campoDe)}
+    </div>
 
     <SectionLabel dark>Alcance da publicação</SectionLabel>
     <div style={{ background: DEV_CARD, borderRadius: 12, padding: 12 }}>

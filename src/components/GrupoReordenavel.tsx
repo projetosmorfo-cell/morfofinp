@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { db, type Categoria, type Lancamento } from '../db'
 import ItemLancamentoAcoes from './ItemLancamentoAcoes'
 import { MarcadorLinha, type Selecao } from './SelecaoETotais'
@@ -6,11 +6,23 @@ import { MarcadorLinha, type Selecao } from './SelecaoETotais'
 // Item 12 (15/09/2026) — press-and-hold drag-to-reorder, escopado por DIA:
 // arrastar um lançamento nunca o tira do dia que já está (não existe alça
 // entre dias diferentes — cada dia é um `GrupoReordenavel` isolado, com a
-// própria lista de ids). A alça (⠿) fica à esquerda de cada linha; segurar
-// nela por ~400ms entra em modo de arrasto (com feedback visual), soltar
-// grava a ordem inteira do dia em `Lancamento.ordemManual` (todo item do
-// grupo ganha um valor, 0..N-1 — nunca deixa mistura ambígua de "com ordem"
-// e "sem ordem" dentro do mesmo dia).
+// própria lista de ids). O gesto nasce na própria linha (a alça ⠿ saiu na
+// build 076): segurar por ~400ms entra em modo de arrasto (com feedback
+// visual), soltar grava a ordem inteira do dia em `Lancamento.ordemManual`
+// (todo item do grupo ganha um valor, 0..N-1 — nunca deixa mistura ambígua
+// de "com ordem" e "sem ordem" dentro do mesmo dia).
+//
+// Build 090 (17/09/2026) — o gesto "selecionava o texto da tela" em vez de
+// arrastar. Três coisas faltavam, todas invisíveis quando funcionam:
+// 1. `user-select: none` na LINHA (`.linha-reordenavel`, index.css) — a regra
+//    tinha ficado na alça que não existe mais.
+// 2. Bloquear a ROLAGEM só enquanto o arrasto está ativo: o `touchmove` do
+//    React é passivo (não aceita `preventDefault`), então é um listener
+//    nativo com `{ passive: false }` no contêiner. Fora do arrasto a lista
+//    rola normalmente — `touch-action: none` na linha inteira mataria o
+//    scroll de quem só quer descer a lista.
+// 3. Engolir o `contextmenu` da linha: no Android o long-press abre o menu
+//    de contexto/seleção exatamente aos ~500ms, logo depois do nosso timer.
 //
 // Pointer Events (não touch/mouse separados, como o arrasto de excluir/
 // duplicar/editar em `ItemLancamentoAcoes.tsx`) — unifica mouse e toque num
@@ -58,6 +70,18 @@ export default function GrupoReordenavel({
   const [emArrasto, setEmArrasto] = useState<number | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
+  /* Build 090 — bloqueia a rolagem da página SÓ durante o arrasto (ver
+     cabeçalho). Listener nativo porque o do React é passivo. */
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    const bloquearRolagem = (e: TouchEvent) => {
+      if (arrastandoIdRef.current != null && e.cancelable) e.preventDefault()
+    }
+    el.addEventListener('touchmove', bloquearRolagem, { passive: false })
+    return () => el.removeEventListener('touchmove', bloquearRolagem)
+  }, [])
+
   function limparTimer() {
     if (timerRef.current != null) {
       clearTimeout(timerRef.current)
@@ -90,12 +114,27 @@ export default function GrupoReordenavel({
     })
   }
 
+  /* Build 090: soltar depois de um arrasto de verdade dispara um `click` na
+     linha (o ponteiro estava capturado por ela), e o clique abre o
+     lançamento — a pessoa reordenava e o formulário abria por cima. O próximo
+     clique depois de um arrasto é engolido na captura; um toque comum (sem
+     arrasto) continua abrindo normalmente. */
+  const engolirProximoCliqueRef = useRef(false)
+
   function onPointerUpOuCancelar() {
     limparTimer()
+    if (arrastandoIdRef.current != null) engolirProximoCliqueRef.current = true
     commitarOrdem()
     arrastandoIdRef.current = null
     setEmArrasto(null)
     setOrdemArrasto(null)
+  }
+
+  function onClickCaptureContainer(e: React.MouseEvent) {
+    if (!engolirProximoCliqueRef.current) return
+    engolirProximoCliqueRef.current = false
+    e.stopPropagation()
+    e.preventDefault()
   }
 
   function onPointerMoveContainer(e: React.PointerEvent) {
@@ -126,6 +165,7 @@ export default function GrupoReordenavel({
       onPointerMove={onPointerMoveContainer}
       onPointerUp={onPointerUpOuCancelar}
       onPointerCancel={onPointerUpOuCancelar}
+      onClickCapture={onClickCaptureContainer}
     >
       {idsExibidos.map((id) => {
         const l = porId.get(id)
@@ -139,6 +179,12 @@ export default function GrupoReordenavel({
             onPointerDown={selecao.ativa ? undefined : (e) => onPointerDownLinha(id, e)}
             onPointerUp={limparTimer}
             onPointerLeave={limparTimer}
+            onContextMenu={(e) => {
+              // Build 090: o long-press do Android dispara o menu de contexto
+              // (seleção de texto) no meio do gesto — só enquanto se segura ou
+              // arrasta; um clique com o botão direito no desktop continua igual.
+              if (timerRef.current != null || arrastandoIdRef.current != null) e.preventDefault()
+            }}
           >
             {selecao.ativa && (
               <MarcadorLinha marcado={selecao.estaMarcado(l.id!)} onAlternar={() => selecao.alternar(l.id!)} />

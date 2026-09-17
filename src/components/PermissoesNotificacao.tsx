@@ -65,8 +65,8 @@ function LinhaPermissao({
           confirmação e sai do caminho (desabilitado). */}
       <button
         type="button"
-        className="primario"
-        style={{ marginTop: 0, width: '100%', opacity: concedida ? 0.5 : 1 }}
+        className="primario botao-compacto"
+        style={{ opacity: concedida ? 0.5 : 1 }}
         disabled={concedida}
         onClick={onClick}
       >
@@ -89,14 +89,14 @@ export function BotoesPermissaoNotificacao({
         titulo="Ler as notificações do banco"
         explicacao='Abre a lista do Android: encontre "MorfoFinP" e ligue o acesso. Sem isso o app não enxerga nenhuma movimentação.'
         concedida={estado.acesso}
-        rotulo="Ligar leitura das notificações"
+        rotulo="Liberar a leitura no Android"
         onClick={() => { void abrirConfiguracaoAcesso() }}
       />
       <LinhaPermissao
         titulo='Avisar "movimentação detectada"'
         explicacao="Permite o app te avisar na hora que detectar uma movimentação. Sem isso ela só aparece quando você abrir o app."
         concedida={estado.aviso}
-        rotulo="Permitir o aviso na tela"
+        rotulo="Liberar o aviso na tela"
         onClick={async () => {
           const ok = await solicitarPermissaoAviso()
           aoMudar({ ...estado, aviso: ok })
@@ -128,11 +128,11 @@ export function PopupPermissoesNotificacao({
           você confirma ou edita cada uma antes de gravar. Faltam estas permissões:
         </p>
         <BotoesPermissaoNotificacao estado={estado} aoMudar={aoMudar} />
-        <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
-          <button type="button" style={{ marginTop: 0, flex: 1 }} onClick={aoAdiar}>
+        <div className="notif-acoes" style={{ marginTop: 4 }}>
+          <button type="button" className="secundario" onClick={aoAdiar}>
             Lembrar mais tarde
           </button>
-          <button type="button" style={{ marginTop: 0, flex: 1 }} onClick={aoNuncaMais}>
+          <button type="button" className="secundario" onClick={aoNuncaMais}>
             Não mostrar novamente
           </button>
         </div>
@@ -149,19 +149,30 @@ export function PopupPermissoesNotificacao({
      em outro dia); "Não mostrar novamente" some pra sempre — até faltar
      permissão de novo depois de ter sido concedida? Não: a marca é
      permanente, é isso que "novamente" quer dizer. */
-export function usarAvisoPermissoes(config: { permissoesAdiadasEm?: string; permissoesNuncaMostrar?: boolean } | undefined) {
+export function usarAvisoPermissoes(
+  /* `undefined` = a configuração AINDA NÃO CHEGOU do banco; `null` = chegou e
+     não existe registro. Build 090, defeito real relatado pelo Rafael:
+     "mesmo colocando pra lembrar mais tarde, se fecho o app e abro, a tela
+     tenta abrir, pisca e fecha". Era isto: na primeira passada `config` vinha
+     `undefined` (carregando), a regra não via o adiamento, ABRIA — e na
+     passada seguinte, com a configuração em mãos, FECHAVA. Agora, enquanto
+     não se sabe o que está gravado, não se decide nada. */
+  config: { permissoesAdiadasEm?: string; permissoesNuncaMostrar?: boolean } | null | undefined,
+) {
   const [estado, setEstado] = useState<EstadoPermissoes>({ acesso: false, aviso: false })
   const [aberto, setAberto] = useState(false)
+  const configPronta = config !== undefined
 
   const conferir = useCallback(async () => {
     if (!ehNativo()) return
+    if (!configPronta) return
     const atual = await lerPermissoes()
     setEstado(atual)
     const falta = !atual.acesso || !atual.aviso
     const hoje = new Date().toISOString().slice(0, 10)
     const adiadoHoje = (config?.permissoesAdiadasEm ?? '').slice(0, 10) === hoje
     setAberto(falta && !config?.permissoesNuncaMostrar && !adiadoHoje)
-  }, [config?.permissoesAdiadasEm, config?.permissoesNuncaMostrar])
+  }, [configPronta, config?.permissoesAdiadasEm, config?.permissoesNuncaMostrar])
 
   useEffect(() => { void conferir() }, [conferir])
 

@@ -16,16 +16,20 @@ import SimularData, { BannerDataSimulada } from './kit/SimularData'
 import RodapeAbas from './kit/RodapeAbas'
 import { ArrowPathIcon, ArrowRightOnRectangleIcon, CalendarDaysIcon, ChatBubbleLeftRightIcon, Cog6ToothIcon, EllipsisVerticalIcon, ListBulletIcon, ScaleIcon, WalletIcon } from '@heroicons/react/24/outline'
 import DetalheLancamento from './components/DetalheLancamento'
-import { mesInicial, formatarMes } from './mes'
+import { mesInicial, formatarMes, type PagamentoFaturaAbertura } from './mes'
 import { mesesComPendencia } from './pendencias'
 import { avancarSeriesFixasPendentes } from './recorrencia'
-import { migrarComportamentoDosGrupos, migrarGruposAntigosParaInvestimento, migrarTipoDosGrupos } from './gruposUtil'
+import { migrarComportamentoDosGrupos, migrarGruposAntigosParaInvestimento, migrarIconeVariavel, migrarTipoDosGrupos } from './gruposUtil'
 import { aplicarPadraoSeNaoEditado } from './kit/padraoCategorias'
 import { aplicarPacoteN0SeNaoEscolhido } from './pacotesIcones'
+import { vincularPagamentosAntigos } from './faturaPagamento'
 import { garantirContaCofrinho } from './contasCofrinho'
 import { migrarReceitaFixa } from './baseMeta'
 import { usarBotaoVoltar } from './voltarAndroid'
 import { PopupPermissoesNotificacao, usarAvisoPermissoes } from './components/PermissoesNotificacao'
+
+/* Sentinela de "consulta ainda não respondeu" (mesmo padrão de `AppRoot.tsx`). */
+const CARREGANDO = Symbol('carregando')
 import { migrarFimDasVersoes, migrarPctGrupo, salvarConfiguracaoIcones, useOrdemAbas, useOrdemMenuEngrenagem, useTemaEfetivo } from './configuracaoIcones'
 import { TopIconMenu, UserHoverIcon, ThemeToggleIcon } from './kit/TopoIcones'
 import { Settings, MessageCircle, RefreshCw, LogOut } from 'lucide-react'
@@ -292,6 +296,9 @@ interface AlvoLancamento {
   // "Clonar este lançamento" já existente dentro do formulário — só pula o
   // passo de abrir em edição e clicar em Clonar manualmente.
   abrirClonando?: boolean
+  // Build 090: "Pagar esta fatura" (Carteira) abre o formulário já como
+  // pagamento daquela fatura — ver `PagamentoFaturaAbertura` em `mes.ts`.
+  pagamentoFatura?: PagamentoFaturaAbertura
 }
 
 // Engrenagem fixa no topo (30/08/2026) — abre um popover com as duas telas
@@ -552,6 +559,11 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: ModoConsultaN
      evidente onde o gating existia, caso um dia volte a fazer sentido. */
   const tenantN1 = useTenantN1()
   const configN1 = useLiveQuery(() => db.configuracoes.get(1), [])
+  /* Build 090: `useLiveQuery` devolve `undefined` tanto "ainda carregando"
+     quanto "não existe registro" — o popup de permissões precisa distinguir
+     os dois (ver `usarAvisoPermissoes`). O sentinela `CARREGANDO` vira `null`
+     depois que a consulta responde, exista registro ou não. */
+  const configN1Carregada = useLiveQuery(async () => (await db.configuracoes.get(1)) ?? null, [], CARREGANDO)
   // Quem está logado — usado só pra mostrar o nome na barra do topo.
   const usuarioTenantLogado = tenantN1?.users.find((u) => u.id === configN1?.loggedUserIdN1)
   const podeVerFuncN1 = (_k: string) => true
@@ -712,6 +724,9 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: ModoConsultaN
          manda é o cadastro — a regra deixou de viver no código-fonte. Ver
          `migrarComportamentoDosGrupos()` em `src/gruposUtil.ts`. */
       await migrarComportamentoDosGrupos()
+      /* Build 090: ícone padrão do grupo Variável virou cadeado aberto
+         colorido — só troca o valor de fábrica antigo. */
+      await migrarIconeVariavel()
       /* O app passou a exigir PELO MENOS UM cofrinho cadastrado (build 086,
          pergunta do Rafael: "na carteira o cofrinho aparece mas no cadastro de
          contas ele não aparece"). Instalação antiga podia não ter nenhuma
@@ -736,6 +751,12 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: ModoConsultaN
          publicado: esta build oferece as três propostas, não repinta o
          cadastro de quem já usa o app sem pedir. Ver `src/pacotesIcones.ts`. */
       await aplicarPacoteN0SeNaoEscolhido()
+      /* Build 090: pagamento de fatura gravado antes desta build só era
+         reconhecido pelos filhos (`faturaId`). Deduz cartão+fatura e grava
+         `faturaCartaoId`/`faturaMes` no pagamento — é o que deixa "Fatura
+         ainda não paga" descontar o que já foi pago. Ver
+         `src/faturaPagamento.ts`. */
+      await vincularPagamentosAntigos()
       /* Parâmetros da notificação bancária publicados pelo N0 (build 080).
          Mesma mecânica do padrão de categorias logo acima, aplicada a
          PARÂMETRO: no escopo "só quem nunca mexeu" a composição das camadas já
@@ -781,7 +802,7 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: ModoConsultaN
      Rafael) — só no app instalado e só enquanto falta alguma das duas; tem
      "Lembrar mais tarde" (volta no dia seguinte) e "Não mostrar novamente".
      Ver `src/components/PermissoesNotificacao.tsx`. */
-  const avisoPermissoes = usarAvisoPermissoes(configN1)
+  const avisoPermissoes = usarAvisoPermissoes(configN1Carregada === CARREGANDO ? undefined : (configN1 ?? null))
   /* 16/09/2026: o aviso do topo conta só o que PARECE movimentação de
      dinheiro. Propaganda do banco que passou pelo filtro nativo (genérico de
      propósito) não infla mais o contador — ela fica na seção "Ignoradas" da
@@ -1288,6 +1309,7 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: ModoConsultaN
           categoriaIdSugerida={sugestaoNotificacao?.categoriaId ?? lancamentoAberto.categoriaIdSugerida}
           contaIdSugerida={sugestaoNotificacao?.contaId ?? lancamentoAberto.contaIdSugerida}
           abrirClonando={lancamentoAberto.abrirClonando}
+          pagamentoFatura={lancamentoAberto.pagamentoFatura}
           aoMudarMes={setMes}
           sugestao={sugestaoNotificacao}
           aoSalvarComSucesso={

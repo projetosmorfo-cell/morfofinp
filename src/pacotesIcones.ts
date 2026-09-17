@@ -54,7 +54,8 @@
 import { db, type Categoria, type GrupoRegistro } from './db'
 import type { EstiloIcone } from './icones'
 import { ICONES_PADRAO_CATEGORIA, ICONES_PADRAO_GRUPO } from './iconesPadrao'
-import { doAmbiente, ambienteDoBanco } from './ambiente'
+import { doAmbiente, ambienteDoBanco, ambienteAtivoId } from './ambiente'
+import { salvarConfiguracaoIcones } from './configuracaoIcones'
 
 export type PacoteId = 'borda' | 'preenchido' | 'colorido'
 
@@ -300,18 +301,39 @@ export function coresBemDiferentes(a?: string, b?: string): boolean {
    o ambiente e impedi-lo de receber uma melhoria de desenho publicada depois
    (a personalização é por parâmetro, regra da build 080).
    --------------------------------------------------------------------------- */
+export type CoresLocaisPacotes = Partial<Record<'borda' | 'preenchido', { categorias?: string; grupos?: string }>>
+
 export function pacoteEfetivo(
   publicado: Partial<PacotesIconesN0> | undefined,
-  cfg: { pacoteIconesEscolhido?: PacoteId; pacoteIconesCorCategorias?: string; pacoteIconesCorGrupos?: string } | undefined,
+  cfg:
+    | {
+        pacoteIconesEscolhido?: PacoteId
+        pacoteIconesCorCategorias?: string
+        pacoteIconesCorGrupos?: string
+        pacoteIconesCores?: CoresLocaisPacotes
+      }
+    | undefined,
 ): { id: PacoteId; pacote: PacoteIcones; pacotes: Record<PacoteId, PacoteIcones>; emUsoNoN0: PacoteId } {
   const base = comPacotesPadrao(publicado)
   const id = cfg?.pacoteIconesEscolhido ?? base.emUso
+  /* Build 090: a cor personalizada é POR PACOTE (`pacoteIconesCores`). Os dois
+     campos antigos (um par só, para todos os pacotes) são lidos apenas como
+     legado e só valem para o pacote que estava escolhido quando foram
+     gravados — nunca por cima do que o N0 publica para os outros. */
+  const corLocal = (pid: 'borda' | 'preenchido', alvo: 'categorias' | 'grupos'): string | undefined => {
+    const nova = cfg?.pacoteIconesCores?.[pid]?.[alvo]
+    if (nova) return nova
+    if (cfg?.pacoteIconesEscolhido === pid) {
+      return alvo === 'categorias' ? cfg?.pacoteIconesCorCategorias : cfg?.pacoteIconesCorGrupos
+    }
+    return undefined
+  }
   const comCorLocal = (p: PacoteIcones, pid: PacoteId): PacoteIcones =>
-    PACOTE_ACEITA_COR[pid]
+    PACOTE_ACEITA_COR[pid] && (pid === 'borda' || pid === 'preenchido')
       ? {
           ...p,
-          corCategorias: cfg?.pacoteIconesCorCategorias ?? p.corCategorias,
-          corGrupos: cfg?.pacoteIconesCorGrupos ?? p.corGrupos,
+          corCategorias: corLocal(pid, 'categorias') ?? p.corCategorias,
+          corGrupos: corLocal(pid, 'grupos') ?? p.corGrupos,
         }
       : p
   const pacotes = {
@@ -337,9 +359,20 @@ export async function aplicarPacoteN0SeNaoEscolhido(): Promise<boolean> {
        app fica exatamente como está. Esta build NÃO repinta ninguém sozinha —
        ela oferece as três opções, e quem troca é a pessoa. */
     if (!publicado) return false
+    /* Build 090: aplica UMA vez por versão publicada (marca por ambiente,
+       como `padraoCatVersaoAplicada`). Sem a marca, o pacote era reaplicado a
+       cada abertura do app e desfazia a cor/traço que a pessoa tivesse
+       ajustado item a item no cadastro. */
+    const amb = ambienteAtivoId()
+    const versao = publicado.versao ?? 0
+    const aplicada = cfg?.pacoteIconesVersaoAplicada?.[amb] ?? 0
+    if (versao <= aplicada) return false
     const base = comPacotesPadrao(publicado)
     const { pacote } = pacoteEfetivo(publicado, cfg)
-    await aplicarPacote(base.emUso, pacote)
+    await aplicarPacote(base.emUso, pacote, amb)
+    await salvarConfiguracaoIcones({
+      pacoteIconesVersaoAplicada: { ...(cfg?.pacoteIconesVersaoAplicada ?? {}), [amb]: versao },
+    })
     return true
   } catch {
     return false

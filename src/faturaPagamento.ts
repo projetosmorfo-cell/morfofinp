@@ -1,0 +1,82 @@
+/* Pagamento de fatura — o lado que GRAVA (build 090, 17/09/2026).
+
+   Decisão do Rafael nesta build: a fatura só é paga pelo botão "Pagar esta
+   fatura" da Carteira, que abre a tela de lançamento já preenchida (cartão,
+   fatura, saída, valor, categoria). A tela de lançamento NÃO oferece mais
+   "Cartão desta fatura / Mês da fatura" nem deixa escolher à mão a categoria
+   "Pagamento de fatura". Cada pagamento carrega `faturaCartaoId` + `faturaMes`
+   (ver `db.ts`), e é isso que permite:
+
+   - "Fatura ainda não paga" DESCONTAR o que já foi pago;
+   - pagar uma PARTE sem quitar a fatura inteira;
+   - editar um pagamento (inclusão = edição, mesma tela) e a fatura refletir.
+
+   A leitura (quanto falta, se está quitada) mora em `faturaCiclo.ts`
+   (`situacaoDaFatura`). Aqui ficam só as duas escritas: marcar os filhos
+   quando a fatura fecha a conta, e vincular pagamentos antigos. */
+import { db, type Lancamento } from './db'
+import { DIA_FECHAMENTO_PADRAO, mesFaturaDoLancamento, situacaoDaFatura } from './faturaCiclo'
+
+/** Reavalia a fatura `cartaoId`+`mesISO` depois de gravar/editar/excluir um
+ *  pagamento. Quitada (nada mais a pagar e pelo menos um pagamento) → todo
+ *  item do ciclo vira `pago: true` com `faturaId` apontando pro ÚLTIMO
+ *  pagamento. Ainda faltando → não mexe em item nenhum (pagar uma parte não
+ *  quita nada; marcar `pago` à mão continua sendo escolha da pessoa). */
+export async function reavaliarQuitacao(cartaoId: number, mesISO: string): Promise<{ quitada: boolean; restante: number }> {
+  const [cartao, categorias, todos] = await Promise.all([
+    db.contas.get(cartaoId),
+    db.categorias.toArray(),
+    db.lancamentos.toArray(),
+  ])
+  if (!cartao) return { quitada: false, restante: 0 }
+  const porId = new Map(categorias.map((c) => [c.id!, c]))
+  const s = situacaoDaFatura(todos, porId, cartao, mesISO)
+  if (s.quitada) {
+    const ultimo = s.pagamentos[s.pagamentos.length - 1]
+    const pendentes = s.itens.filter((l) => l.pago !== true || l.faturaId !== ultimo.id)
+    await Promise.all(pendentes.map((l) => db.lancamentos.update(l.id!, { pago: true, faturaId: ultimo.id })))
+  }
+  return { quitada: s.quitada, restante: s.restante }
+}
+
+/** Pagamentos gravados ANTES da build 090 não dizem qual fatura pagam — só
+ *  os filhos apontam pra eles (`faturaId`). Deduz cartão+mês a partir do
+ *  primeiro filho e grava. Idempotente e barato (roda a cada abertura e
+ *  depois de restaurar backup): quem já tem os dois campos é pulado. Um
+ *  pagamento sem filho nenhum (ex.: gravado pela tela de lançamento numa
+ *  categoria comum) fica como está — não há de onde deduzir. */
+export async function vincularPagamentosAntigos(): Promise<number> {
+  try {
+    const [categorias, contas, todos] = await Promise.all([
+      db.categorias.toArray(),
+      db.contas.toArray(),
+      db.lancamentos.toArray(),
+    ])
+    const naturezaPorCat = new Map(categorias.map((c) => [c.id!, c.natureza]))
+    const contaPorId = new Map(contas.map((c) => [c.id!, c]))
+    const semVinculo = todos.filter(
+      (l) => naturezaPorCat.get(l.categoriaId) === 'Pagamento de fatura' && (l.faturaCartaoId == null || !l.faturaMes),
+    )
+    if (semVinculo.length === 0) return 0
+    const filhosPorPagamento = new Map<number, Lancamento[]>()
+    for (const l of todos) {
+      if (l.faturaId == null) continue
+      const lista = filhosPorPagamento.get(l.faturaId) ?? []
+      lista.push(l)
+      filhosPorPagamento.set(l.faturaId, lista)
+    }
+    let n = 0
+    for (const p of semVinculo) {
+      const filhos = filhosPorPagamento.get(p.id!) ?? []
+      const filho = filhos.find((f) => contaPorId.get(f.contaId)?.tipo === 'cartao')
+      if (!filho) continue
+      const cartao = contaPorId.get(filho.contaId)!
+      const mes = mesFaturaDoLancamento(cartao.diaFechamento ?? DIA_FECHAMENTO_PADRAO, filho)
+      await db.lancamentos.update(p.id!, { faturaCartaoId: cartao.id, faturaMes: mes })
+      n++
+    }
+    return n
+  } catch {
+    return 0
+  }
+}

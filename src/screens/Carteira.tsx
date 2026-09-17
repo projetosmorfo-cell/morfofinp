@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, type Categoria, type Conta, type GrupoRegistro, type Lancamento } from '../db'
 import type { TelaProps } from '../mes'
-import { somarMes } from '../mes'
 import SeletorMes from '../components/SeletorMes'
 import ItemLancamentoAcoes from '../components/ItemLancamentoAcoes'
 import { usePeriodoLista } from '../components/periodoLista'
@@ -11,16 +10,16 @@ import {
   useSelecao, BarraSelecao, TotaisEntradaSaida, MarcadorLinha, blocosPorCorte, RodapeTotais, somarTotais,
 } from '../components/SelecaoETotais'
 import { CampoBusca, FolhaFiltros, FILTROS_VAZIOS, aplicarFiltros, contarFiltrosAtivos, type FiltrosAvancados } from '../components/BuscaEFiltros'
-import { obterOuCriarCategoriaPagamentoFatura } from '../categoriasSistema'
-import { janelaFatura } from '../faturaCiclo'
+import { janelaFatura, lancamentosDoCiclo, situacaoDaFatura, DIA_FECHAMENTO_PADRAO } from '../faturaCiclo'
 import { formatarCabecalhoData } from '../formatoData'
+import { fundoDaLinhaDeData } from '../statusPagamento'
 import SaldoDoCofrinho, { LinhaInformeSaldo } from '../components/SaldoDoCofrinho'
-import { fmtBRL, formatarMoeda, aplicarMascaraValor, paraNumero } from '../formatoMoeda'
+import { fmtBRL } from '../formatoMoeda'
 import { useHojeSimuladoISO, hojeEfetivoISO } from '../hojeSimulado'
 import TituloTelaN1 from '../kit/CabecalhoN1'
 import { ExportSheet, type ExportRow } from '../kit/ExportSheet'
 import { EXPLICACAO_CARTEIRA, SUBTITULO_CARTEIRA } from '../subtitulosTelas'
-import { lerDoAmbiente, marcaDoAmbiente } from '../ambiente'
+import { lerDoAmbiente } from '../ambiente'
 import EdicaoEmMassa from '../components/EdicaoEmMassa'
 
 function fmtBRLComSinal(v: number) {
@@ -502,28 +501,23 @@ function DetalheConta({
       ? janelaFatura(conta?.diaFechamento ?? 9, mes)
       : { inicio: `${mes}-01`, fim: `${mes}-31` }
 
-  // Item 1 da lista pendente (15/09/2026): `faturaOverride` puxa um lançamento
-  // de cartão pro ciclo VIZINHO ao que a data indicaria — ex.: uma compra feita
-  // 1 dia depois do fechamento que o Rafael sabe que caiu na fatura anterior
-  // (atraso do banco em processar). Só é lido pra conta tipo 'cartao'; conta
-  // corrente/cofre ignora o campo por completo (não existe "ciclo" pra elas).
-  const janelaAnterior = isCartao ? janelaFatura(conta?.diaFechamento ?? 9, somarMes(mes, -1)) : janela
-  const janelaSeguinte = isCartao ? janelaFatura(conta?.diaFechamento ?? 9, somarMes(mes, 1)) : janela
+  // `faturaOverride` puxa um lançamento de cartão pro ciclo VIZINHO ao que a
+  // data indicaria (item 1 de 15/09/2026). Desde a build 090 a regra mora
+  // em `faturaCiclo.ts` (`lancamentosDoCiclo`) — a MESMA que o formulário e
+  // a quitação usam, nunca uma cópia aqui.
   const dentroDaJanela = (l: Lancamento, j: { inicio: string; fim: string }) =>
     l.dataCompetencia >= j.inicio && l.dataCompetencia <= j.fim
-  const doPeriodoBruto = lancamentosDoLugar.filter((l) => {
-    if (modoPeriodo || !isCartao) return dentroDaJanela(l, janela)
-    const override = l.faturaOverride
-    // 'proxima' = o lançamento pertence à fatura SEGUINTE à da data dele, então
-    // pra aparecer na fatura ANTERIOR (a que ele foi puxado pra dentro) é a
-    // janela anterior que precisa bater com a data dele.
-    if (override === 'proxima') return dentroDaJanela(l, janelaAnterior)
-    if (override === 'anterior') return dentroDaJanela(l, janelaSeguinte)
-    return dentroDaJanela(l, janela)
-  })
+  const doPeriodoBruto =
+    modoPeriodo || !isCartao
+      ? lancamentosDoLugar.filter((l) => dentroDaJanela(l, janela))
+      : lancamentosDoCiclo(lancamentosDoLugar, conta?.diaFechamento ?? DIA_FECHAMENTO_PADRAO, mes)
+  /* Situação da fatura (build 090): total, o que já foi pago e o que falta —
+     ver `situacaoDaFatura`. Fora do modo período (que não é um ciclo). */
+  const fatura =
+    isCartao && conta && !modoPeriodo ? situacaoDaFatura(todosLancamentos, categoriaPorId, conta, mes) : null
   const entradasPeriodo = doPeriodoBruto.filter((l) => l.valor > 0).reduce((s, l) => s + l.valor, 0)
   const saidasPeriodo = doPeriodoBruto.filter((l) => l.valor < 0).reduce((s, l) => s - l.valor, 0)
-  const totalFatura = saidasPeriodo - entradasPeriodo
+  const totalFatura = fatura ? fatura.total : saidasPeriodo - entradasPeriodo
 
   // Item 1 (16/09/2026) — "Saldo até hoje", calculado sobre TODO o histórico
   // da conta/cofrinho (`lancamentosDoLugar`, nunca limitado ao mês
@@ -588,62 +582,19 @@ function DetalheConta({
     )
   }
 
-  // --- Quitação da fatura (só cartão) — vira registro de lançamento real,
-  // isolado numa seção própria no TOPO (31/08/2026, rodada seguinte; ponto
-  // 6). O lançamento de pagamento em si mora na conta de ORIGEM do
-  // pagamento (ex.: Bradesco), não no próprio cartão — por isso é buscado
-  // em `todosLancamentos` via `faturaId` (não aparece em `lancamentosDoLugar`,
-  // que é só a lista do cartão). "Quitado" = existe pelo menos um registro
-  // de pagamento referenciado por algum lançamento deste ciclo — nunca
-  // depende do `pago` individual de cada compra, pra que excluir o registro
-  // de quitação sempre faça o botão "Pagar fatura" reaparecer sozinho.
-  const idsQuitacaoDoCiclo = new Set(doPeriodoBruto.map((l) => l.faturaId).filter((x): x is number => x != null))
-  const registrosQuitacao = todosLancamentos.filter((l) => l.id != null && idsQuitacaoDoCiclo.has(l.id))
-  const cicloQuitado = registrosQuitacao.length > 0
-
-  const [pagandoFatura, setPagandoFatura] = useState(false)
-  const [contaOrigemPagamento, setContaOrigemPagamento] = useState<number | ''>('')
-  const [valorPagamento, setValorPagamento] = useState('')
-  // Data de pagamento — pedido do Rafael (31/08/2026, rodada seguinte): o
-  // pagamento de fatura é um lançamento como outro qualquer, então precisa
-  // de uma data de verdade, editável, não travada em "hoje" implicitamente.
-  const [dataPagamento, setDataPagamento] = useState('')
-
+  // --- Quitação da fatura (só cartão). Até a build 089 o pagamento era um
+  // formulário inline aqui dentro, que criava o lançamento por conta própria
+  // e marcava TODO o ciclo como pago — mesmo pagando uma parte — e o valor
+  // "ainda não paga" nunca descontava nada. Build 090 (decisão do Rafael,
+  // 17/09/2026): o botão abre a TELA DE LANÇAMENTO já preenchida (cartão,
+  // fatura, saída, valor que falta, categoria); o formulário grava
+  // `faturaCartaoId`/`faturaMes` e reavalia a quitação
+  // (`reavaliarQuitacao`, `faturaPagamento.ts`). Aqui só se LÊ.
   function abrirPagamento() {
-    const origemPadrao =
-      conta?.contaPagamentoPadraoId ?? contasDisponiveis.find((c) => c.ativa && c.tipo !== 'cartao')?.id ?? ''
-    setContaOrigemPagamento(origemPadrao)
-    setValorPagamento(formatarMoeda(totalFatura))
-    setDataPagamento(new Date().toISOString().slice(0, 10))
-    setPagandoFatura(true)
-  }
-
-  async function confirmarPagamento() {
-    if (!conta || !contaOrigemPagamento || !dataPagamento) return
-    const valorNum = paraNumero(valorPagamento)
-    if (!valorNum) return
-    const idsParaQuitar = doPeriodoBruto
-      .filter((l) => categoriaPorId.get(l.categoriaId)?.natureza !== 'Pagamento de fatura')
-      .map((l) => l.id!)
-
-    await db.transaction('rw', db.lancamentos, db.categorias, db.grupos, async () => {
-      const catFaturaId = await obterOuCriarCategoriaPagamentoFatura()
-      const novoId = await db.lancamentos.add({
-        ...marcaDoAmbiente(),
-        dataCompetencia: dataPagamento,
-        dataCaixa: dataPagamento,
-        descricao: `Pagamento fatura ${conta.nome}`,
-        descricaoOriginal: `Pagamento fatura ${conta.nome}`,
-        valor: -valorNum,
-        contaId: contaOrigemPagamento,
-        pagoPor: 'conta',
-        categoriaId: catFaturaId,
-        status: 'manual',
-        pago: true,
-      })
-      await Promise.all(idsParaQuitar.map((id) => db.lancamentos.update(id, { pago: true, faturaId: novoId })))
+    if (!conta || !fatura) return
+    aoAbrirLancamento({
+      pagamentoFatura: { cartaoId: conta.id!, mesFatura: mes, valorSugerido: Math.max(fatura.restante, 0) },
     })
-    setPagandoFatura(false)
   }
 
   // --- Ajuste de fluxo via cofrinho (ponto 7) — só informativo, nunca soma
@@ -770,75 +721,35 @@ function DetalheConta({
       {/* Duplo totalizador (só cartão, ponto 6) — topo E rodapé. */}
       {isCartao && <BlocoPeriodoESaldo {...totaisProps} />}
 
-      {isCartao && (
-        <div className="cartao" style={{ marginTop: 10, marginBottom: 10 }}>
-          {cicloQuitado ? (
-            <>
-              <strong style={{ fontSize: 13 }}>Quitação da fatura</strong>
-              <div style={{ marginTop: 6 }}>{registrosQuitacao.map((l) => linhaDe(l))}</div>
-            </>
-          ) : doPeriodoBruto.length > 0 ? (
-            !pagandoFatura ? (
-              <>
-                <div className="linha" style={{ border: 'none', padding: 0 }}>
-                  <span>Fatura ainda não paga</span>
-                  <strong className="valor-neg">{fmtBRL(totalFatura)}</strong>
-                </div>
-                <button type="button" className="primario" style={{ marginTop: 10 }} onClick={abrirPagamento}>
-                  Pagar esta fatura
-                </button>
-              </>
-            ) : (
-              <>
-                <label>Pagar com</label>
-                <select
-                  value={contaOrigemPagamento}
-                  onChange={(e) => setContaOrigemPagamento(e.target.value ? Number(e.target.value) : '')}
-                >
-                  <option value="">Escolha…</option>
-                  {contasDisponiveis
-                    .filter((c) => c.ativa && c.id !== conta?.id)
-                    .map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.nome}
-                      </option>
-                    ))}
-                </select>
-                <label>Valor pago (R$)</label>
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  value={valorPagamento}
-                  onChange={(e) => setValorPagamento(aplicarMascaraValor(e.target.value))}
-                />
-                <label>Data do Pagamento</label>
-                <input type="date" value={dataPagamento} onChange={(e) => setDataPagamento(e.target.value)} />
-                <p className="texto-fraco" style={{ marginTop: 8, marginBottom: 0 }}>
-                  Lança 1 saída neutra na conta escolhida e marca todos os lançamentos deste ciclo como pagos — a
-                  despesa não é contada de novo (ela já entrou no cálculo quando a compra foi feita).
-                </p>
-                <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-                  <button type="button" className="primario" style={{ marginTop: 0 }} onClick={confirmarPagamento}>
-                    Confirmar pagamento
-                  </button>
-                  <button
-                    type="button"
-                    style={{
-                      marginTop: 0,
-                      background: 'none',
-                      border: '1px solid var(--borda)',
-                      borderRadius: 10,
-                      padding: '12px',
-                      cursor: 'pointer',
-                    }}
-                    onClick={() => setPagandoFatura(false)}
-                  >
-                    Cancelar
-                  </button>
-                </div>
-              </>
-            )
-          ) : null}
+      {fatura && (fatura.itens.length > 0 || fatura.pagamentos.length > 0) && (
+        <div className="cartao" style={{ marginTop: 10, marginBottom: 10 }} data-testid="card-quitacao">
+          <strong style={{ fontSize: 13 }}>
+            {fatura.quitada ? 'Fatura paga' : fatura.pagamentos.length > 0 ? 'Fatura paga em parte' : 'Fatura ainda não paga'}
+          </strong>
+          <div className="linha" style={{ border: 'none', padding: '6px 0 0' }}>
+            <span className="texto-fraco">Total da fatura</span>
+            <strong data-testid="fatura-total">{fmtBRL(fatura.total)}</strong>
+          </div>
+          {fatura.pagamentos.length > 0 && (
+            <div className="linha" style={{ border: 'none', padding: '2px 0 0' }}>
+              <span className="texto-fraco">Já pago</span>
+              <strong className="valor-pos" data-testid="fatura-pago">{fmtBRL(fatura.pago)}</strong>
+            </div>
+          )}
+          {!fatura.quitada && (
+            <div className="linha" style={{ border: 'none', padding: '2px 0 0' }}>
+              <span>{fatura.pagamentos.length > 0 ? 'Falta pagar' : 'A pagar'}</span>
+              <strong className="valor-neg" data-testid="fatura-restante">{fmtBRL(fatura.restante)}</strong>
+            </div>
+          )}
+          {fatura.pagamentos.length > 0 && (
+            <div style={{ marginTop: 6 }} data-testid="fatura-pagamentos">{fatura.pagamentos.map((l) => linhaDe(l))}</div>
+          )}
+          {!fatura.quitada && (
+            <button type="button" className="primario" style={{ marginTop: 10 }} onClick={abrirPagamento} data-testid="pagar-fatura">
+              {fatura.pagamentos.length > 0 ? 'Pagar o restante' : 'Pagar esta fatura'}
+            </button>
+          )}
         </div>
       )}
 
@@ -854,7 +765,7 @@ function DetalheConta({
             {blocos.length > 1 && !selecao.ativa && <div className="bloco-corte-titulo">{b.titulo}</div>}
             {b.sessoes.map((sessao) => (
               <div key={sessao.data}>
-                <div className="sessao-data">{formatarCabecalhoData(sessao.data)}</div>
+                <div className={`sessao-data ${fundoDaLinhaDeData(sessao.itens)}`}>{formatarCabecalhoData(sessao.data)}</div>
                 {sessao.itens.map((l) => linhaDe(l))}
               </div>
             ))}

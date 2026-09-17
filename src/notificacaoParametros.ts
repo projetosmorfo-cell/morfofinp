@@ -375,7 +375,7 @@ export const ROTULO_PARAMETRO: Record<keyof ParametrosNotificacao, { titulo: str
   limiarMarcadoresFracos: { titulo: 'Sinais fracos pra considerar propaganda', ajuda: 'Quantas expressões de marketing leves precisam aparecer juntas pra mandar a notificação pra Ignoradas.' },
   janelaBuscaModo: { titulo: 'Onde procurar o lançamento já previsto', ajuda: 'Ao confirmar, o app procura um lançamento que já seja esta movimentação, pra vincular em vez de criar outro.' },
   janelaBuscaDias: { titulo: 'Dias a mais antes do mês (só no 2º modo)', ajuda: 'Quantos dias antes do dia 1 também entram na procura.' },
-  mesesAnterioresAoAmpliar: { titulo: 'Meses que a procura ampliada alcança', ajuda: 'Alcance do botão "Procurar em meses anteriores" da tela de notificações. Não muda a procura normal.' },
+  mesesAnterioresAoAmpliar: { titulo: 'Meses que a procura ampliada alcança', ajuda: 'Alcance do botão "Procurar mais atrás" da tela de notificações. Não muda a procura normal.' },
   toleranciaValorPct: { titulo: 'Tolerância de valor (%)', ajuda: 'Diferença de valor, em porcentagem, que ainda conta como o mesmo gasto.' },
   toleranciaValorAbs: { titulo: 'Tolerância de valor (R$)', ajuda: 'A mesma folga, em reais. Vale quem passar na MAIOR das duas.' },
   janelaTransferenciaMin: { titulo: 'Janela da transferência (minutos)', ajuda: 'Duas notificações de mesmo valor e sentidos opostos, dentro desta janela, viram uma proposta de transferência entre suas contas.' },
