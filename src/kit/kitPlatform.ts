@@ -1387,10 +1387,14 @@ export async function salvarParametrosNotificacaoN0(
  * Devolve a versão nova — é ela que cada ambiente compara com a que já
  * processou (ver `aplicarZoomN0()` em `src/zoomListas.ts`).
  */
-export async function salvarZoomListasN0(pct: number, escopo: EscopoPublicacao) {
+export async function salvarZoomListasN0(pct: number, espacoPx: number, escopo: EscopoPublicacao) {
   const atual = await lerPlatformN0Persistida()
   const versao = (atual.zoomListas?.versao ?? 0) + 1
-  await salvarPlatformN0({ ...atual, zoomListas: { versao, atualizadoEm: agoraISO(), escopo, pct } })
+  /* Os DOIS parâmetros irmãos (zoom das fontes e espaço entre lançamentos)
+     são publicados juntos, na mesma versão: são a mesma decisão de aparência
+     da lista, e separá-los faria a marca de versão por ambiente ter de virar
+     duas. Ver o cabeçalho de `src/zoomListas.ts`. */
+  await salvarPlatformN0({ ...atual, zoomListas: { versao, atualizadoEm: agoraISO(), escopo, pct, espacoPx } })
   return versao
 }
 

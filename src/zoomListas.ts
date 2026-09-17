@@ -1,4 +1,19 @@
-/* ZOOM DAS FONTES DAS LISTAS — build 094 (17/09/2026), item 2 do Rafael.
+/* APARÊNCIA DAS LISTAS DE LANÇAMENTO — build 094 (17/09/2026).
+ *
+ * DOIS parâmetros irmãos, guardados e publicados juntos:
+ *   • ZOOM DAS FONTES (%) — item 2 da lista do Rafael;
+ *   • ESPAÇO ENTRE OS LANÇAMENTOS (px) — pedido logo em seguida: *"crie mais um
+ *     campo em px com setas pra aumentar ou diminuir tbm o espaçamento entre os
+ *     lançamentos na tela de lançamentos e lançamentos na carteira"*.
+ *
+ * Por que px num e % no outro, e não os dois em %: fonte é uma escala (dobrar
+ * 13px e 16px na mesma proporção é o que mantém a hierarquia), espaço é uma
+ * distância — "quero 8px de respiro" é a pergunta que a pessoa faz, e um
+ * percentual sobre 5px daria números sem significado ("+60%" para ir a 8px).
+ *
+ * O espaço alcança o RESPIRO acima e abaixo do corpo de cada lançamento (os
+ * 5px de 01/09/2026), não a linha de data — ela é separador de sessão e
+ * continua com 0px de sobra, regra que já valia e que o pedido não toca.
  *
  * O PEDIDO, nas palavras dele: *"um campo que coloque % que quer aumentar das
  * fontes da lista de Lançamentos (menu Lançamentos e Carteiras), esse
@@ -60,17 +75,36 @@ export function fatorDoZoom(pct: number): number {
   return 1 + normalizarZoom(pct) / 100
 }
 
+/** O respiro de hoje, em px, acima e abaixo do corpo de cada lançamento. */
+export const ESPACO_LISTAS_PADRAO = 5
+
+/* 0 é permitido de propósito — é o que ele já pediu uma vez (build 093, "zerar
+   todo o espaço acima e abaixo das linhas") e voltou atrás depois. O teto é
+   generoso; acima disso cabem menos de cinco lançamentos numa tela de celular
+   e a lista deixa de ser lista. */
+export const ESPACO_LISTAS_MIN = 0
+export const ESPACO_LISTAS_MAX = 24
+export const ESPACO_LISTAS_PASSO = 1
+
+export function normalizarEspaco(px: number): number {
+  if (!Number.isFinite(px)) return ESPACO_LISTAS_PADRAO
+  return Math.min(ESPACO_LISTAS_MAX, Math.max(ESPACO_LISTAS_MIN, Math.round(px)))
+}
+
 /** O que o N0 publica. Mesma forma de `ParametrosNotificacaoN0`. */
 export interface ZoomListasN0 {
   versao: number
   atualizadoEm: string
   escopo: EscopoPublicacao
   pct: number
+  /* Ausente numa publicação feita antes de o espaço existir — vale o padrão. */
+  espacoPx?: number
 }
 
 interface ConfigParcial {
   ambienteAtivoId?: string
   zoomListasPorAmbiente?: Record<string, number>
+  espacoListasPorAmbiente?: Record<string, number>
   zoomVersaoPorAmbiente?: Record<string, number>
   platformN0?: { zoomListas?: ZoomListasN0 }
 }
@@ -84,35 +118,73 @@ function comporZoom(publicado: ZoomListasN0 | undefined, doAmbiente: number | un
   return normalizarZoom(doAmbiente ?? padraoDoAppZoom(publicado))
 }
 
+/** Fábrica + o que o N0 publicou, para o espaço. */
+export function padraoDoAppEspaco(publicado: ZoomListasN0 | undefined): number {
+  return normalizarEspaco(publicado?.espacoPx ?? ESPACO_LISTAS_PADRAO)
+}
+
+function comporEspaco(publicado: ZoomListasN0 | undefined, doAmbiente: number | undefined): number {
+  return normalizarEspaco(doAmbiente ?? padraoDoAppEspaco(publicado))
+}
+
 /* Cache do último valor lido. Existe só pra `useZoomListas` já nascer com o
    valor certo no primeiro render — sem ele a lista abriria no tamanho de
    fábrica e saltaria pro tamanho escolhido um quadro depois. */
 let cacheZoom = ZOOM_LISTAS_PADRAO
+let cacheEspaco = ESPACO_LISTAS_PADRAO
 
 function lerDaConfig(cfg: ConfigParcial | undefined) {
   const amb = cfg?.ambienteAtivoId || AMBIENTE_DESTE_APARELHO
   const proprio = cfg?.zoomListasPorAmbiente?.[amb]
+  const proprioEspaco = cfg?.espacoListasPorAmbiente?.[amb]
   const publicado = cfg?.platformN0?.zoomListas
-  return { proprio, publicado, efetivo: comporZoom(publicado, proprio) }
+  return {
+    proprio,
+    proprioEspaco,
+    publicado,
+    efetivo: comporZoom(publicado, proprio),
+    efetivoEspaco: comporEspaco(publicado, proprioEspaco),
+  }
 }
 
 liveQuery(() => db.configuracoes.get(1)).subscribe({
-  next: (cfg) => { cacheZoom = lerDaConfig(cfg as ConfigParcial | undefined).efetivo },
+  next: (cfg) => {
+    const r = lerDaConfig(cfg as ConfigParcial | undefined)
+    cacheZoom = r.efetivo
+    cacheEspaco = r.efetivoEspaco
+  },
   error: (e) => { console.error('zoomListas: falha lendo configuração', e) },
 })
 
 /** Versão reativa, pra tela que edita e pra quem precisa re-renderizar. */
-export function useZoomListas(): { efetivo: number; proprio: number | undefined; padraoApp: number } {
+export function useZoomListas(): {
+  efetivo: number
+  proprio: number | undefined
+  padraoApp: number
+  espaco: number
+  espacoProprio: number | undefined
+  espacoPadraoApp: number
+} {
   const [estado, setEstado] = useState(() => ({
     efetivo: cacheZoom,
     proprio: undefined as number | undefined,
     padraoApp: ZOOM_LISTAS_PADRAO,
+    espaco: cacheEspaco,
+    espacoProprio: undefined as number | undefined,
+    espacoPadraoApp: ESPACO_LISTAS_PADRAO,
   }))
   useEffect(() => {
     const ins = liveQuery(() => db.configuracoes.get(1)).subscribe({
       next: (c) => {
-        const { proprio, publicado, efetivo } = lerDaConfig(c as ConfigParcial | undefined)
-        setEstado({ efetivo, proprio, padraoApp: padraoDoAppZoom(publicado) })
+        const r = lerDaConfig(c as ConfigParcial | undefined)
+        setEstado({
+          efetivo: r.efetivo,
+          proprio: r.proprio,
+          padraoApp: padraoDoAppZoom(r.publicado),
+          espaco: r.efetivoEspaco,
+          espacoProprio: r.proprioEspaco,
+          espacoPadraoApp: padraoDoAppEspaco(r.publicado),
+        })
       },
       error: () => { /* nunca derruba a tela */ },
     })
@@ -128,10 +200,11 @@ export function useZoomListas(): { efetivo: number; proprio: number | undefined;
  * variável para si (ver `PreviaLista.tsx`) e ficam imunes a este valor.
  */
 export function useAplicarZoomListas(): void {
-  const { efetivo } = useZoomListas()
+  const { efetivo, espaco } = useZoomListas()
   useEffect(() => {
     document.documentElement.style.setProperty('--zoom-lista', String(fatorDoZoom(efetivo)))
-  }, [efetivo])
+    document.documentElement.style.setProperty('--espaco-lancamento', `${normalizarEspaco(espaco)}px`)
+  }, [efetivo, espaco])
 }
 
 /* --- Escrita pelo lado do CLIENTE ----------------------------------------- */
@@ -145,6 +218,15 @@ export async function definirZoomDoUsuario(pct: number): Promise<void> {
   await salvarConfiguracaoIcones({ zoomListasPorAmbiente: mapa })
 }
 
+/** Personaliza o espaço entre lançamentos DESTE ambiente. */
+export async function definirEspacoDoUsuario(px: number): Promise<void> {
+  const cfg = await db.configuracoes.get(1)
+  const amb = await ambienteDoBanco()
+  const mapa = { ...(cfg?.espacoListasPorAmbiente ?? {}) }
+  mapa[amb] = normalizarEspaco(px)
+  await salvarConfiguracaoIcones({ espacoListasPorAmbiente: mapa })
+}
+
 /**
  * "Voltar ao padrão do app": apaga a camada deste ambiente. O que volta a
  * valer é o que o N0 publica HOJE — nunca uma constante congelada aqui.
@@ -153,8 +235,12 @@ export async function restaurarZoomPadraoDoApp(): Promise<void> {
   const cfg = await db.configuracoes.get(1)
   const amb = await ambienteDoBanco()
   const mapa = { ...(cfg?.zoomListasPorAmbiente ?? {}) }
+  const mapaEspaco = { ...(cfg?.espacoListasPorAmbiente ?? {}) }
   delete mapa[amb]
-  await salvarConfiguracaoIcones({ zoomListasPorAmbiente: mapa })
+  delete mapaEspaco[amb]
+  /* Restaura os DOIS de uma vez: o botão fala da aparência da lista, e deixar
+     um deles personalizado depois de "voltar ao padrão" seria uma surpresa. */
+  await salvarConfiguracaoIcones({ zoomListasPorAmbiente: mapa, espacoListasPorAmbiente: mapaEspaco })
 }
 
 /* --- Aplicação da publicação do N0 (roda no mount do App) ------------------ */
@@ -180,8 +266,11 @@ export async function aplicarZoomN0(): Promise<boolean> {
     }
     if (pub.escopo === 'todos') {
       const mapa = { ...(cfg?.zoomListasPorAmbiente ?? {}) }
+      const mapaEspaco = { ...(cfg?.espacoListasPorAmbiente ?? {}) }
       delete mapa[amb]
+      delete mapaEspaco[amb]
       patch.zoomListasPorAmbiente = mapa
+      patch.espacoListasPorAmbiente = mapaEspaco
     }
     await salvarConfiguracaoIcones(patch)
     return true
@@ -195,8 +284,16 @@ export async function aplicarZoomN0(): Promise<boolean> {
  * tela do N0 lista antes de publicar no escopo 'todos'. Sem servidor é tudo
  * que dá pra saber de verdade, e a tela diz isso com todas as letras.
  */
-export async function ambientesComZoomProprio(): Promise<{ ambiente: string; pct: number }[]> {
+export async function ambientesComZoomProprio(): Promise<
+  { ambiente: string; pct?: number; espacoPx?: number }[]
+> {
   const cfg = await db.configuracoes.get(1)
   const mapa = cfg?.zoomListasPorAmbiente ?? {}
-  return Object.entries(mapa).map(([ambiente, pct]) => ({ ambiente, pct }))
+  const mapaEspaco = cfg?.espacoListasPorAmbiente ?? {}
+  const ambientes = new Set([...Object.keys(mapa), ...Object.keys(mapaEspaco)])
+  return [...ambientes].map((ambiente) => ({
+    ambiente,
+    pct: mapa[ambiente],
+    espacoPx: mapaEspaco[ambiente],
+  }))
 }

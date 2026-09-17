@@ -822,6 +822,23 @@ nav.rodape {
    é `AplicadorZoomListas` (`src/zoomListas.ts`), montado uma vez no App. */
 :root { --zoom-lista: 1; }
 
+/* ESPAÇO ENTRE OS LANÇAMENTOS — build 095 (17/09/2026), pedido do Rafael logo
+   depois do zoom: *"crie mais um campo em px com setas pra aumentar ou
+   diminuir tbm o espaçamento entre os lançamentos na tela de lançamentos e
+   lançamentos na carteira"*.
+
+   Por que px aqui e % no zoom: fonte é uma ESCALA (dobrar 13px e 16px na
+   mesma proporção é o que mantém a hierarquia), espaço é uma DISTÂNCIA —
+   "quero 8px de respiro" é a pergunta que a pessoa faz, e um percentual sobre
+   5px daria números sem significado ("+60%" para ir a 8px).
+
+   O alcance é o RESPIRO acima e abaixo do corpo de cada lançamento (os 5px de
+   01/09/2026, agora parametrizados). A linha de data continua com 0px de
+   sobra: ela é separador de sessão, regra que já valia e que o pedido não
+   toca. Quem escreve o valor em vigor no <html> é `useAplicarZoomListas()`
+   (`src/zoomListas.ts`), junto do fator do zoom. */
+:root { --espaco-lancamento: 5px; }
+
 .barra-meta {
   position: relative;
   height: var(--espessura-barra);
@@ -1238,7 +1255,7 @@ nav.rodape {
      JS (`ALTURA_REF_ICONE.completa = 64`), nunca da altura real renderizada
      — o `min-height` que existia aqui antes era só um espelho visual dessa
      constante, não a fonte da verdade. */
-  padding: 5px 12px;
+  padding: var(--espaco-lancamento) 12px;
   border-radius: 8px;
   box-sizing: border-box;
 }
@@ -1248,7 +1265,7 @@ nav.rodape {
    horizontal de novo — evita dobrar o espaçamento lateral. O vertical de
    5px (acima) continua valendo aqui também, por isso não é zerado. */
 .item-lancamento-conteudo .linha-lancamento-completa {
-  padding: 5px 0;
+  padding: var(--espaco-lancamento) 0;
 }
 
 .llc-icone {
@@ -3787,6 +3804,16 @@ html[data-mloc-tema='claro'] .tarja-inativa {
    Item 2 do Rafael (17/09/2026). Ver `CampoPercentual.tsx` pro porquê de as
    setas serem botões de verdade em vez das setinhas nativas do
    `<input type="number">` (que não existem no celular). */
+
+/* O rótulo de cada campo com setas. Nasceu na build 095, quando o card passou
+   a ter DOIS campos (fontes em % e espaço em px) e um campo solto deixou de
+   dizer sozinho do que se trata. */
+.param-rotulo-campo {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--texto);
+  margin-bottom: 6px;
+}
 
 .campo-percentual {
   display: flex;

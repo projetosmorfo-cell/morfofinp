@@ -23,16 +23,17 @@
  * tarja de status nunca chega a chamar `alternarPago` com um lançamento que
  * não existe no banco.
  *
- * O ZOOM ENTRA PELA VARIÁVEL CSS, redefinida no próprio quadro
- * (`--zoom-lista`). É por isso que "hoje" e "como vai ficar" podem conviver na
- * mesma tela, com a mesma marcação e valores diferentes — ver `zoomListas.ts`.
+ * OS DOIS PARÂMETROS ENTRAM POR VARIÁVEL CSS, redefinidas no próprio quadro
+ * (`--zoom-lista` e, desde a build 095, `--espaco-lancamento`). É por isso que
+ * "hoje" e "como vai ficar" podem conviver na mesma tela, com a mesma marcação
+ * e valores diferentes — ver `zoomListas.ts`.
  */
 import type { CSSProperties } from 'react'
 import type { Categoria, Lancamento } from '../db'
 import LinhaLancamentoCompleta from './LinhaLancamentoCompleta'
 import { Icone } from '../icones'
 import { tamanhoIconePx, useConfiguracaoIcones } from '../configuracaoIcones'
-import { fatorDoZoom } from '../zoomListas'
+import { fatorDoZoom, normalizarEspaco } from '../zoomListas'
 import { fmtNum } from '../formatoMoeda'
 import { COR_PADRAO_CATEGORIAS, COR_PADRAO_GRUPOS } from '../pacotesIcones'
 
@@ -152,18 +153,26 @@ function CasoGrupos({ pctGrupo, pctCategoria }: { pctGrupo: number; pctCategoria
 export default function PreviaLista({
   titulo,
   zoomPct,
+  espacoPx,
   casos = ['lancamentos'],
   testid,
 }: {
   titulo: string
   zoomPct: number
+  /* Ausente = o quadro herda o espaço em vigor (é o caso da prévia dos
+     ícones, que não fala de espaçamento). */
+  espacoPx?: number
   casos?: ('lancamentos' | 'categorias' | 'grupos')[]
   testid?: string
 }) {
   const { pctCategoria, pctGrupo } = useConfiguracaoIcones()
-  /* `--zoom-lista` não existe no tipo de `CSSProperties` (é variável CSS, não
-     propriedade conhecida) — o cast é o caminho normal em React pra isso. */
-  const estilo = { '--zoom-lista': fatorDoZoom(zoomPct) } as CSSProperties
+  /* `--zoom-lista` e `--espaco-lancamento` não existem no tipo de
+     `CSSProperties` (são variáveis CSS, não propriedades conhecidas) — o cast
+     é o caminho normal em React pra isso. */
+  const estilo = {
+    '--zoom-lista': fatorDoZoom(zoomPct),
+    ...(espacoPx === undefined ? {} : { '--espaco-lancamento': `${normalizarEspaco(espacoPx)}px` }),
+  } as CSSProperties
 
   return (
     <div className="previa-lista" data-testid={testid}>

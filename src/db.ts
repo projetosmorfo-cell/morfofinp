@@ -534,6 +534,13 @@ export interface ConfiguracaoIcones {
      ambiente já processou. Aditivos, não indexados, sem bump de schema. */
   zoomListasPorAmbiente?: Record<string, number>
   zoomVersaoPorAmbiente?: Record<string, number>
+  /* Espaçamento vertical entre os lançamentos da mesma lista, em PIXELS
+     (build 094, 2ª rodada). Parâmetro irmão do zoom acima e guardado do mesmo
+     jeito: é o respiro acima e abaixo do corpo de cada lançamento (5px desde
+     01/09/2026), não o espaço entre as sessões de data. Os dois compartilham a
+     marca de versão `zoomVersaoPorAmbiente`, porque o N0 publica os dois na
+     mesma ação. */
+  espacoListasPorAmbiente?: Record<string, number>
   /* `modoVisao` EXISTIU de 04/09 a 16/09/2026 e foi REMOVIDO na build 087
      junto com o conceito de versão (Light/Ideal/Premium/Completa). O app tem
      UM conjunto de abas para todo mundo — ver o cabeçalho de

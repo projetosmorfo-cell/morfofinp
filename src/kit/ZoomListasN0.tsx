@@ -27,8 +27,13 @@ import {
   ZOOM_LISTAS_MIN,
   ZOOM_LISTAS_MAX,
   ZOOM_LISTAS_PASSO,
+  ESPACO_LISTAS_PADRAO,
+  ESPACO_LISTAS_MIN,
+  ESPACO_LISTAS_MAX,
+  ESPACO_LISTAS_PASSO,
   ambientesComZoomProprio,
   padraoDoAppZoom,
+  padraoDoAppEspaco,
 } from '../zoomListas'
 
 const DEV_TXT2 = '#9B96A8'
@@ -36,11 +41,15 @@ const DEV_TXT2 = '#9B96A8'
 interface Afetado {
   ambiente: string
   nome: string
-  pct: number
+  /* Opcionais porque um ambiente pode ter personalizado SÓ um dos dois
+     parâmetros (zoom das fontes ou espaço entre lançamentos). */
+  pct?: number
+  espacoPx?: number
 }
 
 export default function ZoomListasN0({ notify }: { notify: (m: string) => void }) {
   const [pct, setPct] = useState<number | null>(null)
+  const [espaco, setEspaco] = useState(ESPACO_LISTAS_PADRAO)
   const [versao, setVersao] = useState(0)
   const [escopo, setEscopo] = useState<EscopoPublicacao>('naoEditados')
   const [afetados, setAfetados] = useState<Afetado[] | null>(null)
@@ -52,6 +61,7 @@ export default function ZoomListasN0({ notify }: { notify: (m: string) => void }
       lista.map((x) => ({
         ambiente: x.ambiente,
         pct: x.pct,
+        espacoPx: x.espacoPx,
         nome:
           x.ambiente === AMBIENTE_DESTE_APARELHO
             ? `${nomes.get(x.ambiente) ?? 'Ambiente deste aparelho'} (este aparelho)`
@@ -67,6 +77,7 @@ export default function ZoomListasN0({ notify }: { notify: (m: string) => void }
       setVersao(pub?.versao ?? 0)
       if (pub?.escopo) setEscopo(pub.escopo)
       setPct(padraoDoAppZoom(pub))
+      setEspaco(padraoDoAppEspaco(pub))
       const nomes = new Map<string, string>()
       for (const t of platform.tenants ?? []) nomes.set(t.id, t.companyName || t.id)
       await carregarAfetados(nomes)
@@ -79,7 +90,7 @@ export default function ZoomListasN0({ notify }: { notify: (m: string) => void }
     if (pct === null) return
     setSalvando(true)
     try {
-      const nova = await salvarZoomListasN0(pct, escopo)
+      const nova = await salvarZoomListasN0(pct, espaco, escopo)
       setVersao(nova)
       notify(
         escopo === 'todos'
@@ -98,14 +109,16 @@ export default function ZoomListasN0({ notify }: { notify: (m: string) => void }
 
   return <>
     <p style={{ fontSize: 11.5, color: DEV_TXT2, lineHeight: 1.6, margin: '0 0 12px' }}>
-      O tamanho das fontes da lista de lançamentos (menu Lançamentos e dentro de cada carteira) com que um cliente
-      NOVO começa. <strong style={{ color: '#fff' }}>0% é o tamanho original do produto</strong>; negativo diminui.
-      Não iguala os tamanhos entre si — é um zoom sobre o que cada elemento já tem. Versão publicada hoje:{' '}
+      A aparência da lista de lançamentos (menu Lançamentos e dentro de cada carteira) com que um cliente
+      NOVO começa: o tamanho das fontes e o espaço entre um lançamento e outro.{' '}
+      <strong style={{ color: '#fff' }}>0% é o tamanho original do produto</strong>; negativo diminui.
+      O percentual não iguala os tamanhos entre si — é um zoom sobre o que cada elemento já tem. Versão publicada hoje:{' '}
       <strong style={{ color: '#fff' }}>{versao === 0 ? 'nenhuma (vale o padrão de fábrica)' : versao}</strong>.
     </p>
 
-    <SectionLabel dark>Tamanho padrão</SectionLabel>
+    <SectionLabel dark>Padrão de fábrica</SectionLabel>
     <div style={{ background: DEV_CARD, borderRadius: 12, padding: 12 }} data-testid="n0-zoom-bloco">
+      <div className="param-rotulo-campo" style={{ color: '#fff' }}>Tamanho das fontes</div>
       <CampoPercentual
         valor={pct}
         onChange={setPct}
@@ -115,8 +128,33 @@ export default function ZoomListasN0({ notify }: { notify: (m: string) => void }
         testid="n0-zoom"
         ariaLabel="Percentual padrão das fontes da lista"
       />
-      <PreviaLista titulo="Tamanho original do produto" zoomPct={ZOOM_LISTAS_PADRAO} testid="n0-previa-hoje" />
-      <PreviaLista titulo="Como o cliente novo vai ver" zoomPct={pct} testid="n0-previa-resultado" />
+
+      <div className="param-rotulo-campo" style={{ color: '#fff', marginTop: 14 }}>
+        Espaço entre os lançamentos
+      </div>
+      <CampoPercentual
+        valor={espaco}
+        onChange={setEspaco}
+        min={ESPACO_LISTAS_MIN}
+        max={ESPACO_LISTAS_MAX}
+        passo={ESPACO_LISTAS_PASSO}
+        sufixo="px"
+        testid="n0-espaco"
+        ariaLabel="Espaço padrão em pixels entre os lançamentos"
+      />
+
+      <PreviaLista
+        titulo="Tamanho original do produto"
+        zoomPct={ZOOM_LISTAS_PADRAO}
+        espacoPx={ESPACO_LISTAS_PADRAO}
+        testid="n0-previa-hoje"
+      />
+      <PreviaLista
+        titulo="Como o cliente novo vai ver"
+        zoomPct={pct}
+        espacoPx={espaco}
+        testid="n0-previa-resultado"
+      />
     </div>
 
     <SectionLabel dark>Alcance da publicação</SectionLabel>
@@ -148,7 +186,15 @@ export default function ZoomListasN0({ notify }: { notify: (m: string) => void }
         {afetados?.map((a) => (
           <div key={a.ambiente} style={{ fontSize: 11.5, color: '#fff', marginBottom: 4 }}>
             • {a.nome}
-            <span style={{ color: DEV_TXT2 }}> — escolheu {a.pct > 0 ? '+' : ''}{a.pct}%</span>
+            <span style={{ color: DEV_TXT2 }}>
+              {' '}— escolheu{' '}
+              {[
+                a.pct === undefined ? null : `${a.pct > 0 ? '+' : ''}${a.pct}% de fonte`,
+                a.espacoPx === undefined ? null : `${a.espacoPx}px de espaço`,
+              ]
+                .filter(Boolean)
+                .join(' e ')}
+            </span>
           </div>
         ))}
         <p style={{ fontSize: 11, color: '#F5C26B', lineHeight: 1.6, margin: '8px 0 0' }}>
@@ -164,13 +210,20 @@ export default function ZoomListasN0({ notify }: { notify: (m: string) => void }
       <button type="button" style={{ ...primaryBtn, flex: 1 }} disabled={salvando} data-testid="n0-zoom-publicar" onClick={() => void publicar()}>
         {salvando ? 'Publicando…' : escopo === 'todos' ? 'Publicar para todos' : 'Publicar para quem não mexeu'}
       </button>
-      <button type="button" style={{ ...secondaryBtn }} onClick={() => setPct(ZOOM_LISTAS_PADRAO)}>
+      <button
+        type="button"
+        style={{ ...secondaryBtn }}
+        onClick={() => {
+          setPct(ZOOM_LISTAS_PADRAO)
+          setEspaco(ESPACO_LISTAS_PADRAO)
+        }}
+      >
         Padrão de fábrica
       </button>
     </div>
     <p style={{ fontSize: 11, color: DEV_TXT2, lineHeight: 1.6, margin: '8px 0 0' }}>
-      "Padrão de fábrica" só recarrega o campo desta tela com o valor original do produto — nada é publicado enquanto
-      você não tocar em publicar.
+      "Padrão de fábrica" só recarrega os campos desta tela com os valores originais do produto — nada é publicado
+      enquanto você não tocar em publicar.
     </p>
   </>
 }

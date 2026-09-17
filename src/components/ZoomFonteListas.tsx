@@ -22,29 +22,35 @@ import ConfirmacaoAcao from './ConfirmacaoAcao'
 import {
   useZoomListas,
   definirZoomDoUsuario,
+  definirEspacoDoUsuario,
   restaurarZoomPadraoDoApp,
   ZOOM_LISTAS_MIN,
   ZOOM_LISTAS_MAX,
   ZOOM_LISTAS_PASSO,
+  ESPACO_LISTAS_MIN,
+  ESPACO_LISTAS_MAX,
+  ESPACO_LISTAS_PASSO,
 } from '../zoomListas'
 
 export default function ZoomFonteListas() {
-  const { efetivo, proprio, padraoApp } = useZoomListas()
+  const { efetivo, proprio, padraoApp, espaco, espacoProprio, espacoPadraoApp } = useZoomListas()
   const [confirmando, setConfirmando] = useState(false)
 
   return (
     <>
-      <h2>Tamanho das Fontes das Listas</h2>
+      <h2>Aparência das Listas de Lançamento</h2>
       <div className="cartao" data-testid="card-zoom-fontes">
         <p className="texto-fraco" style={{ marginTop: 0 }}>
-          Aumenta ou diminui, de uma vez, todas as fontes da lista de lançamentos (menu Lançamentos e
-          dentro de cada carteira). <strong>0% é o tamanho de hoje.</strong> Negativo diminui.
+          Ajusta a lista de lançamentos (menu Lançamentos e dentro de cada carteira): o tamanho das
+          fontes e o espaço entre um lançamento e outro. <strong>0% é o tamanho de hoje</strong> —
+          negativo diminui.
         </p>
         <p className="texto-fraco" style={{ marginTop: 0, fontSize: 11.5 }}>
-          Não iguala os tamanhos: o título, o valor, a tarja e a conta continuam com as proporções que
-          têm hoje — é como aproximar ou afastar a tela.
+          O percentual não iguala os tamanhos: o título, o valor, a tarja e a conta continuam com as
+          proporções que têm hoje — é como aproximar ou afastar a tela.
         </p>
 
+        <div className="param-rotulo-campo">Tamanho das fontes</div>
         <CampoPercentual
           valor={efetivo}
           onChange={(v) => void definirZoomDoUsuario(v)}
@@ -55,10 +61,39 @@ export default function ZoomFonteListas() {
           ariaLabel="Percentual de aumento das fontes da lista"
         />
 
-        <PreviaLista titulo="Tamanho de hoje" zoomPct={padraoApp} testid="previa-zoom-hoje" />
-        <PreviaLista titulo="Como vai ficar" zoomPct={efetivo} testid="previa-zoom-resultado" />
+        {/* O segundo campo é em PIXELS, não em porcentagem: espaço é uma
+            distância ("quero 8px de respiro"), não uma escala — ver o
+            cabeçalho de `zoomListas.ts`. */}
+        <div className="param-rotulo-campo" style={{ marginTop: 14 }}>Espaço entre os lançamentos</div>
+        <CampoPercentual
+          valor={espaco}
+          onChange={(v) => void definirEspacoDoUsuario(v)}
+          min={ESPACO_LISTAS_MIN}
+          max={ESPACO_LISTAS_MAX}
+          passo={ESPACO_LISTAS_PASSO}
+          sufixo="px"
+          testid="espaco-lancamento"
+          ariaLabel="Espaço em pixels acima e abaixo de cada lançamento"
+        />
+        <p className="texto-fraco" style={{ marginTop: 6, fontSize: 11.5 }}>
+          É o respiro acima e abaixo de cada lançamento. A linha com a data continua colada na
+          lista — ela separa os dias.
+        </p>
 
-        {proprio !== undefined && (
+        <PreviaLista
+          titulo="Como está hoje"
+          zoomPct={padraoApp}
+          espacoPx={espacoPadraoApp}
+          testid="previa-zoom-hoje"
+        />
+        <PreviaLista
+          titulo="Como vai ficar"
+          zoomPct={efetivo}
+          espacoPx={espaco}
+          testid="previa-zoom-resultado"
+        />
+
+        {(proprio !== undefined || espacoProprio !== undefined) && (
           <button
             type="button"
             className="secundario"
@@ -74,7 +109,11 @@ export default function ZoomFonteListas() {
       {confirmando && (
         <ConfirmacaoAcao
           titulo="Voltar ao padrão do app"
-          aviso={`O tamanho escolhido aqui (${efetivo > 0 ? '+' : ''}${efetivo}%) é apagado e passa a valer o padrão do app (${padraoApp > 0 ? '+' : ''}${padraoApp}%).`}
+          aviso={
+            `O que foi escolhido aqui é apagado — o tamanho das fontes ` +
+            `(${efetivo > 0 ? '+' : ''}${efetivo}%) e o espaço entre os lançamentos (${espaco}px) — ` +
+            `e passa a valer o padrão do app (${padraoApp > 0 ? '+' : ''}${padraoApp}% e ${espacoPadraoApp}px).`
+          }
           onConfirmar={async () => {
             await restaurarZoomPadraoDoApp()
             setConfirmando(false)

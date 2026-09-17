@@ -147,6 +147,7 @@ export function useConfiguracaoIcones(): Required<
        `src/zoomListas.ts` — este hook devolve só os 3 percentuais de ícone. */
     | 'zoomListasPorAmbiente'
     | 'zoomVersaoPorAmbiente'
+    | 'espacoListasPorAmbiente'
     /* 16/09/2026 (build 086): marca da criação da conta cofrinho padrão — ver
        `garantirContaCofrinho()` em `src/contasCofrinho.ts`. É marca de
        migração, não configuração de ícone/visão. */
