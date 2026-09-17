@@ -14,17 +14,29 @@
  * passos tinha um botão "fazer" que abria o PLANEJAMENTO — tela que mostra
  * resultado, não cadastro. A pessoa chegava lá sem nada pra fazer.
  *
- * O que é agora — dois passos, um de cada vez, ocupando o app inteiro:
+ * O que é agora — TRÊS passos (build 096), um de cada vez, ocupando o app
+ * inteiro:
  *
  *     PASSO 1  o cadastro da categoria de receita fixa (a "Salário" já
  *              existente, ou uma nova com esse nome), com a flag de receita
  *              fixa marcada e a mensagem de por que ela precisa existir.
  *              Gravar só é possível com valor > 0 e a flag ligada.
- *     PASSO 2  a própria tela "Categorias, Grupos e Metas", em modo primeiro
+ *     PASSO 2  a própria tela "Contas e Carteiras", em modo primeiro acesso —
+ *              onde o dinheiro está, com SALDO INICIAL e data de cada conta.
+ *              (build 096, pedido do Rafael: "abrir tela pra informar saldo
+ *              inicial e data após ou junto com cadastro de contas".)
+ *     PASSO 3  a própria tela "Categorias, Grupos e Metas", em modo primeiro
  *              acesso (sem "Voltar", com o botão "Concluir e ir para o
  *              Planejamento" no rodapé, liberado só quando os percentuais
  *              dos grupos somam 100% e a receita fixa continua válida).
  *     FIM      grava `primeiroAcessoConcluido` e o app abre no Planejamento.
+ *
+ * REFAZER QUANDO QUISER (build 096, mesmo pedido: "esse passo a passo, entendo
+ * que poderia ficar nas config > Ajuda pra repetir quando quiser"). Aberto
+ * por ali, o passo a passo é o MESMO — a única diferença é a prop `aoSair`,
+ * que acrescenta uma saída no cabeçalho. No fluxo obrigatório ela não existe,
+ * e é isso que mantém a regra de "sem saída até concluir": quem já concluiu
+ * uma vez e voltou por vontade própria pode sair a qualquer momento.
  *
  * QUEM ENTRA AQUI: só quem viu as boas-vindas, ainda não concluiu este passo a
  * passo E não tem plano pronto (`usePlanoPronto` === false — o mesmo critério
@@ -56,6 +68,7 @@ import {
   type RascunhoCategoria,
 } from './FormulariosCadastro'
 import Categorias from '../screens/Categorias'
+import Contas from '../screens/Contas'
 import { mesAtualISO } from '../mes'
 import { NOME_PRODUTO } from '../kit/siteKit'
 
@@ -102,20 +115,46 @@ function pendenciaDoPasso1(r: RascunhoCategoria): string | null {
   return null
 }
 
-export default function PrimeiroAcesso({ aoConcluir }: { aoConcluir: () => void }) {
-  const [passo, setPasso] = useState<1 | 2>(1)
+export default function PrimeiroAcesso({ aoConcluir, aoSair }: { aoConcluir: () => void; aoSair?: () => void }) {
+  const [passo, setPasso] = useState<1 | 2 | 3>(1)
   const mes = mesAtualISO()
+
+  /* A saída só existe quando o passo a passo foi reaberto pela Ajuda — no
+     primeiro acesso de verdade ela não é renderizada. Fica sobre o conteúdo,
+     no canto, pra não empurrar o cabeçalho de cada passo (que é de outra
+     tela e tem layout próprio). */
+  const saida = aoSair && (
+    <button
+      type="button"
+      className="botao-sair-passo-a-passo"
+      data-testid="primeiro-acesso-sair"
+      onClick={aoSair}
+    >
+      Sair do passo a passo
+    </button>
+  )
 
   if (passo === 1) {
     return (
       <main data-testid="primeiro-acesso" data-passo="1">
+        {saida}
         <PassoReceitaFixa aoGravar={() => setPasso(2)} />
       </main>
     )
   }
 
+  if (passo === 2) {
+    return (
+      <main data-testid="primeiro-acesso" data-passo="2">
+        {saida}
+        <Contas aoVoltar={() => setPasso(1)} primeiroAcesso={{ aoConcluir: () => setPasso(3) }} />
+      </main>
+    )
+  }
+
   return (
-    <main data-testid="primeiro-acesso" data-passo="2">
+    <main data-testid="primeiro-acesso" data-passo="3">
+      {saida}
       <Categorias
         mes={mes}
         aoMudarMes={() => {}}
@@ -198,7 +237,7 @@ function FormularioReceitaFixa({
       <div className="cabecalho-fixo">
         <h1>Primeiro acesso</h1>
         <p className="ideal-t4" style={{ margin: '4px 0 0', color: 'var(--azul)', fontWeight: 600 }} data-testid="primeiro-acesso-passo">
-          Passo 1 de 2 — sua receita fixa
+          Passo 1 de 3 — sua receita fixa
         </p>
       </div>
 

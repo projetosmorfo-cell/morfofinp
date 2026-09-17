@@ -88,7 +88,7 @@ const SESSAO_1: DefItem[] = [
      na sessão "Do dia a dia" — é parâmetro que a pessoa mexe de vez em quando,
      não ajuste de sistema. O que é interno mora só no N0. */
   { key: 'notificacoesRegras', icon: SlidersHorizontal, titulo: 'Regras de Notificação Bancária', resumo: 'Repetição, tolerância de valor, filtro de propaganda e o de/para aprendido' },
-  { key: 'ajuda', icon: LifeBuoy, titulo: 'Ajuda', resumo: 'Suporte por chat e tour guiado do sistema' },
+  { key: 'ajuda', icon: LifeBuoy, titulo: 'Ajuda', resumo: 'Suporte por chat, tour guiado e refazer o primeiro acesso' },
 ]
 
 const SESSAO_2: DefItem[] = [

@@ -518,7 +518,7 @@ export default function Categorias(
         )}
         {primeiroAcesso && (
           <p className="ideal-t4" style={{ margin: '0 0 4px', color: 'var(--azul)', fontWeight: 600 }} data-testid="primeiro-acesso-passo">
-            Passo 2 de 2 — grupos, categorias e metas
+            Passo 3 de 3 — grupos, categorias e metas
           </p>
         )}
         <h1>Categorias, Grupos e Metas</h1>

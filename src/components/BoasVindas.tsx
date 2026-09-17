@@ -138,11 +138,16 @@ export default function BoasVindas({ aoComecar, planoPronto = false }: { aoComec
         />
         <Linha
           n={2}
+          titulo="Diga onde seu dinheiro está"
+          texto="Conta do banco, cartão e cofrinho — com o saldo que já havia em cada um e desde quando. É isso que faz a Carteira bater com o banco."
+        />
+        <Linha
+          n={3}
           titulo="Ajuste grupos, categorias e metas"
           texto="Como dividir esse dinheiro, por percentual — já vem sugerido 50% para o fixo, 30% para o variável e 20% para investir."
         />
         <Linha
-          n={3}
+          n={4}
           titulo="O Planejamento abre e o app compara o real com o plano"
           texto="Todo dia, em dois números: o que está livre de verdade e o quanto ainda dá para economizar até o fim do mês."
         />
@@ -150,7 +155,7 @@ export default function BoasVindas({ aoComecar, planoPronto = false }: { aoComec
         <p className="ideal-t4 texto-quebra" style={{ margin: '18px 0 0' }} data-testid="boas-vindas-rodape">
           {planoPronto
             ? 'Seu plano já está montado — toque em Começar e o app abre direto.'
-            : 'Os passos 1 e 2 são obrigatórios e vêm em seguida, um de cada vez. O resto do app só abre depois deles.'}
+            : 'Os passos 1, 2 e 3 são obrigatórios e vêm em seguida, um de cada vez. O resto do app só abre depois deles — e dá pra refazer quando quiser, em Configuração → Ajuda.'}
         </p>
       </div>
 

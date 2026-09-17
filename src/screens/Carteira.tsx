@@ -14,7 +14,7 @@ import { janelaFatura, lancamentosDoCiclo, situacaoDaFatura, DIA_FECHAMENTO_PADR
 import { totalDoLugar, lancamentosDoCofrinhoVirtual } from '../totaisCarteira'
 import { formatarCabecalhoData } from '../formatoData'
 import { fundoDaLinhaDeData } from '../statusPagamento'
-import SaldoDoCofrinho, { LinhaInformeSaldo } from '../components/SaldoDoCofrinho'
+import SaldoDoCofrinho, { LinhaInformeSaldo, LinhaVariacaoCofrinho } from '../components/SaldoDoCofrinho'
 import { fmtBRL } from '../formatoMoeda'
 import { useHojeSimuladoISO } from '../hojeSimulado'
 import TituloTelaN1 from '../kit/CabecalhoN1'
@@ -227,6 +227,12 @@ export default function Carteira({ mes, aoMudarMes, aoAbrirLancamento }: TelaPro
             className="card-conta"
             onClick={() => setSelecionado(conta.id!)}
           >
+            {/* Build 096 (pedido do Rafael): TODO card de cofrinho mostra,
+                ACIMA do total, quanto variou desde a última atualização do
+                saldo real — valor, percentual e seta. Só cofrinho: numa conta
+                corrente ou num cartão não existe "atualização de saldo" a
+                comparar. Ver `LinhaVariacaoCofrinho`. */}
+            {conta.tipo === 'cofre' && <LinhaVariacaoCofrinho contaId={conta.id!} />}
             <div className="linha-destaque" style={{ marginTop: 0 }}>
               {/* Ícone da carteira (10/09/2026) — o mesmo selo redondo
                   cadastrado em "Contas e carteiras". */}

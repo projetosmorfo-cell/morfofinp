@@ -77,6 +77,91 @@ export function useUltimoInforme(contaId: number): InformeSaldo | null {
   return { valor: ultimo.saldoInformado, data, dias, velho: dias >= DIAS_PARA_ENVELHECER }
 }
 
+/**
+ * A VARIAÇÃO DO COFRINHO ENTRE AS DUAS ÚLTIMAS ATUALIZAÇÕES (build 096).
+ *
+ * Pedido do Rafael: *"o card do cofrinho na tela principal da carteira, esses
+ * do tipo cofrinho deve sim mostrar uma linha acima do total com menos
+ * destaque mas com cor, mostrando quando variou desde a última atualização,
+ * em valor e percentual e com setinha pra cima ou pra baixo."*
+ *
+ * O QUE É COMPARADO, e por quê: o saldo informado da última vez contra o
+ * informado da vez anterior. O card já mostra o último informe como número
+ * principal, então "desde a última atualização" só pode ser medido contra o
+ * informe que veio antes dele — e é essa a leitura útil de um cofrinho: quanto
+ * ele cresceu (ou encolheu) de uma conferência para a outra.
+ *
+ * NÃO é a diferença entre informado e calculado: essa já existe, na linha
+ * "…desde os lançamentos" logo abaixo, e repetir o mesmo número com outro
+ * nome é exatamente o que este projeto já desfez duas vezes.
+ *
+ * A variação inclui o que foi APORTADO no período, não só rendimento — o app
+ * não separa os dois dentro do cofrinho e não precisa. É a variação do saldo,
+ * e é isso que a linha diz.
+ *
+ * Com menos de duas atualizações não há o que comparar e a linha não existe —
+ * nunca um "0,0%" que parece resposta.
+ */
+interface VariacaoCofrinho {
+  /** Quanto variou, com sinal. */
+  valor: number
+  /** O mesmo, em percentual sobre o saldo anterior — `null` se ele era zero. */
+  percentual: number | null
+  /** Data do informe anterior, `AAAA-MM-DD`. */
+  desde: string
+}
+
+/* Interno de propósito: só `LinhaVariacaoCofrinho` usa. Exportar um hook
+   daqui acrescenta um aviso de fast-refresh sem nenhum ganho. */
+function useVariacaoDesdeUltimoInforme(contaId: number): VariacaoCofrinho | null {
+  const registros = useLiveQuery(() => lerDoAmbiente(db.saldosInformados.toArray()), [])
+  if (!registros) return null
+  const daConta = registros
+    .filter((r) => r.contaId === contaId)
+    .sort((a, b) => b.dataReferencia.localeCompare(a.dataReferencia))
+  if (daConta.length < 2) return null
+  const [atual, anterior] = daConta
+  const valor = atual.saldoInformado - anterior.saldoInformado
+  const base = Math.abs(anterior.saldoInformado)
+  return {
+    valor,
+    percentual: base >= 0.005 ? (valor / base) * 100 : null,
+    desde: dataDoInforme(anterior.dataReferencia),
+  }
+}
+
+/** `AAAAMMDD` (ou o `AAAAMM` antigo) → `AAAA-MM-DD`. */
+function dataDoInforme(bruto: string): string {
+  return bruto.length >= 8
+    ? `${bruto.slice(0, 4)}-${bruto.slice(4, 6)}-${bruto.slice(6, 8)}`
+    : `${bruto.slice(0, 4)}-${bruto.slice(4, 6)}-01`
+}
+
+/**
+ * A linha de variação, ACIMA do total do card — menos destaque que o número
+ * grande, mas com cor e seta. Some quando não há duas atualizações ou quando a
+ * variação é zero.
+ */
+export function LinhaVariacaoCofrinho({ contaId }: { contaId: number }) {
+  const v = useVariacaoDesdeUltimoInforme(contaId)
+  if (!v || Math.abs(v.valor) < 0.005) return null
+  const sobe = v.valor > 0
+  const [ano, mes, dia] = v.desde.split('-')
+  return (
+    <span
+      className={`linha-variacao-cofrinho ${sobe ? 'valor-pos' : 'valor-neg'}`}
+      data-testid="variacao-cofrinho"
+    >
+      <span aria-hidden="true">{sobe ? '▲' : '▼'}</span>{' '}
+      {sobe ? '+' : '−'}{fmtBRL(Math.abs(v.valor))}
+      {v.percentual != null && <>{' · '}{sobe ? '+' : '−'}{Math.abs(v.percentual).toFixed(1).replace('.', ',')}%</>}
+      <span className="texto-fraco">
+        {' '}desde {dia}/{mes}/{ano.slice(2)}
+      </span>
+    </span>
+  )
+}
+
 export async function informarSaldo(contaId: number, valor: number) {
   const hoje = hojeEfetivoISO()
   await db.saldosInformados.add({
@@ -226,6 +311,8 @@ export default function SaldoDoCofrinho({
 
   return (
     <>
+      {/* Build 096: a variação vem ACIMA do total, como pedido. */}
+      <LinhaVariacaoCofrinho contaId={contaId} />
       <div className="linha-destaque" style={{ marginTop: 0 }}>
         <strong style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
           {selo}

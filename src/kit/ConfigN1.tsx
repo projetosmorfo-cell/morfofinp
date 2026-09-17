@@ -10,7 +10,7 @@ import {
   lerPlatformN0Persistida, type UsuarioTenant,
 } from './kitPlatform'
 import { alpha } from './kitBase'
-import { MessageCircle, Navigation, type LucideIcon } from 'lucide-react'
+import { Flag, MessageCircle, Navigation, type LucideIcon } from 'lucide-react'
 
 // N1 → engrenagem: as 4 telas de Configurações do Projeto Modelo que ainda
 // não existiam aqui (10/09/2026, Decisão 55 — Parte B): "Meus Dados", "Meu
@@ -252,8 +252,13 @@ export function AparenciaN1({ aoVoltar }: { aoVoltar: () => void }) {
 }
 
 /* ================= Ajuda (Projeto Modelo) ================= */
-export function AjudaN1({ aoVoltar, abrirSuporte, abrirTour, temNaoLida }: {
-  aoVoltar: () => void; abrirSuporte: () => void; abrirTour: () => void; temNaoLida?: boolean
+export function AjudaN1({ aoVoltar, abrirSuporte, abrirTour, abrirPrimeiroAcesso, temNaoLida }: {
+  aoVoltar: () => void; abrirSuporte: () => void; abrirTour: () => void
+  /* Build 096 — pedido do Rafael: "esse passo a passo, entendo que poderia
+     ficar nas config > Ajuda pra repetir quando quiser". É o MESMO passo a
+     passo do primeiro acesso (`PrimeiroAcesso.tsx`), reaberto com saída. */
+  abrirPrimeiroAcesso: () => void
+  temNaoLida?: boolean
 }) {
   // Cartão grande com ícone (Projeto Modelo `AjudaView` → `cardGrande`): cada
   // item ganha um selo de ícone à esquerda, igual ao Kit — corrigido
@@ -278,5 +283,6 @@ export function AjudaN1({ aoVoltar, abrirSuporte, abrirTour, temNaoLida }: {
     <Cabecalho titulo="Ajuda" aoVoltar={aoVoltar} />
     {card(MessageCircle, 'Suporte Morfo (chat)', 'Fale com o time da Morfo pelo chat interno', abrirSuporte, temNaoLida)}
     {card(Navigation, 'Tour guiado', 'Rever o passo a passo de uso do sistema, na tela real', abrirTour)}
+    {card(Flag, 'Refazer o primeiro acesso', 'Receita fixa, contas com saldo inicial e as metas — na mesma ordem da primeira vez', abrirPrimeiroAcesso)}
   </>
 }

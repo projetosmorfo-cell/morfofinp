@@ -3212,6 +3212,19 @@ html[data-mloc-tema='claro'] .tarja-inativa {
    ganha mais respiro embaixo porque aqui NÃO existe barra de abas por baixo. */
 .rodape-primeiro-acesso { padding-bottom: 16px; z-index: 8; }
 
+/* Saída do passo a passo quando ele foi REABERTO pela Ajuda (build 096). No
+   primeiro acesso de verdade este botão não é renderizado — a regra de "sem
+   saída até concluir" continua valendo lá.
+   Fica no fluxo normal, ANTES do cabeçalho — nunca `position: absolute` nem um
+   segundo `sticky` disputando o `top: 0` com o cabeçalho de cada passo, que é
+   como já nasceram dois bugs reais de elemento fixo cobrindo outro. */
+.botao-sair-passo-a-passo {
+  display: block; margin: 0 0 4px auto;
+  background: var(--bg-elevado); border: 1px solid var(--borda); border-radius: 999px;
+  color: var(--texto-fraco); font-size: 12px; font-weight: 600;
+  padding: 7px 12px; min-height: 32px; cursor: pointer;
+}
+
 /* Cabeçalho A1 do card de grupo (build 059): o percentual é o número grande,
    o R$ é a consequência dele, e a contagem de categorias desce pra segunda
    linha do nome — antes ela dividia a linha principal com o nome do grupo. */
@@ -3374,6 +3387,18 @@ html[data-mloc-tema='claro'] .tarja-inativa {
 
 /* Saldo informado do cofrinho (13/09/2026) — ver SaldoDoCofrinho.tsx. */
 .informe-velho { color: var(--ideal-ambar-txt); }
+
+/* A variação do cofrinho desde a última atualização do saldo (build 096):
+   "uma linha acima do total com menos destaque mas com cor". Menos destaque =
+   12px contra o número grande do card; a cor e a seta vêm de `.valor-pos`/
+   `.valor-neg`, os mesmos tokens de sobe/desce do app inteiro — nunca um verde
+   ou vermelho próprio. O trecho "desde dd/mm/aa" veste `.texto-fraco` dentro
+   da própria linha: é referência, não é o número. */
+.linha-variacao-cofrinho {
+  display: block; margin: 0 0 4px; font-size: 12px; font-weight: 700;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.linha-variacao-cofrinho .texto-fraco { font-weight: 600; }
 /* Informar o saldo do cofrinho é a AÇÃO da tela, não uma nota de rodapé
    (build 059). Era um link azul no meio de uma frase — imperceptível, do jeito
    que o Rafael reportou. Virou botão de largura inteira, com contorno. */

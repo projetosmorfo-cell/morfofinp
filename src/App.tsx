@@ -994,9 +994,16 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: ModoConsultaN
     !onboarding.primeiroAcessoConcluido &&
     planoPronto === false
   if (deveEntrarNoPrimeiroAcesso && !primeiroAcessoAtivo) setPrimeiroAcessoAtivo(true)
+  /* REABERTO PELA AJUDA (build 096): é estado local, nunca uma limpeza de
+     `primeiroAcessoConcluido` no banco. Apagar a marca reabriria o passo a
+     passo OBRIGATÓRIO — e, pior, ele nem abriria: `deveEntrarNoPrimeiroAcesso`
+     também exige `planoPronto === false`, e quem já concluiu tem plano. Este
+     estado é o que distingue os dois modos e o que liga a saída. */
+  const [primeiroAcessoRefeito, setPrimeiroAcessoRefeito] = useState(false)
   const concluirPrimeiroAcesso = () => {
     void salvarConfiguracaoIcones({ primeiroAcessoConcluido: true })
     setPrimeiroAcessoAtivo(false)
+    setPrimeiroAcessoRefeito(false)
     setConfigAberta(null)
     setTela('planejamento')
   }
@@ -1047,8 +1054,15 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: ModoConsultaN
 
   /* Isolado de verdade: nem barra de marca, nem rodapé, nem "Voltar". A única
      saída é concluir (ver o cabeçalho de `PrimeiroAcesso.tsx`). */
-  if (primeiroAcessoAtivo) {
-    return <PrimeiroAcesso aoConcluir={concluirPrimeiroAcesso} />
+  if (primeiroAcessoAtivo || primeiroAcessoRefeito) {
+    return (
+      <PrimeiroAcesso
+        aoConcluir={concluirPrimeiroAcesso}
+        /* A saída existe SÓ quando o passo a passo foi reaberto pela Ajuda —
+           no primeiro acesso de verdade continua sem porta. */
+        aoSair={primeiroAcessoRefeito && !primeiroAcessoAtivo ? () => setPrimeiroAcessoRefeito(false) : undefined}
+      />
+    )
   }
 
   return (
@@ -1316,6 +1330,7 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: ModoConsultaN
               aoVoltar={fecharConfig}
               abrirSuporte={() => { setVoltaPara('ajuda'); setConfigAberta('suporte') }}
               abrirTour={() => { setConfigAberta(null); setTourAberto(true) }}
+              abrirPrimeiroAcesso={() => { setConfigAberta(null); setPrimeiroAcessoRefeito(true) }}
               temNaoLida={chatNaoLida}
             />
           ) : configAberta === 'layout' ? (

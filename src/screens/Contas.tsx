@@ -10,6 +10,7 @@ import { PencilSquareIcon } from '@heroicons/react/24/outline'
 import { lerDoAmbiente, marcaDoAmbiente } from '../ambiente'
 import ConfirmacaoAcao from '../components/ConfirmacaoAcao'
 import { AVISO_ULTIMO_COFRINHO, AVISO_COFRINHO_PADRAO_FIXO, MOTIVO_COFRINHO_PADRAO_TRAVADO, ehCofrinhoPadrao, ehUltimoCofrinho } from '../contasCofrinho'
+import { aplicarMascaraValor, formatarMoeda, paraNumero } from '../formatoMoeda'
 
 const ROTULO_TIPO: Record<TipoConta, string> = {
   corrente: 'Conta corrente',
@@ -35,10 +36,23 @@ interface RascunhoConta {
   diaVencimento: string
   /* Ícone da carteira (10/09/2026) — ver `SeletorInstituicao.tsx`. */
   icone: IconeCarteira
+  /* SALDO INICIAL (build 096, 17/09/2026). Os dois campos existem em `Conta`
+     desde o começo do projeto e são LIDOS de verdade — `totalDoLugar`
+     (`totaisCarteira.ts`) soma `saldoInicial` ao que veio antes do mês pra
+     formar o "Total acumulado" de conta corrente e cofrinho. O que faltava
+     era a tela: até aqui `Contas.tsx` gravava 0 e `hoje()` fixos, então o
+     acumulado de quem já tinha dinheiro antes de começar a usar o app nascia
+     errado por construção. Cartão não tem saldo inicial — o número dele é a
+     fatura do ciclo, e `totalDoLugar` nem chega a ler o campo. */
+  saldoInicial: string
+  dataSaldoInicial: string
 }
 
 function rascunhoVazio(): RascunhoConta {
-  return { nome: '', tipo: 'corrente', diaFechamento: '9', diaVencimento: '16', icone: {} }
+  return {
+    nome: '', tipo: 'corrente', diaFechamento: '9', diaVencimento: '16', icone: {},
+    saldoInicial: '', dataSaldoInicial: hoje(),
+  }
 }
 
 function diaValido(v: string, padrao: number): number {
@@ -62,7 +76,21 @@ function hoje() {
 // construído — esta tela preenche valores neutros por enquanto (mesma
 // lógica de "campo já no schema, UI ainda não usa de verdade" que já vale
 // pra outros campos de conciliação, ver db.ts).
-export default function Contas({ aoVoltar }: { aoVoltar: () => void }) {
+//
+// MODO PRIMEIRO ACESSO (build 096, 17/09/2026) — pedido do Rafael: "não seria
+// interessante no passo a passo inicial de primeiro acesso, abrir tela pra
+// informar saldo inicial e data após ou junto com cadastro de contas? Aliás o
+// cadastro das contas está no passo a passo inicial?". Não estava: o passo a
+// passo tinha dois passos (receita fixa e categorias/grupos/metas) e nunca
+// falou de onde o dinheiro está. Esta MESMA tela é o passo 2 agora — peça
+// única, nunca uma cópia reduzida (a mesma escolha já feita em `Categorias`).
+export default function Contas({
+  aoVoltar,
+  primeiroAcesso,
+}: {
+  aoVoltar: () => void
+  primeiroAcesso?: { aoConcluir: () => void }
+}) {
   const contas = useLiveQuery(() => lerDoAmbiente(db.contas.toArray()), [])
   const lancamentos = useLiveQuery(() => lerDoAmbiente(db.lancamentos.toArray()), [])
 
@@ -131,6 +159,31 @@ export default function Contas({ aoVoltar }: { aoVoltar: () => void }) {
           opcoes={(Object.keys(ROTULO_TIPO) as TipoConta[]).map((t): OpcaoExplicada<TipoConta> => ({ valor: t, rotulo: ROTULO_TIPO[t], explicacao: EXPLICACAO_TIPO[t] }))}
           onEscolher={(tipo) => setRasc((r) => ({ ...r, tipo }))}
         />
+        {rasc.tipo !== 'cartao' && (
+          <>
+            <label htmlFor="conta-saldo-inicial">Saldo Inicial</label>
+            <input
+              id="conta-saldo-inicial"
+              type="text"
+              inputMode="numeric"
+              placeholder="0,00"
+              value={rasc.saldoInicial}
+              onChange={(e) => setRasc((r) => ({ ...r, saldoInicial: aplicarMascaraValor(e.target.value) }))}
+            />
+            <label htmlFor="conta-data-saldo">Data desse Saldo</label>
+            <input
+              id="conta-data-saldo"
+              type="date"
+              value={rasc.dataSaldoInicial}
+              onChange={(e) => setRasc((r) => ({ ...r, dataSaldoInicial: e.target.value }))}
+            />
+            <p className="texto-fraco texto-quebra" style={{ margin: '4px 0 10px', fontSize: 12 }}>
+              Quanto já havia nesta conta antes de você começar a lançar aqui, e em que dia.
+              É a partir dele que a Carteira monta o total acumulado. Sem nada guardado ainda,
+              deixe zerado.
+            </p>
+          </>
+        )}
         {rasc.tipo === 'cartao' && (
           <>
             <label htmlFor="conta-fechamento">Dia de Fechamento da Fatura</label>
@@ -173,6 +226,8 @@ export default function Contas({ aoVoltar }: { aoVoltar: () => void }) {
       diaFechamento: String(c.diaFechamento ?? 9),
       diaVencimento: String(c.diaVencimento ?? 16),
       icone: { instituicao: c.iconeInstituicao, cor: c.iconeCor, imagemUri: c.iconeImagemUri },
+      saldoInicial: c.saldoInicial ? formatarMoeda(c.saldoInicial) : '',
+      dataSaldoInicial: c.dataSaldoInicial || hoje(),
     })
     setConfirmandoExclusaoId(null)
     setAvisoCofrinho(null)
@@ -205,6 +260,11 @@ export default function Contas({ aoVoltar }: { aoVoltar: () => void }) {
       iconeImagemUri: rascunho.icone.imagemUri,
       diaFechamento: rascunho.tipo === 'cartao' ? diaValido(rascunho.diaFechamento, 1) : undefined,
       diaVencimento: rascunho.tipo === 'cartao' ? diaValido(rascunho.diaVencimento, 10) : undefined,
+      /* Cartão continua com saldo inicial zerado: `totalDoLugar` não lê o campo
+         nele, e gravar um número que ninguém usa seria criar uma divergência
+         silenciosa entre o que a tela mostra e o que o cálculo faz. */
+      saldoInicial: rascunho.tipo === 'cartao' ? 0 : paraNumero(rascunho.saldoInicial),
+      dataSaldoInicial: rascunho.dataSaldoInicial || hoje(),
     })
     setEditandoId(null)
     setAvisoCofrinho(null)
@@ -256,8 +316,8 @@ export default function Contas({ aoVoltar }: { aoVoltar: () => void }) {
       iconeInstituicao: novaConta.icone.instituicao,
       iconeCor: novaConta.icone.cor,
       iconeImagemUri: novaConta.icone.imagemUri,
-      saldoInicial: 0,
-      dataSaldoInicial: hoje(),
+      saldoInicial: novaConta.tipo === 'cartao' ? 0 : paraNumero(novaConta.saldoInicial),
+      dataSaldoInicial: novaConta.dataSaldoInicial || hoje(),
       importavel: false,
       ativa: true,
       diaFechamento: novaConta.tipo === 'cartao' ? diaValido(novaConta.diaFechamento, 1) : undefined,
@@ -270,15 +330,31 @@ export default function Contas({ aoVoltar }: { aoVoltar: () => void }) {
   return (
     <>
       <div className="cabecalho-fixo">
-        <button type="button" className="botao-voltar-config" onClick={aoVoltar}>
-          ‹ Voltar
-        </button>
+        {!primeiroAcesso && (
+          <button type="button" className="botao-voltar-config" onClick={aoVoltar}>
+            ‹ Voltar
+          </button>
+        )}
+        {primeiroAcesso && (
+          <p className="ideal-t4" style={{ margin: '0 0 4px', color: 'var(--azul)', fontWeight: 600 }} data-testid="primeiro-acesso-passo">
+            Passo 2 de 3 — onde seu dinheiro está
+          </p>
+        )}
         <h1>Contas e Carteiras</h1>
       </div>
-      <p className="texto-fraco">
-        Todo lugar onde o dinheiro está — conta corrente, cartão de crédito ou cofrinho/investimento.
-        Aparecem automaticamente na tela Carteira e no seletor "Pago com" de cada lançamento.
-      </p>
+      {primeiroAcesso ? (
+        <p className="texto-fraco texto-quebra" data-testid="primeiro-acesso-orientacao-contas">
+          Cadastre onde seu dinheiro está hoje — conta do banco, cartão de crédito e cofrinho —
+          e informe o <strong>saldo inicial</strong> de cada conta: quanto já havia ali antes de
+          você começar a lançar no app, e em que dia. É esse número que faz o total da Carteira
+          bater com o do banco desde o primeiro dia.
+        </p>
+      ) : (
+        <p className="texto-fraco">
+          Todo lugar onde o dinheiro está — conta corrente, cartão de crédito ou cofrinho/investimento.
+          Aparecem automaticamente na tela Carteira e no seletor "Pago com" de cada lançamento.
+        </p>
+      )}
 
       <h2>Cadastradas</h2>
       {avisoCofrinho && (
@@ -406,6 +482,34 @@ export default function Contas({ aoVoltar }: { aoVoltar: () => void }) {
           {formularioConta(rascunho, setRascunho, ehCofrinhoPadrao(contaEmEdicao))}
         </ModalCadastro>
       )}
+
+      {/* Rodapé do PASSO 2 do primeiro acesso — mesma peça e mesma técnica do
+          passo 3 (`Categorias.tsx`): fixo embaixo, o botão só libera com o
+          mínimo, e a linha acima dele diz o que falta. O mínimo aqui é ter
+          onde o dinheiro cai: pelo menos uma conta ativa que não seja cartão
+          (num cartão o dinheiro não fica, ele só vira fatura). */}
+      {primeiroAcesso && (() => {
+        const pode = contas.some((c) => c.ativa && c.tipo !== 'cartao')
+        return (
+          <div className="rodape-totais-fixo rodape-primeiro-acesso" data-testid="primeiro-acesso-rodape-contas">
+            {!pode && (
+              <p className="valor-neg texto-quebra" style={{ margin: '0 0 6px', fontSize: 12.5 }} data-testid="primeiro-acesso-falta-contas">
+                Cadastre pelo menos uma conta corrente ou cofrinho — é onde o dinheiro fica.
+              </p>
+            )}
+            <button
+              type="button"
+              className="primario"
+              style={{ width: '100%', marginTop: 0 }}
+              disabled={!pode}
+              data-testid="primeiro-acesso-concluir-contas"
+              onClick={primeiroAcesso.aoConcluir}
+            >
+              Continuar para o passo 3
+            </button>
+          </div>
+        )
+      })()}
     </>
   )
 }
