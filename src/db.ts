@@ -522,6 +522,18 @@ export interface ConfiguracaoIcones {
      sem bump de schema — mesma regra desta tabela singleton. */
   notifParamsPorAmbiente?: Record<string, Partial<ParametrosNotificacao>>
   notifVersaoPorAmbiente?: Record<string, number>
+  /* ---- Zoom das fontes das listas (17/09/2026, build 094, item 2) ----
+     Um número só, em PORCENTAGEM, aplicado como fator sobre o tamanho ATUAL
+     de cada elemento da lista de lançamentos (Lançamentos e o drill-in da
+     Carteira): 0 = o tamanho de hoje, positivo aumenta, negativo diminui. Não
+     iguala tamanho nenhum — título, valor, tarja e conta continuam com as
+     proporções entre si; é zoom, não uniformização. Ver `src/zoomListas.ts`.
+     Mesma mecânica de 3 camadas dos parâmetros de notificação acima:
+     `zoomListasPorAmbiente` é a camada do cliente (é ela que "voltar ao padrão
+     do app" apaga) e `zoomVersaoPorAmbiente` marca qual publicação do N0 cada
+     ambiente já processou. Aditivos, não indexados, sem bump de schema. */
+  zoomListasPorAmbiente?: Record<string, number>
+  zoomVersaoPorAmbiente?: Record<string, number>
   /* `modoVisao` EXISTIU de 04/09 a 16/09/2026 e foi REMOVIDO na build 087
      junto com o conceito de versão (Light/Ideal/Premium/Completa). O app tem
      UM conjunto de abas para todo mundo — ver o cabeçalho de

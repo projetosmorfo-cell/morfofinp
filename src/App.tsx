@@ -51,6 +51,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { db, type Conta, type NotificacaoPendente } from './db'
 import { sincronizarPendentesNativas, ouvirNotificacoesAoVivo, marcarConfirmada, separarPendentes } from './notificacaoBancaria'
 import { aplicarParametrosN0, paramsNotificacaoAtuais } from './notificacaoParametros'
+import { aplicarZoomN0, useAplicarZoomListas } from './zoomListas'
 import { acharDePara, ensinarDePara } from './vinculoNotificacao'
 import { analisarNotificacao, casarContaDaNotificacao } from './parseNotificacao'
 import { lerDoAmbiente } from './ambiente'
@@ -690,6 +691,11 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: ModoConsultaN
      estiver visível agora, mostramos a 1ª que está — e quando ela voltar a
      escolha original reaparece sozinha. */
 
+  /* Build 094 (item 2): escreve o fator de zoom das fontes no <html>. Uma vez
+     só, aqui — a variável CSS cascateia e nenhuma lista precisa saber que
+     existe zoom. Ver `src/zoomListas.ts`. */
+  useAplicarZoomListas()
+
   // No carregamento, avança toda série de lançamento "fixo" que já deveria
   // ter gerado uma nova ocorrência até hoje — é a "geração dinâmica por
   // ciclo" (ver src/recorrencia.ts).
@@ -768,6 +774,10 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: ModoConsultaN
          que APAGA a personalização deste ambiente. Ver
          `src/notificacaoParametros.ts`. */
       await aplicarParametrosN0()
+      /* Zoom das fontes das listas publicado pelo N0 (build 094, item 2).
+         Mesma mecânica e o mesmo escopo dos parâmetros logo acima — ver
+         `src/zoomListas.ts`. */
+      await aplicarZoomN0()
     })()
     /* Base das metas: marca a receita fixa numa base que veio de antes da
        build 051 e nunca recebeu a flag (bug real de 12/09/2026 — ver

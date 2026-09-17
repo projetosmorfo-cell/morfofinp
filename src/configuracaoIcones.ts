@@ -143,6 +143,10 @@ export function useConfiguracaoIcones(): Required<
        3 camadas) — este hook devolve só os 4 campos de ícone/visão. */
     | 'notifParamsPorAmbiente'
     | 'notifVersaoPorAmbiente'
+    /* Build 094: o zoom das fontes das listas compõe as próprias 3 camadas em
+       `src/zoomListas.ts` — este hook devolve só os 3 percentuais de ícone. */
+    | 'zoomListasPorAmbiente'
+    | 'zoomVersaoPorAmbiente'
     /* 16/09/2026 (build 086): marca da criação da conta cofrinho padrão — ver
        `garantirContaCofrinho()` em `src/contasCofrinho.ts`. É marca de
        migração, não configuração de ícone/visão. */

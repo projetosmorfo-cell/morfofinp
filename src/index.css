@@ -802,6 +802,26 @@ nav.rodape {
    Só a barra de DESTAQUE (o gráfico principal, 18px) fica fora — é outra
    peça, por decisão da build 058. */
 :root { --espessura-barra: 10px; }
+
+/* ZOOM DAS FONTES DAS LISTAS — build 094 (17/09/2026), item 2 do Rafael.
+
+   Um fator só, multiplicando o tamanho que cada elemento da lista de
+   lançamentos JÁ TINHA. É por isso que as bases continuam escritas uma a uma
+   abaixo (título 13px, conta 12px, data 12px, valor 16px, tarja 11px): o
+   pedido foi explícito em que o percentual NÃO iguala tamanho nenhum — "temos
+   titulo, numero, tarja, conta, etc cada um num tamanho (…) deve aplicar esse
+   aumento no tamanho atual hoje de cada um. é como se fosse um zoom".
+
+   Em 0% o fator é 1 e o `calc` devolve exatamente o pixel de antes — nada
+   muda pra quem não mexer no campo.
+
+   Por ser VARIÁVEL, qualquer elemento pode redefini-la pra si e seus filhos:
+   é assim que os quadros de prévia (`PreviaLista.tsx`) mostram o tamanho de
+   hoje e o resultado lado a lado usando a marcação de verdade, em vez de uma
+   imitação que envelheceria sozinha. Quem escreve o valor em vigor no <html>
+   é `AplicadorZoomListas` (`src/zoomListas.ts`), montado uma vez no App. */
+:root { --zoom-lista: 1; }
+
 .barra-meta {
   position: relative;
   height: var(--espessura-barra);
@@ -1255,13 +1275,13 @@ nav.rodape {
      13px com `line-height: 1.25` (a fonte sozinha ficaria na altura padrão,
      que é mais alta que o texto) devolve espaço em TODA lista completa, sem
      encolher o valor nem a tarja, que continuam nos tamanhos de sempre. */
-  font-size: 13px;
+  font-size: calc(13px * var(--zoom-lista));
   line-height: 1.25;
 }
 
 .llc-texto .llc-origem {
   color: var(--texto-fraco);
-  font-size: 12px;
+  font-size: calc(12px * var(--zoom-lista));
 }
 
 /* Valor + tarja como um grupo compacto à direita, tarja ABAIXO do valor
@@ -1282,6 +1302,11 @@ nav.rodape {
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
   text-align: right;
+  /* 16px é o tamanho que este valor SEMPRE teve — ele nunca declarou
+     `font-size` e herdava o padrão do documento. Declarar explicitamente é o
+     que permite o zoom alcançá-lo; o número é o mesmo, então em 0% nada
+     muda. */
+  font-size: calc(16px * var(--zoom-lista));
 }
 
 /* Tarja de status COLADA na direita (10/09/2026, pedido do Rafael: "a tarja
@@ -1295,6 +1320,11 @@ nav.rodape {
    continua exatamente como está. */
 .llc-valores .status-pill {
   align-self: flex-end;
+  /* A tarja só acompanha o zoom DENTRO da lista completa — a `.status-pill`
+     global continua em 11px na listagem Simples (categoria expandida), que
+     não faz parte do que o pedido alcança ("lista de Lançamentos — menu
+     Lançamentos e Carteiras"). */
+  font-size: calc(11px * var(--zoom-lista));
 }
 
 /* Bloco que envolve a listagem SIMPLES inteira (01/09/2026) — pedido do
@@ -1513,7 +1543,7 @@ nav.rodape {
      MESMO tamanho do texto da conta ("Bradesco", "Porto Seguro") na linha
      logo abaixo — `.llc-texto .llc-origem`, 12px. Era 10.5px desde
      10/09/2026 (build 026). `.sessao-data-simples` (lista Simples) não muda. */
-  font-size: 12px;
+  font-size: calc(12px * var(--zoom-lista));
   line-height: 1.15;
   color: var(--texto-fraco);
   letter-spacing: 0.02em;
@@ -3751,4 +3781,96 @@ html[data-mloc-tema='claro'] .tarja-inativa {
   font-size: 11.5px;
   color: var(--texto-fraco);
   margin: 12px 0 4px;
+}
+
+/* ===== CAMPO DE PERCENTUAL COM SETAS E QUADROS DE PRÉVIA — build 094 =====
+   Item 2 do Rafael (17/09/2026). Ver `CampoPercentual.tsx` pro porquê de as
+   setas serem botões de verdade em vez das setinhas nativas do
+   `<input type="number">` (que não existem no celular). */
+
+.campo-percentual {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  max-width: 220px;
+}
+
+.campo-percentual-seta {
+  /* 44px é o alvo mínimo de toque do app (Padrão UI, seção 15). */
+  width: 44px;
+  min-height: 44px;
+  flex: 0 0 44px;
+  border: 1px solid var(--borda);
+  border-radius: 10px;
+  background: var(--bg-elevado);
+  color: var(--texto);
+  font-size: 13px;
+  line-height: 1;
+}
+
+.campo-percentual-seta:disabled {
+  opacity: 0.35;
+}
+
+.campo-percentual-meio {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border: 1px solid var(--borda);
+  border-radius: 10px;
+  background: var(--bg);
+  padding: 0 10px;
+}
+
+/* A regra global `input { width: 100% }` esticaria o campo e empurraria o "%"
+   pra fora da caixa — aqui ele divide a linha com o sufixo. */
+.campo-percentual-meio input {
+  width: 100%;
+  min-width: 0;
+  border: none;
+  background: none;
+  padding: 0;
+  margin: 0;
+  color: var(--texto);
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.campo-percentual-meio input:focus {
+  outline: none;
+}
+
+.campo-percentual-sufixo {
+  color: var(--texto-fraco);
+  font-size: 14px;
+  flex: 0 0 auto;
+}
+
+.previa-lista {
+  margin-top: 10px;
+}
+
+.previa-lista-titulo {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--texto-fraco);
+  margin-bottom: 4px;
+}
+
+/* NADA aqui dentro é clicável: o quadro usa os componentes de verdade da
+   lista, e a tarja de status deles alterna `pago` no banco. Com dados de
+   exemplo (ids negativos, ver `PreviaLista.tsx`) isso não pode acontecer. */
+.previa-lista-quadro {
+  pointer-events: none;
+  user-select: none;
+  background: var(--bg);
+  border: 1px solid var(--borda);
+  border-radius: 10px;
+  padding: 8px 10px;
+  overflow: hidden;
 }

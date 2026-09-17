@@ -23,6 +23,8 @@ import MenuLinha from '../components/MenuLinha'
 import ConfirmacaoAcao from '../components/ConfirmacaoAcao'
 import { avaliarPassos } from '../components/PrimeirosPassos'
 import PacoteIconesN1 from '../components/PacoteIconesN1'
+import PreviaLista from '../components/PreviaLista'
+import ZoomFonteListas from '../components/ZoomFonteListas'
 import ModalCadastro from '../components/ModalCadastro'
 import { ROTULO_TIPO_GRUPO, comportamentoDoGrupo, gruposParaNatureza, tipoDoGrupo } from '../gruposUtil'
 import { fmtBRL, fmtNum, formatarMoeda, aplicarMascaraValor, paraNumero } from '../formatoMoeda'
@@ -624,8 +626,27 @@ export default function Categorias(
               value={configIcones.pctGrupo}
               onChange={(e) => salvarConfiguracaoIcones({ pctGrupo: Number(e.target.value) || 0 })}
             />
+
+            {/* Build 094 (item 2): *"Esse quadro de prévia quero que aplique
+                tbm na mesma tela em que permite mudar os tamanhos dos icones,
+                quero um exemplo do lado (…) devem ser de uns 3 casos"*. Os
+                três casos são exatamente os três percentuais acima — um
+                exemplo por linha que cada um governa —, e o de grupos traz
+                DOIS grupos com categorias dentro, como ele nomeou. Não há um
+                segundo quadro de "como vai ficar" aqui: os campos gravam na
+                hora e o quadro já mostra o resultado enquanto se mexe. */}
+            <PreviaLista
+              titulo="Exemplo com os tamanhos acima"
+              zoomPct={0}
+              casos={['lancamentos', 'categorias', 'grupos']}
+              testid="previa-icones"
+            />
           </div>
 
+          {/* Build 094 (item 2): o zoom das fontes da lista de lançamentos.
+              Fica DEPOIS dos ícones de propósito — é o parâmetro mais novo e
+              o menos procurado dos dois. */}
+          <ZoomFonteListas />
         </>
       )}
 

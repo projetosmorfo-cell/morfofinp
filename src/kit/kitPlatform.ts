@@ -5,6 +5,7 @@ import type { PacotesIconesN0 } from '../pacotesIcones'
 import { salvarConfiguracaoIcones } from '../configuracaoIcones'
 import { hojeEfetivoISO } from '../hojeSimulado'
 import type { ParametrosNotificacao, ParametrosNotificacaoN0, EscopoPublicacao } from '../notificacaoParametros'
+import type { ZoomListasN0 } from '../zoomListas'
 import { uid, type Endereco } from './kitBase'
 import { LOGO_PRODUTO_BRANCA, LOGO_PRODUTO_COR } from './logosProduto'
 
@@ -649,6 +650,11 @@ export interface PlatformN0 {
      seguinte. Ver `src/notificacaoParametros.ts` — inclusive o limite honesto
      de que, sem backend, isso só alcança os ambientes deste aparelho. */
   parametrosNotificacao?: ParametrosNotificacaoN0
+  /* Zoom das fontes das listas de lançamento (17/09/2026, build 094, item 2).
+     Mesma mecânica e o MESMO escopo de publicação dos parâmetros de
+     notificação logo acima — é um parâmetro só, um número em porcentagem. Ver
+     `src/zoomListas.ts`. */
+  zoomListas?: ZoomListasN0
   /* URLs do produto (12/09/2026, build 053 — pedido do Rafael: "nas configs do
      N0, ter novo menu pra URLs, lá devo preencher com a url pra download do
      apk", e mais adiante "coloque tbm a URL do Website... mostrar como
@@ -717,6 +723,8 @@ export const FUNCOES_PERFIL_N0: FuncaoPerfil[] = [
     /* Build 080: as regras e parâmetros da leitura de notificação bancária —
        TODOS, inclusive os que não são expostos no app do cliente. */
     { k: 'parametros.notificacoes', l: 'Notificações bancárias', sessao: 'Ambiente do Cliente' },
+    /* Build 094: o tamanho das fontes da lista de lançamentos. */
+    { k: 'parametros.zoomListas', l: 'Tamanho das fontes das listas', sessao: 'Ambiente do Cliente' },
     { k: 'parametros.testesCliente', l: 'Gerar Teste no Cliente', sessao: 'Ambiente do Cliente' },
     { k: 'parametros.limpezasCliente', l: 'Limpar Dados do Cliente (teste e reais)', sessao: 'Ambiente do Cliente' },
     { k: 'parametros.marca', l: 'Marca', sessao: 'Ambiente MorfoFinP ADM' },
@@ -1371,6 +1379,18 @@ export async function salvarParametrosNotificacaoN0(
     ...atual,
     parametrosNotificacao: { versao, atualizadoEm: agoraISO(), escopo, valores },
   })
+  return versao
+}
+
+/**
+ * Publica o zoom das fontes das listas, com o escopo escolhido no salvamento.
+ * Devolve a versão nova — é ela que cada ambiente compara com a que já
+ * processou (ver `aplicarZoomN0()` em `src/zoomListas.ts`).
+ */
+export async function salvarZoomListasN0(pct: number, escopo: EscopoPublicacao) {
+  const atual = await lerPlatformN0Persistida()
+  const versao = (atual.zoomListas?.versao ?? 0) + 1
+  await salvarPlatformN0({ ...atual, zoomListas: { versao, atualizadoEm: agoraISO(), escopo, pct } })
   return versao
 }
 

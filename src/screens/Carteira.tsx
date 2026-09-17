@@ -11,11 +11,12 @@ import {
 } from '../components/SelecaoETotais'
 import { CampoBusca, FolhaFiltros, FILTROS_VAZIOS, aplicarFiltros, contarFiltrosAtivos, type FiltrosAvancados } from '../components/BuscaEFiltros'
 import { janelaFatura, lancamentosDoCiclo, situacaoDaFatura, DIA_FECHAMENTO_PADRAO } from '../faturaCiclo'
+import { totalDoLugar, lancamentosDoCofrinhoVirtual } from '../totaisCarteira'
 import { formatarCabecalhoData } from '../formatoData'
 import { fundoDaLinhaDeData } from '../statusPagamento'
 import SaldoDoCofrinho, { LinhaInformeSaldo } from '../components/SaldoDoCofrinho'
 import { fmtBRL } from '../formatoMoeda'
-import { useHojeSimuladoISO, hojeEfetivoISO } from '../hojeSimulado'
+import { useHojeSimuladoISO } from '../hojeSimulado'
 import TituloTelaN1 from '../kit/CabecalhoN1'
 import { ExportSheet, type ExportRow } from '../kit/ExportSheet'
 import { EXPLICACAO_CARTEIRA, SUBTITULO_CARTEIRA } from '../subtitulosTelas'
@@ -37,20 +38,14 @@ function formatarDataCurta(dataISO: string) {
 // "Pagamento de fatura" diretamente pelo formulário. Nenhuma regra mudou —
 // mesmo código, só extraído pra não duplicar.
 
-// Janela da fatura em aberto de um cartão "até o momento" — do dia de
-// fechamento (inclusive, ver correção acima) até hoje. Só usada no card
-// resumido da Carteira (fora do drill-in).
-function janelaFaturaEmAberto(diaFechamento: number): { inicio: string; fim: string } {
-  const hoje = new Date()
-  const ano = hoje.getFullYear()
-  const mes = hoje.getMonth()
-  const diaHoje = hoje.getDate()
-  const ultimoFechamento =
-    diaHoje >= diaFechamento ? new Date(ano, mes, diaFechamento) : new Date(ano, mes - 1, diaFechamento)
-  const inicio = new Date(ultimoFechamento)
-  const iso = (d: Date) => d.toISOString().slice(0, 10)
-  return { inicio: iso(inicio), fim: iso(hoje) }
-}
+// `janelaFaturaEmAberto` morou aqui até 17/09/2026 (build 094, item 3).
+// Ela desenhava o card do cartão com um recorte PRÓPRIO — "do último
+// fechamento até HOJE" — enquanto o drill-in mostrava o ciclo inteiro do mês.
+// Dois números com nomes parecidos ("Fatura até o momento" × "Total da
+// fatura") na mesma tela, discordando por construção. Agora o card e o
+// fechamento da lista saem os dois de `totalDoLugar()` (`src/totaisCarteira.ts`),
+// que usa o mês selecionado para TODO tipo de lugar. Nada mais precisa desta
+// janela; se algum dia voltar a precisar, ela nasce lá, não aqui.
 
 // Tela "Carteira" — status atual de cada lugar onde o dinheiro está: toda
 // conta cadastrada em Contas (corrente, cartão ou cofre) mais o card virtual
@@ -93,7 +88,6 @@ export default function Carteira({ mes, aoMudarMes, aoAbrirLancamento }: TelaPro
   const nomeCofrinho = cofrinhoPadrao?.nome?.trim() || 'Cofrinho'
   const categoriaPorId = new Map(categorias.map((c) => [c.id!, c]))
   const contaPorId = new Map(todasContas.map((c) => [c.id!, c]))
-  const naturezaDoLancamento = (l: Lancamento) => categoriaPorId.get(l.categoriaId)?.natureza
 
   function categoriasVinculadasDe(contaId: number): number[] {
     // `categorias!`: o guard `if (!categorias) return null` já garantiu que
@@ -104,21 +98,30 @@ export default function Carteira({ mes, aoMudarMes, aoAbrirLancamento }: TelaPro
     return categorias!.filter((c) => c.contaVinculada === contaId).map((c) => c.id!)
   }
 
-  const totalAportes = todosLancamentos
-    .filter((l) => naturezaDoLancamento(l) === 'Aporte')
-    .reduce((s, l) => s + Math.abs(l.valor), 0)
-  const totalGastosCofrinho = todosLancamentos
-    .filter((l) => naturezaDoLancamento(l) === 'Gasto de cofrinho')
-    .reduce((s, l) => s + Math.abs(l.valor), 0)
-  const saldoCofrinho = totalAportes - totalGastosCofrinho
+  /* Build 094 (item 3) — o COFRINHO VIRTUAL sai da mesma fonte dos outros
+     lugares. Antes o card fazia |aportes| − |gastos| sobre a vida inteira e o
+     drill-in somava os valores crus (todos negativos, porque um aporte SAI da
+     conta corrente): −R$ 4.565,15 no card contra −R$ 11.249,95 dentro. Agora
+     os dois leem `lancamentosDoCofrinhoVirtual` (a cópia com o sinal do
+     cofrinho) e `totalDoLugar` com o MESMO mês. */
+  const lancamentosCofrinho = lancamentosDoCofrinhoVirtual(todosLancamentos, categoriaPorId)
+  const saldoCofrinho = totalDoLugar(
+    undefined,
+    lancamentosCofrinho,
+    mes,
+    todosLancamentos,
+    categoriaPorId,
+  ).valor
 
   if (selecionado !== null) {
     const conta = typeof selecionado === 'number' ? contas.find((c) => c.id === selecionado) : undefined
+    /* Build 094: no cofrinho virtual a lista vem com o sinal DO COFRINHO —
+       aporte entra, gasto sai (ver `totaisCarteira.ts`). Antes ela somava os
+       valores crus (todos negativos, porque o aporte sai da conta corrente) e
+       o fechamento dizia −R$ 11.249,95 enquanto o card dizia −R$ 4.565,15. */
     const lancamentosDoLugar = conta
       ? todosLancamentos.filter((l) => l.contaId === conta.id)
-      : todosLancamentos.filter(
-          (l) => naturezaDoLancamento(l) === 'Aporte' || naturezaDoLancamento(l) === 'Gasto de cofrinho',
-        )
+      : lancamentosCofrinho
     // Só informativo (nunca somado ao saldo) — lançamentos pagos por OUTRA
     // conta numa categoria vinculada a este cofrinho (ver decisão acima).
     const vinculadosInformativos =
@@ -152,35 +155,17 @@ export default function Carteira({ mes, aoMudarMes, aoAbrirLancamento }: TelaPro
 
   /* G44 regra 11b. `valorDoCard` é a MESMA conta que cada card faz logo
      abaixo — extraída pra função pra a exportação nunca divergir do que está
-     na tela (o Kit exporta "o que está sendo exibido agora"). */
+     na tela (o Kit exporta "o que está sendo exibido agora").
+     Build 094: e agora é também a MESMA conta que o fechamento do drill-in
+     faz, porque as duas chamam `totalDoLugar` — ver `totaisCarteira.ts`. */
   function valorDoCard(conta: Conta): { rotulo: string; valor: number } {
-    /* `todosLancamentos!`: mesmo caso já documentado acima pra `categorias!`
-       — o guard de carregamento garante, mas o TS não propaga o narrowing
-       pra dentro de função aninhada. */
-    const daConta = todosLancamentos!.filter((l) => l.contaId === conta.id)
-    if (conta.tipo === 'cartao') {
-      const { inicio, fim } = janelaFaturaEmAberto(conta.diaFechamento ?? 9)
-      return { rotulo: 'Fatura até o momento', valor: daConta.filter((l) => l.dataCompetencia >= inicio && l.dataCompetencia <= fim).reduce((s, l) => s - l.valor, 0) }
-    }
-    if (conta.tipo === 'cofre') return { rotulo: 'Total acumulado', valor: daConta.reduce((s, l) => s + l.valor, 0) }
-    // Item 2 da lista pendente (15/09/2026): conta corrente mostrava só o mês
-    // selecionado ("Total do mês"), diferente de cartão/cofre — que já mostram
-    // um número acumulado (fatura em aberto / total de sempre). Corrigido pra
-    // "Saldo atual" = saldo inicial cadastrado + todo o histórico de verdade,
-    // acumulado de sempre até hoje — o mesmo tipo de número que os outros dois.
-    //
-    // Item 5 (16/09/2026), bug real corrigido: "até hoje" não estava sendo
-    // respeitado de verdade — a soma incluía QUALQUER lançamento, inclusive
-    // com `dataCompetencia` no futuro (ex.: uma parcela ainda não vencida),
-    // o que inflava/desinflava o "Saldo atual" do card em relação ao "Saldo"
-    // mostrado no drill-in daquele mesmo mês (que é sempre limitado ao mês
-    // selecionado). Agora a soma respeita literalmente "até hoje".
-    const hojeISO = hojeEfetivoISO()
-    return {
-      rotulo: 'Saldo atual',
-      valor: (conta.saldoInicial ?? 0) + daConta.filter((l) => l.dataCompetencia <= hojeISO).reduce((s, l) => s + l.valor, 0),
-    }
+    /* `todosLancamentos!`/`categorias!`: o guard de carregamento já garantiu,
+       mas o TS não propaga o narrowing pra dentro de função aninhada. */
+    const doLugar = todosLancamentos!.filter((l) => l.contaId === conta.id)
+    const t = totalDoLugar(conta, doLugar, mes, todosLancamentos!, categoriaPorId)
+    return { rotulo: t.rotulo, valor: t.valor }
   }
+
   const linhasCarteira: ExportRow[] = [
     ...contas.map((c) => {
       const v = valorDoCard(c)
@@ -198,6 +183,13 @@ export default function Carteira({ mes, aoMudarMes, aoAbrirLancamento }: TelaPro
           explicacao={EXPLICACAO_CARTEIRA}
           onExportar={() => setExportOpen(true)}
         />
+        {/* Build 094 (item 3): a lista de cards ganhou o seletor de mês.
+            Enquanto o card fazia um recorte próprio ("até hoje", "fatura até
+            o momento") não havia mês a mostrar; agora que ele é o total do
+            MÊS SELECIONADO — o mesmo que o drill-in abre — o número ficaria
+            sem dizer de quando é. É o mesmo `mes` compartilhado pelas outras
+            telas, então entrar e sair da Carteira não muda nada de lugar. */}
+        <SeletorMes mes={mes} onMudar={aoMudarMes} />
       </div>
       {exportOpen && <ExportSheet title="Carteira" filenameBase={`morfofinp-carteira-${mes}`}
         screenColumns={[
@@ -218,29 +210,11 @@ export default function Carteira({ mes, aoMudarMes, aoAbrirLancamento }: TelaPro
       {/* 12/09/2026 (build 053) — ver nota em `Situacao.tsx`. */}
 
       {contas.map((conta) => {
-        const lancamentosDaConta = todosLancamentos.filter((l) => l.contaId === conta.id)
-        let rotuloValor: string
-        let valorNumero: number
-        if (conta.tipo === 'cartao') {
-          const { inicio, fim } = janelaFaturaEmAberto(conta.diaFechamento ?? 9)
-          valorNumero = lancamentosDaConta
-            .filter((l) => l.dataCompetencia >= inicio && l.dataCompetencia <= fim)
-            .reduce((s, l) => s - l.valor, 0)
-          rotuloValor = 'Fatura até o momento'
-        } else if (conta.tipo === 'cofre') {
-          // Saldo acumulado só de movimentos REAIS por contaId (ver nota de
-          // revisão no topo do arquivo — não soma mais vinculados de outra
-          // conta, isso nunca foi dinheiro que entrou/saiu daqui de verdade).
-          valorNumero = lancamentosDaConta.reduce((s, l) => s + l.valor, 0)
-          rotuloValor = 'Total acumulado'
-        } else {
-          // Item 2 (15/09/2026): acumulado de sempre, igual ao cofre — ver
-          // comentário em `valorDoCard`. Item 5 (16/09/2026): limitado a
-          // "até hoje" de verdade (mesma correção de `valorDoCard`).
-          const hojeISO = hojeEfetivoISO()
-          valorNumero = (conta.saldoInicial ?? 0) + lancamentosDaConta.filter((l) => l.dataCompetencia <= hojeISO).reduce((s, l) => s + l.valor, 0)
-          rotuloValor = 'Saldo atual'
-        }
+        /* Build 094: o número do card é EXATAMENTE o do fechamento do
+           drill-in — a mesma `totalDoLugar`, o mesmo mês. Antes cada um
+           tinha o seu recorte (card até HOJE, drill-in até o fim do mês) e
+           dois nomes parecidos discordavam na mesma tela. */
+        const { rotulo: rotuloValor, valor: valorNumero } = valorDoCard(conta)
         // Build 093 (item 4): a prévia dos 3 últimos lançamentos (F-05 da
         // revisão de UI de 04/09/2026) SAIU dos cards — pedido do Rafael: "os
         // cards não devem mais mostrar os últimos lançamentos". O card volta a
@@ -266,8 +240,14 @@ export default function Carteira({ mes, aoMudarMes, aoAbrirLancamento }: TelaPro
                 />
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{conta.nome}</span>
               </strong>
+              {/* Build 094 (item 3): o SINAL é escrito. `fmtBRL` nunca escreve
+                  sinal (é regra antiga, e certa, para valor dentro de frase),
+                  então um saldo de −R$ 52,00 aparecia aqui como "R$ 52,00" —
+                  só a cor dizia o lado, e o mesmo número aparecia com o sinal
+                  no fechamento do drill-in. Dois jeitos de escrever o MESMO
+                  número é exatamente o que este item veio desfazer. */}
               <strong className={conta.tipo === 'cartao' ? 'valor-neg' : valorNumero < 0 ? 'valor-neg' : 'valor-pos'}>
-                {fmtBRL(valorNumero)}
+                {fmtBRLComSinal(valorNumero)}
               </strong>
             </div>
             <span className="texto-fraco">{rotuloValor}</span>
@@ -332,16 +312,20 @@ function FechamentoDaLista({
   itensPeriodo,
   rotuloTotal,
   saldoAnterior,
+  totalForcado,
 }: {
   itensPeriodo: { valor: number }[]
   rotuloTotal: string
   /** `undefined` = cartão (não mostra as duas linhas acumuladas). */
   saldoAnterior?: number
+  /* Build 094 (item 3): o total da FATURA vem de `totalDoLugar`, o mesmo
+     número (e o mesmo sinal) do card de fora e do card de quitação. */
+  totalForcado?: number
 }) {
   const totalPeriodo = somarTotais(itensPeriodo).total
   return (
     <div className="total-geral" data-testid="fechamento-lista">
-      <TotaisEntradaSaida itens={itensPeriodo} rotulos={{ entrada: 'Entrada', saida: 'Saída', total: rotuloTotal }} />
+      <TotaisEntradaSaida itens={itensPeriodo} total={totalForcado} rotulos={{ entrada: 'Entrada', saida: 'Saída', total: rotuloTotal }} />
       {saldoAnterior !== undefined && (
         <>
           <div className="linha" style={{ border: 'none', padding: '8px 0 0', borderTop: '1px solid var(--borda)', marginTop: 8 }}>
@@ -470,11 +454,20 @@ function DetalheConta({
 
   /* Build 092 — "Saldo do mês anterior": saldo-base da conta + tudo que
      aconteceu ANTES do início da janela (mês civil ou período escolhido).
-     Só para conta que não é cartão — ver `FechamentoDaLista`. */
+     Só para conta que não é cartão — ver `FechamentoDaLista`.
+
+     Build 094 (item 3): no modo MÊS quem devolve esse número é
+     `totalDoLugar()` — a MESMA função que desenha o card lá fora. É isso que
+     faz o "Total acumulado" daqui e o número do card serem iguais por
+     construção, e não por duas contas parecidas escritas em dois lugares.
+     No modo PERÍODO a janela é outra (de tal data a tal data, escolha da
+     pessoa), então a conta continua local: `totalDoLugar` só conhece mês. */
   const saldoAnterior = isCartao
     ? undefined
-    : (conta?.saldoInicial ?? 0) +
-      lancamentosDoLugar.filter((l) => l.dataCompetencia < janela.inicio).reduce((s, l) => s + l.valor, 0)
+    : modoPeriodo
+      ? (conta?.saldoInicial ?? 0) +
+        lancamentosDoLugar.filter((l) => l.dataCompetencia < janela.inicio).reduce((s, l) => s + l.valor, 0)
+      : totalDoLugar(conta, lancamentosDoLugar, mes, todosLancamentos, categoriaPorId).saldoAnterior
 
   const doPeriodoFiltrado = aplicarFiltros(doPeriodoBruto, busca, filtros, categoriaPorId, contaPorId)
   const doPeriodo = [...doPeriodoFiltrado].sort((a, b) =>
@@ -743,9 +736,20 @@ function DetalheConta({
         ))}
         {/* Build 092: o fechamento da lista — o ÚNICO bloco de totais que
             sobrou (ver `FechamentoDaLista`). */}
-        {doPeriodoBruto.length > 0 && !selecao.ativa && (
+        {/* Build 094 (item 3): o fechamento aparece também quando o MÊS não
+            teve movimento, desde que a conta acumule saldo. Antes a condição
+            era só "tem lançamento": uma conta parada mostrava o total no card
+            de fora (ex.: −R$ 52,00) e NADA aqui dentro — o caso mais extremo
+            de "o de fora não bate com o de dentro". No cartão nada muda: sem
+            compras no ciclo não há fatura nem saldo acumulado a mostrar. */}
+        {(doPeriodoBruto.length > 0 || saldoAnterior !== undefined) && !selecao.ativa && (
           <div style={{ padding: '8px 0 10px' }}>
-            <FechamentoDaLista itensPeriodo={doPeriodoBruto} rotuloTotal={rotuloTotal} saldoAnterior={saldoAnterior} />
+            <FechamentoDaLista
+              itensPeriodo={doPeriodoBruto}
+              rotuloTotal={rotuloTotal}
+              saldoAnterior={saldoAnterior}
+              totalForcado={fatura ? fatura.total : undefined}
+            />
           </div>
         )}
       </div>

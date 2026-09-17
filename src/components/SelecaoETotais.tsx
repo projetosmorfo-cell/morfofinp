@@ -142,8 +142,16 @@ export function BarraSelecao({ selecao, total, onAlterar }: {
   )
 }
 
-export function TotaisEntradaSaida({ itens, rotulo, destaque, recolhivel, rotulos }: {
+export function TotaisEntradaSaida({ itens, rotulo, destaque, recolhivel, rotulos, total }: {
   itens: { valor: number }[]
+  /* Build 094 (item 3): substitui o total CALCULADO (entrada − saída) por um
+     número que vem de fora. Existe por um caso só — a fatura de cartão, cujo
+     total é o valor DEVIDO (positivo), o mesmo que o card de fora e o card de
+     quitação mostram. Sem isto, a mesma fatura aparecia como R$ 8.391,92 no
+     card e −R$ 8.391,92 no fechamento da lista logo abaixo: o sinal do
+     movimento e o valor da conta a pagar são coisas diferentes com o mesmo
+     rótulo. Ausente (o caso de todo mundo), nada muda. */
+  total?: number
   rotulo?: string
   destaque?: boolean
   /* Item 1 (16/09/2026): os três rótulos da faixa são "Entrada"/"Saída"/
@@ -162,7 +170,8 @@ export function TotaisEntradaSaida({ itens, rotulo, destaque, recolhivel, rotulo
      sempre abertos, que é onde eles servem de fechamento de bloco. */
   recolhivel?: boolean
 }) {
-  const t = somarTotais(itens)
+  const calculado = somarTotais(itens)
+  const t = { ...calculado, total: total ?? calculado.total }
   const [aberta, setAberta] = useState(false)
 
   /* `fmtBRL` formata o número sem sinal (é o formato usado no app inteiro),

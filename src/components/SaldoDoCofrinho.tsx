@@ -238,14 +238,14 @@ export default function SaldoDoCofrinho({
           className={mostrado < 0 ? 'valor-neg' : 'valor-pos'}
           data-testid="saldo-cofrinho"
         >
-          {mostrado < 0 ? '\u2212' : ''}{fmtBRL(Math.abs(mostrado))}
+          {mostrado < 0 ? '−' : ''}{fmtBRL(Math.abs(mostrado))}
         </strong>
       </div>
 
-      {!informe && <span className="texto-fraco">Total acumulado pelos lan\u00e7amentos</span>}
+      {!informe && <span className="texto-fraco">Total acumulado pelos lançamentos</span>}
 
-      {/* A linha de informe e o bot\u00e3o vivem em `LinhaInformeSaldo` desde a
-          build 086 \u2014 a mesma pe\u00e7a que toda conta de cofrinho REAL usa. */}
+      {/* A linha de informe e o botão vivem em `LinhaInformeSaldo` desde a
+          build 086 — a mesma peça que toda conta de cofrinho REAL usa. */}
       <LinhaInformeSaldo contaId={contaId} calculado={calculado} />
     </>
   )

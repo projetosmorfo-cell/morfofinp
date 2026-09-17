@@ -672,7 +672,10 @@ export default function Planejamento({ mes, aoMudarMes, aoAbrirLancamento, aoAbr
                       )}
                       <span className="texto-quebra">{grupo}</span>
                     </strong>
-                    <span className="texto-fraco" style={{ fontSize: 11.5 }}>{itens.length} categoria(s)</span>
+                    {/* Build 094: a contagem de categorias saiu daqui (pedido do
+                        Rafael). Ela não decide nada — quem quer ver as
+                        categorias abre o grupo, e a lista já mostra quantas
+                        são. No card ela só disputava a linha do nome. */}
                   </div>
                   {percentualDoGrupo(grupo) > 0 && (
                     <div className="pct-grupo-a1">
