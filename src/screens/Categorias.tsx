@@ -4,7 +4,7 @@ import { PencilSquareIcon } from '@heroicons/react/24/outline'
 import SeletorComExplicacao, { type OpcaoExplicada } from '../components/SeletorComExplicacao'
 import { db, type Categoria, type GrupoRegistro, type Natureza } from '../db'
 import { categoriaConsomeMeta } from '../orcamento'
-import { marcarCategoriasEditadas } from '../kit/padraoCategorias'
+import { marcarCategoriasEditadas, restaurarCategoriasEGruposPadrao } from '../kit/padraoCategorias'
 import type { TelaProps } from '../mes'
 import { Icone, type EstiloIcone } from '../icones'
 import SeletorIcone from '../components/SeletorIcone'
@@ -20,6 +20,7 @@ import {
   type RascunhoGrupo,
 } from '../components/FormulariosCadastro'
 import MenuLinha from '../components/MenuLinha'
+import { avaliarPassos } from '../components/PrimeirosPassos'
 import PacoteIconesN1 from '../components/PacoteIconesN1'
 import ModalCadastro from '../components/ModalCadastro'
 import { ROTULO_TIPO_GRUPO, comportamentoDoGrupo, gruposParaNatureza, tipoDoGrupo } from '../gruposUtil'
@@ -63,11 +64,15 @@ import {
 // (o grupo) e ficar trocando de aba pra cadastrar o grupo e depois a meta
 // dele era vaivém puro. Nenhum recurso saiu: os dois blocos continuam
 // inteiros, agora um abaixo do outro na mesma aba.
-type AbaCategorias = 'categorias' | 'gruposMetas' | 'aparencia'
+// Build 092 (17/09/2026): 4ª aba "Padrão do app" — é onde moram os DOIS
+// botões de restaurar (categorias e grupos; ícones). O de ícones estava em
+// "Aparência", e o Rafael foi direto: "na aba Aparência não tem sentido".
+type AbaCategorias = 'categorias' | 'gruposMetas' | 'aparencia' | 'padrao'
 const ABAS_CATEGORIAS: { valor: AbaCategorias; rotulo: string }[] = [
   { valor: 'categorias', rotulo: 'Categorias e Metas' },
   { valor: 'gruposMetas', rotulo: 'Grupos e Metas' },
   { valor: 'aparencia', rotulo: 'Aparência' },
+  { valor: 'padrao', rotulo: 'Padrão do app' },
 ]
 
 function mesVigenciaAtual() {
@@ -90,8 +95,20 @@ function mesAnteriorISO() {
 // telas). Também é a única tela com categoria+valor que NÃO tem linhas
 // recolhíveis com lançamentos (aqui a categoria é o cadastro em si, não um
 // total pra explorar — ver Resumo do Mês e Situação pra isso).
-export default function Categorias(_props: TelaProps & { aoVoltar: () => void }) {
-  const { aoVoltar, aoAbrirCalibragem } = _props
+export default function Categorias(
+  _props: TelaProps & {
+    aoVoltar: () => void
+    /* Build 092 — PASSO 2 do primeiro acesso isolado (ver
+       `components/PrimeiroAcesso.tsx`): a MESMA tela, sem "Voltar" e sem o
+       atalho da Calibragem, com um rodapé fixo "Concluir e ir para o
+       Planejamento" que só libera quando o plano mínimo existe (receita fixa
+       válida + percentuais dos grupos somando 100%). Peça única, nunca uma
+       cópia reduzida da tela. */
+    primeiroAcesso?: { aoConcluir: () => void }
+  },
+) {
+  const { aoVoltar, primeiroAcesso } = _props
+  const aoAbrirCalibragem = primeiroAcesso ? undefined : _props.aoAbrirCalibragem
   const categorias = useLiveQuery(() => lerDoAmbiente(db.categorias.toArray()), [])
   const lancamentos = useLiveQuery(() => lerDoAmbiente(db.lancamentos.toArray()), [])
   const metas = useLiveQuery(() => lerDoAmbiente(db.metas.toArray()), [])
@@ -158,6 +175,22 @@ export default function Categorias(_props: TelaProps & { aoVoltar: () => void })
         : 'Nenhum padrão de ícone salvo ainda pra restaurar.',
     )
     setConfirmandoRestaurarPadrao(false)
+  }
+
+  /* Build 092: "Restaurar categorias e grupos padrão do app" — dupla checagem
+     com o aviso que o Rafael pediu (lançamento pode ficar sem categoria). */
+  const [confirmandoRestaurarCadastro, setConfirmandoRestaurarCadastro] = useState(false)
+  const [resultadoRestaurarCadastro, setResultadoRestaurarCadastro] = useState<string | null>(null)
+  async function restaurarCadastroPadrao() {
+    try {
+      const r = await restaurarCategoriasEGruposPadrao()
+      setResultadoRestaurarCadastro(
+        `${r.grupos} grupo(s) e ${r.categorias} categoria(s) conferidos com o padrão ${r.origem === 'morfo' ? 'publicado pela Morfo' : 'de fábrica do app'}. O que já existia com o mesmo nome foi mantido e ajustado; o que faltava foi criado.`,
+      )
+    } catch (e) {
+      setResultadoRestaurarCadastro(`Não foi possível restaurar: ${e instanceof Error ? e.message : String(e)}`)
+    }
+    setConfirmandoRestaurarCadastro(false)
   }
 
   if (!categorias || !lancamentos || !metas || !grupos || !contas) return null
@@ -475,14 +508,28 @@ export default function Categorias(_props: TelaProps & { aoVoltar: () => void })
   return (
     <>
       <div className="cabecalho-fixo">
-        <button type="button" className="botao-voltar-config" onClick={aoVoltar}>
-          ‹ Voltar
-        </button>
+        {!primeiroAcesso && (
+          <button type="button" className="botao-voltar-config" onClick={aoVoltar}>
+            ‹ Voltar
+          </button>
+        )}
+        {primeiroAcesso && (
+          <p className="ideal-t4" style={{ margin: '0 0 4px', color: 'var(--azul)', fontWeight: 600 }} data-testid="primeiro-acesso-passo">
+            Passo 2 de 2 — grupos, categorias e metas
+          </p>
+        )}
         <h1>Categorias, Grupos e Metas</h1>
       </div>
-      <p className="texto-fraco">
-        Cadastro central — a natureza de uma categoria só muda aqui, nunca lançamento a lançamento.
-      </p>
+      {primeiroAcesso ? (
+        <p className="texto-fraco texto-quebra" data-testid="primeiro-acesso-orientacao-2">
+          Confira como o dinheiro se divide entre os grupos (os percentuais precisam somar 100%) e,
+          se quiser, ajuste categorias e metas. Ao concluir, o Planejamento abre.
+        </p>
+      ) : (
+        <p className="texto-fraco">
+          Cadastro central — a natureza de uma categoria só muda aqui, nunca lançamento a lançamento.
+        </p>
+      )}
 
       {/* Build 090 (17/09/2026), pedido do Rafael: "Tela de calibrar, mostrar
           no topo da tela de parametrização > Categorias e Grupos sob título
@@ -578,13 +625,57 @@ export default function Categorias(_props: TelaProps & { aoVoltar: () => void })
             />
           </div>
 
+        </>
+      )}
+
+      {abaAtiva === 'padrao' && (
+        <>
+          {/* Build 092: "em Manutenção, se uso o Apagar Tudo, limpa categorias e
+              grupos e lançamentos, aí percebi que não tem como restaurar o
+              padrão". Restaura por MERGE de nome (ver
+              `restaurarCategoriasEGruposPadrao`): cria o que falta, ajusta o
+              que existe pelo mesmo nome, não apaga nada. */}
+          <h2>Categorias e Grupos — Padrão do App</h2>
+          <div className="cartao" data-testid="card-restaurar-cadastro">
+            <p className="texto-fraco" style={{ marginTop: 0 }}>
+              Recria os grupos e as categorias padrão do app (os publicados pela Morfo ou, sem isso, os de
+              fábrica), com ícones, receita fixa e os percentuais dos grupos. O que você já tem com o mesmo nome
+              é mantido e ajustado; o que faltar é criado; nada é apagado.
+            </p>
+            {confirmandoRestaurarCadastro ? (
+              <>
+                <p className="valor-neg texto-quebra" style={{ fontSize: 13, margin: '0 0 10px' }} data-testid="aviso-restaurar-cadastro">
+                  Atenção: se você tiver lançamentos ligados a categorias que não existem mais, eles podem ficar
+                  sem categoria vinculada — depois de restaurar, abra esses lançamentos e escolha a categoria.
+                </p>
+                <div className="acoes-modal">
+                  <button type="button" className="secundario" onClick={() => setConfirmandoRestaurarCadastro(false)}>
+                    Cancelar
+                  </button>
+                  <button type="button" className="primario" onClick={restaurarCadastroPadrao} data-testid="confirmar-restaurar-cadastro">
+                    Sim, restaurar o padrão
+                  </button>
+                </div>
+              </>
+            ) : (
+              <button type="button" className="primario" style={{ marginTop: 0 }} onClick={() => setConfirmandoRestaurarCadastro(true)} data-testid="restaurar-cadastro">
+                Restaurar categorias e grupos padrão
+              </button>
+            )}
+            {resultadoRestaurarCadastro && (
+              <p className="texto-fraco" style={{ marginTop: 8 }} data-testid="resultado-restaurar-cadastro">
+                {resultadoRestaurarCadastro}
+              </p>
+            )}
+          </div>
+
           {/* 04/09/2026, pedido do Rafael: os ícones que ele escolheu em cada
               categoria/grupo viraram o padrão oficial do app (salvo em
               `iconesPadrao.ts`, exportado pela tela Manutenção). Este botão
               devolve TODAS as categorias/grupos pra esse padrão de uma vez —
               cada item também tem seu próprio "Restaurar padrão" individual,
               agora dentro do menu "⋮" das abas Grupos/Categorias (F-08). */}
-          <h2>Ícones — Padrão do Sistema</h2>
+          <h2>Ícones — Padrão Morfo</h2>
           <div className="cartao">
             <p className="texto-fraco" style={{ marginTop: 0 }}>
               Devolve o ícone, estilo e cor de todas as categorias e grupos pro padrão salvo como oficial
@@ -613,7 +704,7 @@ export default function Categorias(_props: TelaProps & { aoVoltar: () => void })
               </div>
             ) : (
               <button type="button" className="primario" style={{ marginTop: 0 }} onClick={() => setConfirmandoRestaurarPadrao(true)}>
-                Restaurar Padrão
+                Restaurar ícones no padrão Morfo
               </button>
             )}
             {resultadoRestaurarPadrao && (
@@ -1347,6 +1438,39 @@ export default function Categorias(_props: TelaProps & { aoVoltar: () => void })
       )}
       </>
       )}
+
+      {/* Build 092 — rodapé do PASSO 2 do primeiro acesso. Fixo embaixo
+          (mesma técnica de `.rodape-totais-fixo`), sempre visível em qualquer
+          aba desta tela; o botão só libera com o plano mínimo, e a linha acima
+          dele diz exatamente o que falta. */}
+      {primeiroAcesso && (() => {
+        const p = avaliarPassos(categorias ?? [], grupos ?? [], metas ?? [])
+        const pode = p.receitaOk && p.percentuaisOk
+        const falta = !p.receitaOk
+          ? 'Falta uma categoria de receita fixa com o valor esperado por mês.'
+          : !p.percentuaisOk
+            ? 'Os percentuais dos grupos de saída precisam somar 100% (aba Grupos e Metas).'
+            : null
+        return (
+          <div className="rodape-totais-fixo rodape-primeiro-acesso" data-testid="primeiro-acesso-rodape">
+            {falta && (
+              <p className="valor-neg texto-quebra" style={{ margin: '0 0 6px', fontSize: 12.5 }} data-testid="primeiro-acesso-falta">
+                {falta}
+              </p>
+            )}
+            <button
+              type="button"
+              className="primario"
+              style={{ width: '100%', marginTop: 0 }}
+              disabled={!pode}
+              data-testid="primeiro-acesso-concluir"
+              onClick={primeiroAcesso.aoConcluir}
+            >
+              Concluir e ir para o Planejamento
+            </button>
+          </div>
+        )
+      })()}
     </>
   )
 }

@@ -588,6 +588,8 @@ export interface ConfiguracaoIcones {
   /* Build 090: marca da migração do ícone do grupo Variável (ver
      `migrarIconeVariavel`, `gruposUtil.ts`). */
   iconeVariavelRevisado?: boolean
+  /* Build 092: o Variável recebe o cadeado aberto com estilo/cor do Fixo (ver `migrarIconeVariavelParDoFixo`). */
+  iconeVariavelParRevisado?: boolean
   // Aviso de permissões da notificação bancária (12/09/2026, pedido do
   // Rafael: "ao abrir o app, apareça um popup com esses dados e os 2 botões,
   // enquanto não forem fornecidas as permissões [...] com a opção de lembrar
@@ -602,6 +604,12 @@ export interface ConfiguracaoIcones {
   loggedTenantIdN1?: string
   permissoesAdiadasEm?: string
   permissoesNuncaMostrar?: boolean
+  /* Build 092 (17/09/2026): "Lembrar mais tarde" deixou de ser "amanhã de
+     novo" — o Rafael pediu que, depois de adiar, o popup NÃO abra mais
+     sozinho. "Mais tarde" passou a ser "na próxima build instalada": guarda o
+     número da build em que foi adiado; uma build maior pergunta de novo, a
+     mesma não. A tela de Notificações continua com os dois botões sempre. */
+  permissoesAdiadasNaBuild?: number
   // Memória do campo "O que foi" (10/09/2026, pedido do Rafael: "sugere lista
   // dos últimos registros conforme digita; essa memória é parâmetro de nível 1
   // do ambiente do cliente, em DIAS PRA TRÁS, padrão 60 dias"). Quantos dias
@@ -775,6 +783,13 @@ export interface ConfiguracaoIcones {
      vez só, quando o plano fica pronto (fim do passo 2), e nunca insiste. */
   boasVindasVistas?: boolean
   tourConviteFeito?: boolean
+  /* PRIMEIRO ACESSO ISOLADO (build 092, 17/09/2026 — ver
+     `src/components/PrimeiroAcesso.tsx`). Depois das boas-vindas, quem ainda
+     não tem plano passa por um passo a passo que ocupa o app inteiro, sem
+     saída: receita fixa → grupos/categorias/metas → Planejamento. Esta marca
+     diz que ele foi concluído; só entra nele quem NÃO tem plano pronto, então
+     instalação antiga (plano já montado) nunca a precisa. */
+  primeiroAcessoConcluido?: boolean
   /* Qual versão do padrão de Categorias/Grupos cada ambiente já recebeu
      (item 15, 12/09/2026). Antes era um número único (`padraoCatVersaoAplicada`,
      mantido por compatibilidade): um cliente novo nunca recebia o padrão

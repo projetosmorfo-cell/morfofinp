@@ -798,7 +798,7 @@ export const ICONES: Record<string, DefIcone> = {
   ferramentas: { nome: 'Ferramentas', outline: WrenchIcon, solid: WrenchIconSolid, emoji: '🛠️', categoria: 'moradia', sinonimos: ['equipamento'] },
   servicosTecnicos: { nome: 'Serviços Técnicos', outline: Cog6ToothIcon, solid: Cog6ToothIconSolid, emoji: '⚙️', categoria: 'trabalho', sinonimos: ['tecnico', 'assistencia tecnica'] },
   seguranca: { nome: 'Segurança/Chaveiro', outline: KeyIcon, solid: KeyIconSolid, emoji: '🔑', categoria: 'seguranca', sinonimos: ['chaveiro', 'alarme'] },
-  cofreDigital: { nome: 'Cofre/Segurança Digital', outline: LockClosedIcon, solid: LockClosedIconSolid, emoji: '🔒', categoria: 'seguranca', sinonimos: ['senha', 'protecao de dados'] },
+  cofreDigital: { nome: 'Cofre/Segurança Digital', outline: LockClosedIcon, solid: LockClosedIconSolid, emoji: '🔒', categoria: 'seguranca', sinonimos: ['senha', 'protecao de dados', 'cadeado', 'cadeado fechado', 'fixo'] },
   juridico: { nome: 'Jurídico/Advocacia', outline: ScaleIcon, solid: ScaleIconSolid, emoji: '⚖️', categoria: 'seguranca', sinonimos: ['advogado', 'processo', 'justica'] },
   documentos: { nome: 'Documentos/Cartório', outline: ClipboardDocumentListIcon, solid: ClipboardDocumentListIconSolid, emoji: '📋', categoria: 'documentos', sinonimos: ['cartorio', 'papelada'] },
   contrato: { nome: 'Contrato', outline: ClipboardDocumentCheckIcon, solid: ClipboardDocumentCheckIconSolid, emoji: '📝', categoria: 'documentos', sinonimos: ['acordo'] },
@@ -906,7 +906,8 @@ export const ICONES: Record<string, DefIcone> = {
   escudoAlerta: { nome: 'Risco/Alerta de Segurança', outline: ShieldExclamationIcon, solid: ShieldExclamationIconSolid, emoji: '🛡️', categoria: 'seguranca' },
   olhoAberto: { nome: 'Visível/Transparência', outline: EyeIcon, solid: EyeIconSolid, emoji: '👁️', categoria: 'seguranca' },
   olhoFechado: { nome: 'Oculto/Privado', outline: EyeSlashIcon, solid: EyeSlashIconSolid, emoji: '🙈', categoria: 'seguranca' },
-  cadeadoAberto: { nome: 'Acesso Liberado', outline: LockOpenIcon, solid: LockOpenIconSolid, emoji: '🔓', categoria: 'seguranca' },
+  /* Build 092: era "Acesso Liberado" — o Rafael procurou "cadeado" na grade e não achou. É o par ABERTO do `cofreDigital` (o cadeado fechado do Fixo). */
+  cadeadoAberto: { nome: 'Cadeado aberto', outline: LockOpenIcon, solid: LockOpenIconSolid, emoji: '🔓', categoria: 'seguranca', sinonimos: ['acesso liberado', 'desbloqueado', 'aberto', 'variavel', 'variável'] },
   semSimbolo: { nome: 'Bloqueado/Cancelado', outline: NoSymbolIcon, solid: NoSymbolIconSolid, emoji: '🚫', categoria: 'simbolos' },
   checkCirculo: { nome: 'Confirmado/Pago', outline: CheckCircleIcon, solid: CheckCircleIconSolid, emoji: '✅', categoria: 'simbolos' },
   check: { nome: 'Concluído', outline: CheckIcon, solid: CheckIconSolid, emoji: '✔️', categoria: 'simbolos' },

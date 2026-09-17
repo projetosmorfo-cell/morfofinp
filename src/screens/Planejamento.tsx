@@ -768,11 +768,12 @@ export default function Planejamento({ mes, aoMudarMes, aoAbrirLancamento, aoAbr
                         if (Math.abs(diferenca) < 1) return null
                         return (
                           <p style={{ margin: '4px 0 0', fontSize: 11.5 }} className="texto-fraco texto-quebra">
-                            Categorias somam {fmt(somaCategorias)} —{' '}
+                            {/* Build 092 — sem "R$" (pedido: "esses textos nos cards de grupos tbm devem ficar sem R$"). */}
+                            Categorias somam {fmtNum(somaCategorias)} —{' '}
                             {diferenca > 0 ? (
-                              <span className="valor-pos">sobram {fmt(diferenca)} por distribuir</span>
+                              <span className="valor-pos">sobram {fmtNum(diferenca)} por distribuir</span>
                             ) : (
-                              <span className="valor-neg">excedem em {fmt(-diferenca)}</span>
+                              <span className="valor-neg">excedem em {fmtNum(-diferenca)}</span>
                             )}
                           </p>
                         )

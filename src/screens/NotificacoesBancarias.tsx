@@ -208,7 +208,14 @@ export default function NotificacoesBancarias({
               aria-selected={aba === k}
               className={`aba-tela-item${aba === k ? ' ativa' : ''}`}
               data-testid={`notif-aba-${k}`}
-              onClick={() => setAba(k)}
+              onClick={(e) => {
+                setAba(k)
+                /* Build 092: trocar de aba volta a lista pro TOPO. O `<main>`
+                   é o único contêiner de rolagem do N1 e não desmonta ao
+                   trocar de aba — sem isto a aba nova abria na altura em que
+                   a anterior tinha sido rolada. */
+                e.currentTarget.closest('main')?.scrollTo({ top: 0 })
+              }}
             >
               {ROTULO_ABA[k]}{' '}
               <span className="texto-fraco" style={{ fontWeight: 400 }}>

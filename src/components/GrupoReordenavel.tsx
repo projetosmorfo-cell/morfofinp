@@ -24,11 +24,26 @@ import { MarcadorLinha, type Selecao } from './SelecaoETotais'
 // 3. Engolir o `contextmenu` da linha: no Android o long-press abre o menu
 //    de contexto/seleção exatamente aos ~500ms, logo depois do nosso timer.
 //
-// Pointer Events (não touch/mouse separados, como o arrasto de excluir/
-// duplicar/editar em `ItemLancamentoAcoes.tsx`) — unifica mouse e toque num
-// só handler, o que casa bem com um gesto de posição contínua (mover sobre
-// as linhas vizinhas), diferente do swipe horizontal que só precisa de
-// direção.
+// Build 092 (17/09/2026) — REINCIDÊNCIA no celular: "segurar e arrastar
+// ainda não está funcionando". A 090 provou o gesto com mouse e com toque
+// SIMULADO (CDP) no Chromium headless, e os dois passam — mas o Android real
+// não. CAUSA (hipótese forte, fundamentada no comportamento documentado do
+// Chrome, não reproduzível aqui): o `html` tem `touch-action: pan-y` (shell
+// do Kit). Com pan-y, o Chrome/WebView entrega a rolagem vertical ao
+// compositor SEM esperar o JS: o `touchmove` vertical chega NÃO CANCELÁVEL
+// (o `preventDefault` da 090 era ignorado) e, assim que a rolagem começa, o
+// navegador dispara `pointercancel` — o arrasto morria e a lista rolava.
+// Correção em duas partes:
+// 1. No TOQUE o gesto passa a viver em Touch Events nativos (touchstart/
+//    touchmove/touchend), que continuam chegando mesmo quando o navegador
+//    decide rolar — o `pointercancel` deixa de matar o arrasto. Pointer
+//    Events ficam só pro mouse/caneta.
+// 2. Enquanto o arrasto está ativo, o `<main>` (único contêiner de rolagem
+//    do N1) recebe `overflow: hidden` — não existe mais o que rolar, então
+//    o dedo move a linha e não a página, independente de o `touchmove` ser
+//    cancelável ou não. Restaurado ao soltar.
+// `touch-action: none` na linha resolveria de um jeito só, mas mataria o
+// scroll de quem só quer descer a lista (a linha É a lista inteira).
 const ATRASO_PRESSIONAR_MS = 400
 
 export default function GrupoReordenavel({
@@ -69,18 +84,15 @@ export default function GrupoReordenavel({
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [emArrasto, setEmArrasto] = useState<number | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
-
-  /* Build 090 — bloqueia a rolagem da página SÓ durante o arrasto (ver
-     cabeçalho). Listener nativo porque o do React é passivo. */
-  useEffect(() => {
-    const el = containerRef.current
-    if (!el) return
-    const bloquearRolagem = (e: TouchEvent) => {
-      if (arrastandoIdRef.current != null && e.cancelable) e.preventDefault()
-    }
-    el.addEventListener('touchmove', bloquearRolagem, { passive: false })
-    return () => el.removeEventListener('touchmove', bloquearRolagem)
-  }, [])
+  /* Espelhos em ref do que os listeners NATIVOS de toque precisam ler — eles
+     são registrados uma vez e não enxergam o estado/props do render atual. */
+  const ordemRef = useRef<number[] | null>(null)
+  ordemRef.current = ordemArrasto
+  const idsAtuaisRef = useRef(idsAtuais)
+  idsAtuaisRef.current = idsAtuais
+  const selecaoAtivaRef = useRef(selecao.ativa)
+  selecaoAtivaRef.current = selecao.ativa
+  const engolirProximoCliqueRef = useRef(false)
 
   function limparTimer() {
     if (timerRef.current != null) {
@@ -89,57 +101,27 @@ export default function GrupoReordenavel({
     }
   }
 
-  function onPointerDownLinha(id: number, e: React.PointerEvent) {
-    limparTimer()
-    const alvo = e.currentTarget
-    const pointerId = e.pointerId
-    timerRef.current = setTimeout(() => {
-      arrastandoIdRef.current = id
-      setEmArrasto(id)
-      try {
-        alvo.setPointerCapture(pointerId)
-      } catch {
-        // Alguns navegadores/ambientes de teste não suportam captura de
-        // ponteiro — o arrasto continua funcionando via listener no
-        // contêiner, só sem a garantia de receber o evento fora do elemento.
-      }
-    }, ATRASO_PRESSIONAR_MS)
+  /* Build 092: trava/destrava a rolagem do `<main>` durante o arrasto (ver
+     cabeçalho). */
+  function travarRolagem(travar: boolean) {
+    const main = containerRef.current?.closest('main') as HTMLElement | null
+    if (!main) return
+    main.style.overflowY = travar ? 'hidden' : ''
   }
 
-  function commitarOrdem() {
-    if (arrastandoIdRef.current == null) return
-    const ordemFinal = ordemArrasto ?? idsAtuais
-    ordemFinal.forEach((id, i) => {
-      db.lancamentos.update(id, { ordemManual: i })
-    })
+  function ativarArrasto(id: number) {
+    arrastandoIdRef.current = id
+    setEmArrasto(id)
+    travarRolagem(true)
+    try {
+      navigator.vibrate?.(25)
+    } catch {
+      // sem vibração, sem problema — é só um aviso tátil de "pegou"
+    }
   }
 
-  /* Build 090: soltar depois de um arrasto de verdade dispara um `click` na
-     linha (o ponteiro estava capturado por ela), e o clique abre o
-     lançamento — a pessoa reordenava e o formulário abria por cima. O próximo
-     clique depois de um arrasto é engolido na captura; um toque comum (sem
-     arrasto) continua abrindo normalmente. */
-  const engolirProximoCliqueRef = useRef(false)
-
-  function onPointerUpOuCancelar() {
-    limparTimer()
-    if (arrastandoIdRef.current != null) engolirProximoCliqueRef.current = true
-    commitarOrdem()
-    arrastandoIdRef.current = null
-    setEmArrasto(null)
-    setOrdemArrasto(null)
-  }
-
-  function onClickCaptureContainer(e: React.MouseEvent) {
-    if (!engolirProximoCliqueRef.current) return
-    engolirProximoCliqueRef.current = false
-    e.stopPropagation()
-    e.preventDefault()
-  }
-
-  function onPointerMoveContainer(e: React.PointerEvent) {
+  function moverPara(y: number) {
     if (arrastandoIdRef.current == null || !containerRef.current) return
-    const y = e.clientY
     const linhas = [...containerRef.current.querySelectorAll<HTMLElement>('[data-linha-id]')]
     if (linhas.length === 0) return
     let novoIndex = linhas.length - 1
@@ -150,13 +132,130 @@ export default function GrupoReordenavel({
         break
       }
     }
-    const atual = ordemArrasto ?? idsAtuais
+    const atual = ordemRef.current ?? idsAtuaisRef.current
     const indiceAtual = atual.indexOf(arrastandoIdRef.current)
     if (indiceAtual === -1 || indiceAtual === novoIndex) return
     const nova = [...atual]
     nova.splice(indiceAtual, 1)
     nova.splice(novoIndex, 0, arrastandoIdRef.current)
+    ordemRef.current = nova
     setOrdemArrasto(nova)
+  }
+
+  function commitarOrdem() {
+    if (arrastandoIdRef.current == null) return
+    const ordemFinal = ordemRef.current ?? idsAtuaisRef.current
+    ordemFinal.forEach((id, i) => {
+      db.lancamentos.update(id, { ordemManual: i })
+    })
+  }
+
+  /* Build 090: soltar depois de um arrasto de verdade dispara um `click` na
+     linha, e o clique abre o lançamento — a pessoa reordenava e o formulário
+     abria por cima. O próximo clique depois de um arrasto é engolido na
+     captura; um toque comum (sem arrasto) continua abrindo normalmente. */
+  function encerrar() {
+    limparTimer()
+    if (arrastandoIdRef.current != null) engolirProximoCliqueRef.current = true
+    commitarOrdem()
+    arrastandoIdRef.current = null
+    travarRolagem(false)
+    setEmArrasto(null)
+    setOrdemArrasto(null)
+    ordemRef.current = null
+  }
+
+  /* ---- TOQUE: Touch Events nativos (build 092, ver cabeçalho) ---- */
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    let toqueId: number | null = null
+    let x0 = 0
+    let y0 = 0
+    const acharToque = (e: TouchEvent) => [...e.changedTouches].find((t) => t.identifier === toqueId) ?? null
+    const onTouchStart = (e: TouchEvent) => {
+      if (selecaoAtivaRef.current || toqueId != null || e.touches.length !== 1) return
+      const linha = (e.target as HTMLElement | null)?.closest<HTMLElement>('[data-linha-id]')
+      if (!linha || !el.contains(linha)) return
+      const t = e.changedTouches[0]
+      toqueId = t.identifier
+      x0 = t.clientX
+      y0 = t.clientY
+      const id = Number(linha.dataset.linhaId)
+      limparTimer()
+      timerRef.current = setTimeout(() => {
+        timerRef.current = null
+        ativarArrasto(id)
+      }, ATRASO_PRESSIONAR_MS)
+    }
+    const onTouchMove = (e: TouchEvent) => {
+      const t = acharToque(e)
+      if (!t) return
+      if (arrastandoIdRef.current == null) {
+        // Ainda segurando: mexer mais que a folga é rolar ou deslizar pra
+        // agir — não é começo de arrasto. O timer cai e nada acontece.
+        if (Math.abs(t.clientX - x0) > 10 || Math.abs(t.clientY - y0) > 10) limparTimer()
+        return
+      }
+      if (e.cancelable) e.preventDefault()
+      moverPara(t.clientY)
+    }
+    const onTouchEnd = (e: TouchEvent) => {
+      if (!acharToque(e)) return
+      toqueId = null
+      encerrar()
+    }
+    el.addEventListener('touchstart', onTouchStart, { passive: true })
+    el.addEventListener('touchmove', onTouchMove, { passive: false })
+    el.addEventListener('touchend', onTouchEnd)
+    el.addEventListener('touchcancel', onTouchEnd)
+    return () => {
+      el.removeEventListener('touchstart', onTouchStart)
+      el.removeEventListener('touchmove', onTouchMove)
+      el.removeEventListener('touchend', onTouchEnd)
+      el.removeEventListener('touchcancel', onTouchEnd)
+    }
+    // Os handlers leem tudo por ref; registrar uma vez basta.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  /* ---- MOUSE/CANETA: Pointer Events (o toque é ignorado aqui, de propósito
+     — no toque o `pointercancel` da rolagem mataria o gesto; ver cabeçalho) ---- */
+  const ehToque = (e: React.PointerEvent) => e.pointerType === 'touch'
+
+  function onPointerDownLinha(id: number, e: React.PointerEvent) {
+    if (ehToque(e)) return
+    limparTimer()
+    const alvo = e.currentTarget
+    const pointerId = e.pointerId
+    timerRef.current = setTimeout(() => {
+      timerRef.current = null
+      ativarArrasto(id)
+      try {
+        alvo.setPointerCapture(pointerId)
+      } catch {
+        // Alguns navegadores/ambientes de teste não suportam captura de
+        // ponteiro — o arrasto continua funcionando via listener no
+        // contêiner, só sem a garantia de receber o evento fora do elemento.
+      }
+    }, ATRASO_PRESSIONAR_MS)
+  }
+
+  function onPointerUpOuCancelar(e: React.PointerEvent) {
+    if (ehToque(e)) return
+    encerrar()
+  }
+
+  function onClickCaptureContainer(e: React.MouseEvent) {
+    if (!engolirProximoCliqueRef.current) return
+    engolirProximoCliqueRef.current = false
+    e.stopPropagation()
+    e.preventDefault()
+  }
+
+  function onPointerMoveContainer(e: React.PointerEvent) {
+    if (ehToque(e)) return
+    moverPara(e.clientY)
   }
 
   return (
@@ -177,8 +276,8 @@ export default function GrupoReordenavel({
             data-testid={`linha-reordenavel-${id}`}
             className={`linha-selecionavel linha-reordenavel ${emArrasto === id ? 'em-arrasto' : ''}`}
             onPointerDown={selecao.ativa ? undefined : (e) => onPointerDownLinha(id, e)}
-            onPointerUp={limparTimer}
-            onPointerLeave={limparTimer}
+            onPointerUp={(e) => { if (!ehToque(e)) limparTimer() }}
+            onPointerLeave={(e) => { if (!ehToque(e)) limparTimer() }}
             onContextMenu={(e) => {
               // Build 090: o long-press do Android dispara o menu de contexto
               // (seleção de texto) no meio do gesto — só enquanto se segura ou

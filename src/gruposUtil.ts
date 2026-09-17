@@ -317,6 +317,43 @@ export async function migrarTipoDosGrupos(): Promise<{ tipados: number; movidas:
    o padrão de fábrica ANTIGO (`cadeadoAberto` preenchido) ou o genérico
    (`outros`/vazio) — um ícone escolhido de propósito fica intocado. Marca
    própria, roda uma vez. */
+/* Build 092 (17/09/2026) — REINCIDÊNCIA: "não tem esse ícone, mas antes
+   tinha". O ícone existia (`cadeadoAberto`, LockOpen), mas com o nome
+   "Acesso Liberado" ninguém o achava procurando "cadeado"; e a migração da
+   090 só trocava a fábrica antiga/genérico — um Variável com QUALQUER outro
+   ícone ficava como estava. Pedido literal agora: o cadeado aberto no
+   Variável, "seguindo o padrão atual ativo pela Morfo (preenchido, apenas
+   borda, na cor definida pela Morfo, ou colorido)". Então esta migração
+   (marca própria, roda uma vez) escreve o DESENHO no Variável e copia
+   estilo+cor do Fixo — é o Fixo que carrega o pacote ativo, e os dois são
+   o par 🔒/🔓. Sem Fixo, copia de qualquer outro grupo; sem grupo nenhum,
+   fica a fábrica. */
+export async function migrarIconeVariavelParDoFixo(): Promise<boolean> {
+  try {
+    const config = await db.configuracoes.get(1)
+    if (config?.iconeVariavelParRevisado) return false
+    const amb = await ambienteDoBanco()
+    const grupos = doAmbiente(await db.grupos.toArray(), amb)
+    const variavel = grupos.find((g) => g.ativo !== false && semAcento(g.nome) === semAcento('Variável'))
+    const fixo = grupos.find((g) => g.ativo !== false && semAcento(g.nome) === semAcento('Fixo'))
+    const referencia = fixo ?? grupos.find((g) => g.id !== variavel?.id && g.icone && g.icone !== 'nenhum')
+    const padrao = ICONES_PADRAO_GRUPO['Variável']
+    let mudou = false
+    if (variavel?.id != null && padrao) {
+      await db.grupos.update(variavel.id, {
+        icone: padrao.icone,
+        iconeEstilo: referencia?.iconeEstilo ?? padrao.iconeEstilo,
+        iconeCor: referencia?.iconeCor ?? padrao.iconeCor,
+      })
+      mudou = true
+    }
+    await salvarConfiguracaoIcones({ iconeVariavelParRevisado: true })
+    return mudou
+  } catch {
+    return false
+  }
+}
+
 export async function migrarIconeVariavel(): Promise<boolean> {
   try {
     const config = await db.configuracoes.get(1)

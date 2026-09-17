@@ -12,6 +12,7 @@ import ParametrosNotificacao from './screens/ParametrosNotificacao'
 import MinhaAssinatura from './kit/MinhaAssinatura'
 import GuidedTour, { passosTourN1, ONDE_REABRIR_TOUR, type PassoTour } from './kit/GuidedTour'
 import BoasVindas, { ConviteTour, useEstadoOnboarding, usePlanoPronto } from './components/BoasVindas'
+import PrimeiroAcesso from './components/PrimeiroAcesso'
 import SimularData, { BannerDataSimulada } from './kit/SimularData'
 import RodapeAbas from './kit/RodapeAbas'
 import { ArrowPathIcon, ArrowRightOnRectangleIcon, CalendarDaysIcon, ChatBubbleLeftRightIcon, Cog6ToothIcon, EllipsisVerticalIcon, ListBulletIcon, ScaleIcon, WalletIcon } from '@heroicons/react/24/outline'
@@ -19,7 +20,7 @@ import DetalheLancamento from './components/DetalheLancamento'
 import { mesInicial, formatarMes, type PagamentoFaturaAbertura } from './mes'
 import { mesesComPendencia } from './pendencias'
 import { avancarSeriesFixasPendentes } from './recorrencia'
-import { migrarComportamentoDosGrupos, migrarGruposAntigosParaInvestimento, migrarIconeVariavel, migrarTipoDosGrupos } from './gruposUtil'
+import { migrarComportamentoDosGrupos, migrarGruposAntigosParaInvestimento, migrarIconeVariavel, migrarIconeVariavelParDoFixo, migrarTipoDosGrupos } from './gruposUtil'
 import { aplicarPadraoSeNaoEditado } from './kit/padraoCategorias'
 import { aplicarPacoteN0SeNaoEscolhido } from './pacotesIcones'
 import { vincularPagamentosAntigos } from './faturaPagamento'
@@ -727,6 +728,7 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: ModoConsultaN
       /* Build 090: ícone padrão do grupo Variável virou cadeado aberto
          colorido — só troca o valor de fábrica antigo. */
       await migrarIconeVariavel()
+      await migrarIconeVariavelParDoFixo()
       /* O app passou a exigir PELO MENOS UM cofrinho cadastrado (build 086,
          pergunta do Rafael: "na carteira o cofrinho aparece mas no cadastro de
          contas ele não aparece"). Instalação antiga podia não ter nenhuma
@@ -802,7 +804,10 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: ModoConsultaN
      Rafael) — só no app instalado e só enquanto falta alguma das duas; tem
      "Lembrar mais tarde" (volta no dia seguinte) e "Não mostrar novamente".
      Ver `src/components/PermissoesNotificacao.tsx`. */
-  const avisoPermissoes = usarAvisoPermissoes(configN1Carregada === CARREGANDO ? undefined : (configN1 ?? null))
+  /* Build 092: passa a MESMA consulta que carrega a marca — misturar duas
+     `useLiveQuery` aqui era a corrida que fazia o popup piscar (ver
+     `usarAvisoPermissoes`). */
+  const avisoPermissoes = usarAvisoPermissoes(configN1Carregada === CARREGANDO ? undefined : configN1Carregada)
   /* 16/09/2026: o aviso do topo conta só o que PARECE movimentação de
      dinheiro. Propaganda do banco que passou pelo filtro nativo (genérico de
      propósito) não infla mais o contador — ela fica na seção "Ignoradas" da
@@ -960,13 +965,38 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: ModoConsultaN
      bug real pego pelo t050b, não relatado. */
   const mostrarBoasVindas =
     !modoConsultaN0 && onboarding.pronto && !onboarding.boasVindasVistas
+
+  /* PRIMEIRO ACESSO ISOLADO (build 092) — ver `components/PrimeiroAcesso.tsx`.
+     Entra quem viu as boas-vindas, ainda não concluiu o passo a passo e NÃO
+     tem plano (`planoPronto === false` — `undefined` é "ainda carregando" e
+     não decide nada). Uma vez dentro, fica dentro (`primeiroAcessoAtivo`) até
+     concluir: o passo 1 (receita fixa) torna o plano "pronto" no meio do
+     caminho — com os percentuais 50/30/20 já semeados — e sem esta trava o
+     passo 2 desapareceria antes de ser visto. O estado é ajustado durante o
+     render (padrão "adjusting state when a prop changes"), nunca em efeito. */
+  const [primeiroAcessoAtivo, setPrimeiroAcessoAtivo] = useState(false)
+  const deveEntrarNoPrimeiroAcesso =
+    !modoConsultaN0 &&
+    onboarding.pronto &&
+    onboarding.boasVindasVistas &&
+    !onboarding.primeiroAcessoConcluido &&
+    planoPronto === false
+  if (deveEntrarNoPrimeiroAcesso && !primeiroAcessoAtivo) setPrimeiroAcessoAtivo(true)
+  const concluirPrimeiroAcesso = () => {
+    void salvarConfiguracaoIcones({ primeiroAcessoConcluido: true })
+    setPrimeiroAcessoAtivo(false)
+    setConfigAberta(null)
+    setTela('planejamento')
+  }
+
   const mostrarConviteTour =
     !modoConsultaN0 &&
     onboarding.pronto &&
     onboarding.boasVindasVistas &&
     !onboarding.tourConviteFeito &&
     !configN1?.tourNaoExibir &&
-    planoPronto &&
+    !!planoPronto &&
+    !primeiroAcessoAtivo &&
     !tourAberto
   const aceitarConviteTour = () => {
     void salvarConfiguracaoIcones({ tourConviteFeito: true })
@@ -995,11 +1025,18 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: ModoConsultaN
   if (mostrarBoasVindas) {
     return (
       <BoasVindas
+        planoPronto={!!planoPronto}
         aoComecar={() => {
           void salvarConfiguracaoIcones({ boasVindasVistas: true })
         }}
       />
     )
+  }
+
+  /* Isolado de verdade: nem barra de marca, nem rodapé, nem "Voltar". A única
+     saída é concluir (ver o cabeçalho de `PrimeiroAcesso.tsx`). */
+  if (primeiroAcessoAtivo) {
+    return <PrimeiroAcesso aoConcluir={concluirPrimeiroAcesso} />
   }
 
   return (

@@ -109,6 +109,7 @@ export function useConfiguracaoIcones(): Required<
     | 'temaPreferido'
     | 'permissoesAdiadasEm'
     | 'permissoesNuncaMostrar'
+    | 'permissoesAdiadasNaBuild'
     | 'memoriaDescricaoDias'
     | 'logosInstituicoes'
     | 'pctGrupoRevisado'
@@ -124,6 +125,7 @@ export function useConfiguracaoIcones(): Required<
     | 'tourNaoExibir'
     | 'boasVindasVistas'
     | 'tourConviteFeito'
+    | 'primeiroAcessoConcluido'
     | 'padraoCatVersaoPorAmbiente'
     /* 16/09/2026 (build 080): os parâmetros da notificação bancária moram no
        mesmo singleton, mas quem lê é `notificacaoParametros.ts` (que compõe as
@@ -149,6 +151,7 @@ export function useConfiguracaoIcones(): Required<
     | 'pacoteIconesCores'
     | 'pacoteIconesVersaoAplicada'
     | 'iconeVariavelRevisado'
+    | 'iconeVariavelParRevisado'
   >
 > {
   const config = useLiveQuery(() => db.configuracoes.get(1), [])

@@ -45,13 +45,22 @@ export interface EstadoOnboarding {
   pronto: boolean
   boasVindasVistas: boolean
   tourConviteFeito: boolean
+  /** Build 092: o passo a passo isolado do primeiro acesso já foi concluído. */
+  primeiroAcessoConcluido: boolean
 }
 
 export function useEstadoOnboarding(): EstadoOnboarding {
   const cfg = useLiveQuery(() => db.configuracoes.get(1), [], CARREGANDO as never)
   const pronto = (cfg as unknown) !== CARREGANDO
-  const c = pronto ? (cfg as { boasVindasVistas?: boolean; tourConviteFeito?: boolean } | undefined) : undefined
-  return { pronto, boasVindasVistas: !!c?.boasVindasVistas, tourConviteFeito: !!c?.tourConviteFeito }
+  const c = pronto
+    ? (cfg as { boasVindasVistas?: boolean; tourConviteFeito?: boolean; primeiroAcessoConcluido?: boolean } | undefined)
+    : undefined
+  return {
+    pronto,
+    boasVindasVistas: !!c?.boasVindasVistas,
+    tourConviteFeito: !!c?.tourConviteFeito,
+    primeiroAcessoConcluido: !!c?.primeiroAcessoConcluido,
+  }
 }
 
 /* QUANDO o plano fica "pronto" — a condição que dispara o convite do tour.
@@ -67,27 +76,51 @@ export function useEstadoOnboarding(): EstadoOnboarding {
  *
  * Nos dois casos o passo 2 (percentuais dos grupos somando 100%) é obrigatório:
  * sem ele não existe meta, e sem meta não existe nenhum dos dois números.
+ *
+ * Build 092: devolve `undefined` ENQUANTO CARREGA (categorias, grupos, metas
+ * ou a contagem de receita lançada ainda não chegaram). É essa terceira
+ * resposta que impede o passo a passo isolado do primeiro acesso
+ * (`PrimeiroAcesso.tsx`) de abrir por um instante pra quem já tem plano —
+ * "false" só quando se SABE que não há plano. Quem só precisa de sim/não
+ * trata `undefined` como falso, como sempre tratou.
  */
 export function usePlanoPronto(
   categorias: readonly Categoria[] | undefined,
   grupos: readonly GrupoRegistro[] | undefined,
   metas: readonly Meta[] | undefined,
-): boolean {
+): boolean | undefined {
   const idsBase = (categorias ? categoriasDaBaseMeta(categorias as Categoria[]) : [])
     .map((c) => c.id)
     .filter((id): id is number => id != null)
   const chave = idsBase.join(',')
-  const receitaLancada = useLiveQuery(async () => {
-    if (!chave) return 0
-    return contarDoAmbiente(db.lancamentos.where('categoriaId').anyOf(chave.split(',').map(Number)).toArray())
-  }, [chave]) ?? 0
-  if (!categorias || !grupos || !metas) return false
+  /* A resposta carrega a CHAVE com que foi calculada: quando a lista de
+     categorias chega e a chave muda, `useLiveQuery` continua devolvendo o
+     resultado ANTERIOR (o da chave vazia, 0) até a consulta nova terminar —
+     e um 0 momentâneo diria "sem receita lançada" pra quem tem 827
+     lançamentos. Foi exatamente o que o t092 pegou: a base de demonstração
+     caía no passo a passo do primeiro acesso ao recarregar. Só vale a
+     resposta cuja chave é a atual; o resto é "carregando". */
+  const resposta = useLiveQuery(async () => {
+    const n = chave
+      ? await contarDoAmbiente(db.lancamentos.where('categoriaId').anyOf(chave.split(',').map(Number)).toArray())
+      : 0
+    return { chave, n }
+  }, [chave])
+  const receitaLancada = resposta && resposta.chave === chave ? resposta.n : undefined
+  if (!categorias || !grupos || !metas || receitaLancada === undefined) return undefined
   const p = avaliarPassos(categorias, grupos, metas)
   return p.percentuaisOk && (p.receitaOk || receitaLancada > 0)
 }
 
-/** A tela de abertura. Ocupa o app inteiro — não há nada por trás a ver ainda. */
-export default function BoasVindas({ aoComecar }: { aoComecar: () => void }) {
+/** A tela de abertura. Ocupa o app inteiro — não há nada por trás a ver ainda.
+ *
+ * Build 092: o resumo passou a descrever o passo a passo ISOLADO que vem em
+ * seguida (`PrimeiroAcesso.tsx`) — pedido do Rafael: "esse passo a passo deve
+ * ficar claro na primeira tela onde mostra o resumo dos primeiros passos".
+ * `planoPronto` muda só a última frase: quem já tem plano (base restaurada,
+ * instalação antiga) não vai passar pelo passo a passo, e a tela não pode
+ * prometer um passo que não vai acontecer. */
+export default function BoasVindas({ aoComecar, planoPronto = false }: { aoComecar: () => void; planoPronto?: boolean }) {
   return (
     <div className="boas-vindas" data-testid="boas-vindas">
       <div className="boas-vindas-corpo">
@@ -100,22 +133,24 @@ export default function BoasVindas({ aoComecar }: { aoComecar: () => void }) {
 
         <Linha
           n={1}
-          titulo="Você diz quanto recebe todo mês"
-          texto="A renda fixa é a base de tudo. É sobre ela que o resto é calculado."
+          titulo="Cadastre sua receita fixa"
+          texto="A categoria Salário já vem pronta: você só informa quanto recebe por mês. Mesmo que varie, é a base de todo o cálculo."
         />
         <Linha
           n={2}
-          titulo="E como quer dividir esse dinheiro"
-          texto="Em grupos, por percentual — já vem sugerido 50% para o fixo, 30% para o variável e 20% para investir."
+          titulo="Ajuste grupos, categorias e metas"
+          texto="Como dividir esse dinheiro, por percentual — já vem sugerido 50% para o fixo, 30% para o variável e 20% para investir."
         />
         <Linha
           n={3}
-          titulo="O app compara o real com esse plano"
+          titulo="O Planejamento abre e o app compara o real com o plano"
           texto="Todo dia, em dois números: o que está livre de verdade e o quanto ainda dá para economizar até o fim do mês."
         />
 
-        <p className="ideal-t4 texto-quebra" style={{ margin: '18px 0 0' }}>
-          São 3 passos de configuração, e o primeiro já aparece na próxima tela.
+        <p className="ideal-t4 texto-quebra" style={{ margin: '18px 0 0' }} data-testid="boas-vindas-rodape">
+          {planoPronto
+            ? 'Seu plano já está montado — toque em Começar e o app abre direto.'
+            : 'Os passos 1 e 2 são obrigatórios e vêm em seguida, um de cada vez. O resto do app só abre depois deles.'}
         </p>
       </div>
 

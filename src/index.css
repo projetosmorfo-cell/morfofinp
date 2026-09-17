@@ -1502,10 +1502,12 @@ nav.rodape {
    de respiro; a data é só um separador de seção, não um item de lista. */
 .sessao-data {
   padding: 0 4px;
-  /* Mesma redução da `.sessao-data-simples` (10/09/2026): 12px→10.5px com
-     `line-height: 1.1`. É separador de sessão, não item de lista. */
-  font-size: 10.5px;
-  line-height: 1.1;
+  /* Build 092 (17/09/2026), pedido do Rafael: a data da lista Completa tem o
+     MESMO tamanho do texto da conta ("Bradesco", "Porto Seguro") na linha
+     logo abaixo — `.llc-texto .llc-origem`, 12px. Era 10.5px desde
+     10/09/2026 (build 026). `.sessao-data-simples` (lista Simples) não muda. */
+  font-size: 12px;
+  line-height: 1.15;
   color: var(--texto-fraco);
   letter-spacing: 0.02em;
   /* Item 3 (16/09/2026): sem fundo próprio, esta linha ficava sobre o fundo
@@ -3163,6 +3165,15 @@ html[data-mloc-tema='claro'] .tarja-inativa {
    só que sempre clicável. */
 .faixa-percentuais.atalho-calibragem { cursor: pointer; margin-top: 4px; }
 .faixa-percentuais.atalho-calibragem strong { display: block; margin-bottom: 2px; }
+/* Build 092: o título do atalho em AMARELO — a mesma cor do "Calibrar" do
+   Planejamento (`.aviso-calibragem-acao`, `--ideal-ambar-txt`), pedido do
+   Rafael. A explicação embaixo continua neutra. */
+.faixa-percentuais.atalho-calibragem strong { color: var(--ideal-ambar-txt); }
+
+/* Build 092 — rodapé fixo do passo 2 do primeiro acesso isolado (a tela de
+   Categorias em modo `primeiroAcesso`). Reusa `.rodape-totais-fixo`; só
+   ganha mais respiro embaixo porque aqui NÃO existe barra de abas por baixo. */
+.rodape-primeiro-acesso { padding-bottom: 16px; z-index: 8; }
 
 /* Cabeçalho A1 do card de grupo (build 059): o percentual é o número grande,
    o R$ é a consequência dele, e a contagem de categorias desce pra segunda
@@ -3476,6 +3487,11 @@ html[data-mloc-tema='claro'] .tarja-inativa {
 }
 /* Abas da tela Planejamento (Árvore × Gráficos). */
 .abas-planejamento { display: flex; gap: 6px; margin: 0 0 10px; }
+/* Build 092: as abas Colunas/Linhas/Medidor vinham COLADAS no card do
+   veredito acima delas (o card não tem margem embaixo; quem dá o respiro
+   entre cards é `main .cartao + .cartao`, que não casa com uma linha de
+   abas). Mesmo espaço dos cards. */
+.cartao + .abas-planejamento { margin-top: var(--espaco-cartoes); }
 .abas-planejamento button {
   flex: 1 1 0; padding: 8px 10px; border-radius: 9px;
   border: 1px solid var(--borda); background: var(--bg-elevado);

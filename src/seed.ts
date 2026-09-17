@@ -1,6 +1,7 @@
-import { db, type Categoria, type Lancamento } from './db'
+import { db, type Categoria, type GrupoRegistro, type Lancamento } from './db'
 import { comIconePadraoCategoria, comIconePadraoGrupo } from './iconesPadrao'
 import { GRUPO_RECEITA } from './gruposUtil'
+import type { GrupoPadraoN0, CategoriaPadraoN0 } from './kit/kitPlatform'
 import { doAmbiente, AMBIENTE_DESTE_APARELHO } from './ambiente'
 
 /* Primeiro mês que a base de demonstração entrega EM ABERTO (`pago: false`).
@@ -895,6 +896,30 @@ const LANCAMENTOS_SEMENTE: LancamentoSemente[] = [
   { data: '2026-09-25', descricao: 'Faxina', categoria: 'Casa', valor: -150, conta: 'bradesco' },
   { data: '2026-09-28', descricao: 'Energia', categoria: 'Casa', valor: -127.82, conta: 'bradesco' },
 ]
+
+/* Build 092 (17/09/2026) — o PADRÃO DE FÁBRICA de categorias e grupos, no
+   formato do padrão da plataforma (`PadraoCategoriasN0`), pra o botão
+   "Restaurar categorias e grupos padrão do app" (Categorias › Padrão do app)
+   ter de onde ler quando o N0 nunca publicou nada — depois de "Apagar tudo" o
+   cadastro está vazio, e `lerPadraoAtual()` cairia numa fotografia vazia.
+   Só ESTRUTURA (nome, grupo, natureza, receita fixa, ícone, percentual do
+   grupo, comportamento) — nunca valor de meta, nunca lançamento. */
+export function padraoDeFabrica(): { grupos: GrupoPadraoN0[]; categorias: CategoriaPadraoN0[] } {
+  const grupos = [
+    { nome: 'Fixo', percentual: 50, comportamento: 'fixo' as const },
+    { nome: 'Variável', percentual: 30, comportamento: 'variavel' as const },
+    { nome: 'Investimento', percentual: 20, comportamento: 'guardar' as const },
+    { nome: GRUPO_RECEITA, percentual: 0 },
+  ].map((g) => {
+    const i = comIconePadraoGrupo({ nome: g.nome, ativo: true } as Omit<GrupoRegistro, 'id'>)
+    return { nome: g.nome, percentual: g.percentual, comportamento: g.comportamento, icone: i.icone, iconeEstilo: i.iconeEstilo, iconeCor: i.iconeCor }
+  })
+  const categorias = CATEGORIAS_PADRAO.map((c) => {
+    const i = comIconePadraoCategoria(c)
+    return { nome: c.nome, grupo: c.grupo, natureza: c.natureza, receitaFixa: c.receitaFixa, icone: i.icone, iconeEstilo: i.iconeEstilo, iconeCor: i.iconeCor }
+  })
+  return { grupos, categorias }
+}
 
 export async function seedIfEmpty() {
   /* 12/09/2026: conta só o ambiente deste aparelho — com o escopo por

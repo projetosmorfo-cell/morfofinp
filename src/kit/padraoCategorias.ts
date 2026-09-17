@@ -42,6 +42,29 @@ export async function lerPadraoAtual(): Promise<PadraoEditavel> {
   return lerPadraoDoAmbienteAtual()
 }
 
+/* Build 092 — "Restaurar categorias e grupos padrão do app" (Categorias ›
+   Padrão do app). Pedido do Rafael depois de usar "Apagar tudo": "limpa
+   categorias e grupos e lançamentos, aí percebi que não tem como restaurar o
+   padrão". Fonte: o padrão PUBLICADO pelo N0, quando existe; senão o de
+   fábrica (`padraoDeFabrica`, `seed.ts`). Aplica por MERGE de nome
+   (`aplicarPadrao`): cria o que falta, corrige grupo/natureza/ícone/receita
+   fixa do que existe pelo mesmo nome, e NÃO apaga nada que a pessoa tenha
+   criado à parte — lançamento que aponte pra categoria apagada antes continua
+   sem categoria (a tela avisa isso antes de confirmar). */
+export async function restaurarCategoriasEGruposPadrao(): Promise<{ grupos: number; categorias: number; origem: 'morfo' | 'fabrica' }> {
+  const platform = await lerPlatformN0Persistida()
+  const publicado = platform.padraoCategorias
+  if (publicado && publicado.categorias.length > 0) {
+    const { versao: _v, atualizadoEm: _a, ...resto } = publicado
+    void _v; void _a
+    const r = await aplicarPadrao(resto)
+    return { ...r, origem: 'morfo' }
+  }
+  const { padraoDeFabrica } = await import('../seed')
+  const r = await aplicarPadrao(padraoDeFabrica())
+  return { ...r, origem: 'fabrica' }
+}
+
 /** Fotografia do cadastro deste ambiente, no formato do padrão. */
 export async function lerPadraoDoAmbienteAtual(ambienteAlvo?: string): Promise<PadraoEditavel> {
   const amb = ambienteAlvo ?? (await ambienteDoBanco())

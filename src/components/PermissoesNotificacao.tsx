@@ -28,6 +28,7 @@ import {
   solicitarPermissaoAviso,
 } from '../notificacaoBancaria'
 import { salvarConfiguracaoIcones } from '../configuracaoIcones'
+import { BUILD_NUMBER } from '../buildInfo'
 
 export type EstadoPermissoes = { acesso: boolean; aviso: boolean }
 
@@ -145,8 +146,8 @@ export function PopupPermissoesNotificacao({
    precisa pra desenhá-lo. Regras:
    - só no app instalado (no navegador não existe permissão pra pedir);
    - só enquanto FALTA alguma das duas;
-   - "Lembrar mais tarde" some pelo resto do dia (volta na abertura seguinte,
-     em outro dia); "Não mostrar novamente" some pra sempre — até faltar
+   - "Lembrar mais tarde" some até a PRÓXIMA BUILD instalada (build 092 —
+     antes voltava no dia seguinte); "Não mostrar novamente" some pra sempre — até faltar
      permissão de novo depois de ter sido concedida? Não: a marca é
      permanente, é isso que "novamente" quer dizer. */
 export function usarAvisoPermissoes(
@@ -157,7 +158,15 @@ export function usarAvisoPermissoes(
      `undefined` (carregando), a regra não via o adiamento, ABRIA — e na
      passada seguinte, com a configuração em mãos, FECHAVA. Agora, enquanto
      não se sabe o que está gravado, não se decide nada. */
-  config: { permissoesAdiadasEm?: string; permissoesNuncaMostrar?: boolean } | null | undefined,
+  /* Build 092 — REINCIDÊNCIA ("isso continua"). A 090 tratou o `undefined`
+     de carregamento, mas o App passava OUTRO `useLiveQuery` (`configN1`) como
+     valor, guardado por um terceiro (`configN1Carregada`): são duas consultas
+     independentes, e num aparelho lento a segunda resolve antes da primeira —
+     a regra recebia `null` ("chegou e não existe"), ABRIA, e fechava quando
+     a primeira chegava. O App passa agora a MESMA consulta que carrega a
+     marca. E "Lembrar mais tarde" virou "na próxima build" (ver `db.ts`):
+     fechar e abrir o app na mesma build nunca mais reabre o popup. */
+  config: { permissoesAdiadasEm?: string; permissoesNuncaMostrar?: boolean; permissoesAdiadasNaBuild?: number } | null | undefined,
 ) {
   const [estado, setEstado] = useState<EstadoPermissoes>({ acesso: false, aviso: false })
   const [aberto, setAberto] = useState(false)
@@ -169,10 +178,12 @@ export function usarAvisoPermissoes(
     const atual = await lerPermissoes()
     setEstado(atual)
     const falta = !atual.acesso || !atual.aviso
-    const hoje = new Date().toISOString().slice(0, 10)
-    const adiadoHoje = (config?.permissoesAdiadasEm ?? '').slice(0, 10) === hoje
-    setAberto(falta && !config?.permissoesNuncaMostrar && !adiadoHoje)
-  }, [configPronta, config?.permissoesAdiadasEm, config?.permissoesNuncaMostrar])
+    const adiadoNestaBuild = (config?.permissoesAdiadasNaBuild ?? 0) >= BUILD_NUMBER
+    /* `permissoesAdiadasEm` (build 089/090, adiamento por DIA) é lido só como
+       legado: quem adiou numa build anterior a esta ainda vê o popup uma vez
+       nesta build — e o "Lembrar mais tarde" daqui grava a marca nova. */
+    setAberto(falta && !config?.permissoesNuncaMostrar && !adiadoNestaBuild)
+  }, [configPronta, config?.permissoesAdiadasNaBuild, config?.permissoesNuncaMostrar])
 
   useEffect(() => { void conferir() }, [conferir])
 
@@ -185,7 +196,7 @@ export function usarAvisoPermissoes(
     setEstado,
     adiar: () => {
       setAberto(false)
-      void salvarConfiguracaoIcones({ permissoesAdiadasEm: new Date().toISOString() })
+      void salvarConfiguracaoIcones({ permissoesAdiadasEm: new Date().toISOString(), permissoesAdiadasNaBuild: BUILD_NUMBER })
     },
     nuncaMais: () => {
       setAberto(false)
