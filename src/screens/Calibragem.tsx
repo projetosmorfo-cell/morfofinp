@@ -30,7 +30,7 @@ import { db, type Categoria, type GrupoRegistro } from '../db'
 import { lerDoAmbiente, marcaDoAmbiente } from '../ambiente'
 import { baseMetaDoMes, metaEmReais } from '../baseMeta'
 import { categoriaConsomeMeta } from '../orcamento'
-import { fmtBRL } from '../formatoMoeda'
+import { fmtBRL, fmtNum } from '../formatoMoeda'
 import { Icone } from '../icones'
 import { useConfiguracaoIcones, tamanhoIconePx } from '../configuracaoIcones'
 import { ArrowsRightLeftIcon, PencilSquareIcon, ListBulletIcon } from '@heroicons/react/24/outline'
@@ -238,7 +238,7 @@ export default function Calibragem({ mes, aoVoltar, aoAbrirLancamento }: Calibra
                   clicável — mesma reclamação do link azul do cofrinho. */}
               <PencilSquareIcon width={14} height={14} className="icone-editar-inline" />
             </button>
-            <span className="valor-pct-calibragem">{fmtBRL(metaEmReais(base, pctDe(g.nome)))}</span>
+            <span className="valor-pct-calibragem">{fmtNum(metaEmReais(base, pctDe(g.nome)))}</span>
             <input
               type="number"
               min={0}
@@ -300,18 +300,18 @@ export default function Calibragem({ mes, aoVoltar, aoAbrirLancamento }: Calibra
               <div className="linha-detalhe-cat">
                 <span className="ideal-t3">{g.nome}</span>
                 <span className="ideal-t4">
-                  meta {fmtBRL(meta)} ({Number(pctDe(g.nome).toFixed(2))}%)
+                  meta {fmtNum(meta)} ({Number(pctDe(g.nome).toFixed(2))}%)
                 </span>
               </div>
               <div className="linha-detalhe-cat">
                 <span className="ideal-t4">Soma das metas das categorias</span>
-                <span className="ideal-t3">{fmtBRL(soma)}</span>
+                <span className="ideal-t3">{fmtNum(soma)}</span>
               </div>
               {foraDoLugar && (
                 <div className="linha-detalhe-cat total">
                   <span className="ideal-t3">{dif < 0 ? 'Excede a meta do grupo' : 'Ainda não distribuído'}</span>
                   <span className={`ideal-t3 ${dif < 0 ? 'valor-neg' : 'valor-pos'}`}>
-                    {fmtBRL(Math.abs(dif))}
+                    {fmtNum(Math.abs(dif))}
                   </span>
                 </div>
               )}
@@ -373,9 +373,9 @@ export default function Calibragem({ mes, aoVoltar, aoAbrirLancamento }: Calibra
                         }`}
                         data-testid={`ref-cat-${c.id}`}
                       >
-                        {ref ? fmtBRL(ref) : '—'}
+                        {ref ? fmtNum(ref) : '—'}
                       </span>
-                      <span className="ideal-t3 col-meta-calibragem">{fmtBRL(c.aceitavelMensal || 0)}</span>
+                      <span className="ideal-t3 col-meta-calibragem">{fmtNum(c.aceitavelMensal || 0)}</span>
                       <PencilSquareIcon width={14} height={14} className="icone-editar-inline col-lapis-calibragem" />
                     </button>
                     {/* Item 7 (15/09/2026): abre os lançamentos desta categoria

@@ -2,7 +2,7 @@ import { type Categoria, type Lancamento } from '../db'
 import { statusDoLancamento, ROTULO_STATUS, CLASSE_STATUS, FUNDO_STATUS } from '../statusPagamento'
 import { alternarPago } from '../lancamentosUtil'
 import { Icone } from '../icones'
-import { fmtBRL } from '../formatoMoeda'
+import { fmtNum } from '../formatoMoeda'
 import { useConfiguracaoIcones, tamanhoIconePx } from '../configuracaoIcones'
 
 // Linha da listagem COMPLETA (31/08/2026, rodada seguinte) — o modelo de
@@ -48,9 +48,12 @@ export default function LinhaLancamentoCompleta({
         {origemLabel && <div className="llc-origem">{origemLabel}</div>}
       </span>
       <span className="llc-valores">
-        <span className={`lci-valor ${lancamento.valor < 0 ? 'valor-neg' : 'valor-pos'}`}>
+        {/* Build 091: sem "R$" e sem vermelho — negativo é o caso normal numa
+            lista de gastos e fica neutro; só o positivo (entrada) é verde. O
+            sinal escrito é o que diz o lado. */}
+        <span className={`lci-valor ${lancamento.valor < 0 ? 'valor-neutro' : 'valor-pos'}`}>
           {lancamento.valor < 0 ? '-' : '+'}
-          {fmtBRL(lancamento.valor)}
+          {fmtNum(lancamento.valor)}
         </span>
         <span
           className={`status-pill ${CLASSE_STATUS[status]}`}

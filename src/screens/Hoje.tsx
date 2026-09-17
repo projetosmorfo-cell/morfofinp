@@ -30,7 +30,7 @@ import { Icone } from '../icones'
 import { useConfiguracaoIcones, tamanhoIconePx } from '../configuracaoIcones'
 import TituloTelaN1 from '../kit/CabecalhoN1'
 import { InfoDot } from '../kit/PadraoUI'
-import { fmtBRL as fmt, fmtComSinal } from '../formatoMoeda'
+import { fmtBRL as fmt, fmtComSinal, fmtNum, fmtNumComSinal } from '../formatoMoeda'
 import { categoriaConsomeMeta, idsDeCofre, lancamentoConsomeMeta } from '../orcamento'
 import { comportamentoDoGrupo } from '../gruposUtil'
 import BlocoRecolhivel from '../components/BlocoRecolhivel'
@@ -414,16 +414,16 @@ export default function Hoje({ mes, aoMudarMes, aoAbrirLancamento, aoAbrirPlanej
                 <>
                   <div className="linha-detalhe-cat">
                     <span className="ideal-t4">Caixa de hoje (acumulado)</span>
-                    <span className="ideal-t3">{fmtComSinal(numeros.caixaAcumulado)}</span>
+                    <span className="ideal-t3">{fmtNumComSinal(numeros.caixaAcumulado)}</span>
                   </div>
                   <div className="linha-detalhe-cat">
                     <span className="ideal-t4">− resultado deste mês</span>
-                    <span className="ideal-t3">{fmtComSinal(numeros.resultadoDoMes)}</span>
+                    <span className="ideal-t3">{fmtNumComSinal(numeros.resultadoDoMes)}</span>
                   </div>
                   <div className="linha-detalhe-cat total">
                     <span className="ideal-t3">Mês passado</span>
                     <span className={`ideal-t3 ${caixaAnterior < 0 ? 'valor-neg' : 'valor-pos'}`}>
-                      {fmtComSinal(caixaAnterior)}
+                      {fmtNumComSinal(caixaAnterior)}
                     </span>
                   </div>
                 </>
@@ -431,16 +431,16 @@ export default function Hoje({ mes, aoMudarMes, aoAbrirLancamento, aoAbrirPlanej
                 <>
                   <div className="linha-detalhe-cat">
                     <span className="ideal-t4">Entrou no mês</span>
-                    <span className="ideal-t3">{fmtComSinal(numeros.entradas)}</span>
+                    <span className="ideal-t3">{fmtNumComSinal(numeros.entradas)}</span>
                   </div>
                   <div className="linha-detalhe-cat">
                     <span className="ideal-t4">− saiu no mês</span>
-                    <span className="ideal-t3">{fmt(Math.abs(numeros.saidas))}</span>
+                    <span className="ideal-t3">{fmtNum(Math.abs(numeros.saidas))}</span>
                   </div>
                   <div className="linha-detalhe-cat total">
                     <span className="ideal-t3">Resultado do mês</span>
                     <span className={`ideal-t3 ${numeros.resultadoDoMes < 0 ? 'valor-neg' : 'valor-pos'}`}>
-                      {fmtComSinal(numeros.resultadoDoMes)}
+                      {fmtNumComSinal(numeros.resultadoDoMes)}
                     </span>
                   </div>
                 </>
@@ -473,16 +473,16 @@ export default function Hoje({ mes, aoMudarMes, aoAbrirLancamento, aoAbrirPlanej
               <BlocoRecolhivel testid="detalhe-caixa-hoje" rotulo="De onde vem a caixa de hoje?">
                 <div className="linha-detalhe-cat">
                   <span className="ideal-t4">Mês passado</span>
-                  <span className="ideal-t3">{fmtComSinal(caixaAnterior)}</span>
+                  <span className="ideal-t3">{fmtNumComSinal(caixaAnterior)}</span>
                 </div>
                 <div className="linha-detalhe-cat">
                   <span className="ideal-t4">+ resultado deste mês</span>
-                  <span className="ideal-t3">{fmtComSinal(numeros.resultadoDoMes)}</span>
+                  <span className="ideal-t3">{fmtNumComSinal(numeros.resultadoDoMes)}</span>
                 </div>
                 <div className="linha-detalhe-cat total">
                   <span className="ideal-t3">Caixa de hoje</span>
                   <span className={`ideal-t3 ${numeros.caixaAcumulado < 0 ? 'valor-neg' : 'valor-pos'}`}>
-                    {fmtComSinal(numeros.caixaAcumulado)}
+                    {fmtNumComSinal(numeros.caixaAcumulado)}
                   </span>
                 </div>
               </BlocoRecolhivel>
@@ -598,16 +598,16 @@ export default function Hoje({ mes, aoMudarMes, aoAbrirLancamento, aoAbrirPlanej
                 <>
                   <div className="linha-detalhe-cat">
                     <span className="ideal-t4">Caixa de hoje (acumulado)</span>
-                    <span className="ideal-t3">{fmtComSinal(numeros.caixaAcumulado)}</span>
+                    <span className="ideal-t3">{fmtNumComSinal(numeros.caixaAcumulado)}</span>
                   </div>
                   <div className="linha-detalhe-cat">
                     <span className="ideal-t4">− reservado nas metas do mês</span>
-                    <span className="ideal-t3">{fmt(numeros.reservado)}</span>
+                    <span className="ideal-t3">{fmtNum(numeros.reservado)}</span>
                   </div>
                   <div className="linha-detalhe-cat total">
                     <span className="ideal-t3">Livre de tudo</span>
                     <span className={`ideal-t3 ${numeros.saldoLivre < 0 ? 'valor-neg' : 'valor-pos'}`}>
-                      {fmtComSinal(numeros.saldoLivre)}
+                      {fmtNumComSinal(numeros.saldoLivre)}
                     </span>
                   </div>
                 </>
@@ -641,7 +641,7 @@ export default function Hoje({ mes, aoMudarMes, aoAbrirLancamento, aoAbrirPlanej
                   <div className="linha-detalhe-cat total" data-testid="total-pode-sobrar">
                     <span className="ideal-t3">Total</span>
                     <span className={`ideal-t3 ${numeros.podeSobrar < 0 ? 'valor-neg' : 'valor-pos'}`}>
-                      {fmtComSinal(numeros.podeSobrar)}
+                      {fmtNumComSinal(numeros.podeSobrar)}
                     </span>
                   </div>
                   {/* A legenda deste balão passou a ser RECOLHIDA (build 086,
@@ -699,7 +699,7 @@ export default function Hoje({ mes, aoMudarMes, aoAbrirLancamento, aoAbrirPlanej
                     <div className="linha-detalhe-cat" key={g.nome}>
                       <span className="ideal-t4">{g.nome}</span>
                       <span className={`ideal-t3 ${dif > 0 ? 'valor-neg' : 'valor-pos'}`}>
-                        {dif > 0 ? '+' : '−'} {fmt(Math.abs(dif))}
+                        {dif > 0 ? '+' : '−'} {fmtNum(Math.abs(dif))}
                       </span>
                     </div>
                   )
@@ -819,26 +819,26 @@ export default function Hoje({ mes, aoMudarMes, aoAbrirLancamento, aoAbrirPlanej
                     <div className="linha-detalhe-cat" key={l.cat.id}>
                       <span className="ideal-t4">{l.cat.nome}</span>
                       <span className="ideal-t3">
-                        {fmt(l.gasto)} de {fmt(l.cat.aceitavelMensal)}
+                        {fmtNum(l.gasto)} de {fmtNum(l.cat.aceitavelMensal)}
                       </span>
                     </div>
                   ))}
                   <div className="linha-detalhe-cat total" data-testid="total-aportes">
                     <span className="ideal-t3">Aportado</span>
                     <span className="ideal-t2">
-                      {fmt(totalAportado)} de {fmt(metaAportes)}
+                      {fmtNum(totalAportado)} de {fmtNum(metaAportes)}
                     </span>
                   </div>
                   {metaAportes - totalAportado > 0.005 && (
                     <div className="linha-detalhe-cat" data-testid="falta-aportar">
                       <span className="ideal-t4">Falta aportar</span>
-                      <span className="ideal-t3 valor-neg">{fmt(metaAportes - totalAportado)}</span>
+                      <span className="ideal-t3 valor-neg">{fmtNum(metaAportes - totalAportado)}</span>
                     </div>
                   )}
                   {totalAportado - metaAportes > 0.005 && (
                     <div className="linha-detalhe-cat" data-testid="aportou-a-mais">
                       <span className="ideal-t4">Aportou a mais que a meta</span>
-                      <span className="ideal-t3 valor-pos">{fmt(totalAportado - metaAportes)}</span>
+                      <span className="ideal-t3 valor-pos">{fmtNum(totalAportado - metaAportes)}</span>
                     </div>
                   )}
                   <Legenda familias={['ideal']} comoConteudo testid="legenda-aportes" />
@@ -907,15 +907,15 @@ function LinhaGrupoHoje({
   const sobraGuardar = linha.meta - linha.realizado
   const textoGuardar =
     sobraGuardar > 0.005
-      ? `falta aportar ${fmt(sobraGuardar)}`
+      ? `falta aportar ${fmtNum(sobraGuardar)}`
       : sobraGuardar < -0.005
-        ? `aportou ${fmt(-sobraGuardar)} a mais`
+        ? `aportou ${fmtNum(-sobraGuardar)} a mais`
         : 'meta cumprida'
   const textoGasto =
     linha.diferenca < -0.005
-      ? `estourou ${fmt(-linha.diferenca)}`
+      ? `estourou ${fmtNum(-linha.diferenca)}`
       : linha.diferenca > 0.005
-        ? `margem ${fmt(linha.diferenca)}`
+        ? `margem ${fmtNum(linha.diferenca)}`
         : 'bateu a meta'
   return (
     <div className="grupo-hoje" data-testid={`grupo-hoje-${linha.nome}`}>
@@ -945,8 +945,8 @@ function LinhaGrupoHoje({
           proibido (a forma "falta aportar", de `doisNumeros.ts`, é outra
           coisa: é o nome da conta de guardar, não o plural banido). */}
       <p className="ideal-t4 texto-quebra linha-legenda-grupo">
-        {guardar ? `aportou ${fmt(linha.realizado)} de ${fmt(linha.meta)} · ${textoGuardar}` : null}
-        {!guardar ? `gastou ${fmt(linha.realizado)} de ${fmt(linha.meta)} · ${textoGasto}` : null}
+        {guardar ? `aportou ${fmtNum(linha.realizado)} de ${fmtNum(linha.meta)} · ${textoGuardar}` : null}
+        {!guardar ? `gastou ${fmtNum(linha.realizado)} de ${fmtNum(linha.meta)} · ${textoGasto}` : null}
       </p>
       {aberta && (
         <div className="detalhe-grupo-hoje">
@@ -969,7 +969,7 @@ function LinhaGrupoHoje({
           <div className="linha-detalhe-cat" style={{ marginTop: 6 }}>
             <span className="ideal-t4">Soma das categorias</span>
             <span className={`ideal-t3 ${somaCategorias < 0 ? 'valor-neg' : 'valor-pos'}`}>
-              {fmtComSinal(somaCategorias)}
+              {fmtNumComSinal(somaCategorias)}
             </span>
           </div>
           {Math.abs(descalibre) >= 0.005 && (
@@ -980,14 +980,14 @@ function LinhaGrupoHoje({
                   : 'suas metas de categoria ficam abaixo da meta do grupo'}
               </span>
               <span className={`ideal-t3 ${descalibre > 0 ? 'valor-neg' : 'valor-pos'}`}>
-                {descalibre > 0 ? '−' : '+'} {fmt(Math.abs(descalibre))}
+                {descalibre > 0 ? '−' : '+'} {fmtNum(Math.abs(descalibre))}
               </span>
             </div>
           )}
           <div className="linha-detalhe-cat total">
             <span className="ideal-t3">{linha.nome}</span>
             <span className={`ideal-t3 ${linha.diferenca < 0 ? 'valor-neg' : 'valor-pos'}`}>
-              {fmtComSinal(linha.diferenca)}
+              {fmtNumComSinal(linha.diferenca)}
             </span>
           </div>
         </div>
@@ -1016,11 +1016,11 @@ function TotalDoCartao({
     <div className="detalhe-cat-ideal fechamento-cartao" data-testid={testid}>
       <div className="linha-detalhe-cat">
         <span className="ideal-t4">Soma das metas destas categorias</span>
-        <span className="ideal-t3">{fmt(meta)}</span>
+        <span className="ideal-t3">{fmtNum(meta)}</span>
       </div>
       <div className="linha-detalhe-cat">
         <span className="ideal-t4">Soma do gasto</span>
-        <span className="ideal-t3">{fmt(gasto)}</span>
+        <span className="ideal-t3">{fmtNum(gasto)}</span>
       </div>
       <div className="linha-detalhe-cat total">
         <span className="ideal-t3">{rotulo}</span>
@@ -1066,18 +1066,18 @@ function LinhaCat({
           <div className="detalhe-cat-ideal" data-testid="detalhe-cat">
             <div className="linha-detalhe-cat">
               <span className="ideal-t4">Meta da categoria</span>
-              <span className="ideal-t3">{fmt(linha.cat.aceitavelMensal)}</span>
+              <span className="ideal-t3">{fmtNum(linha.cat.aceitavelMensal)}</span>
             </div>
             <div className="linha-detalhe-cat">
               <span className="ideal-t4">
                 Gasto{linha.comprometido > 0.005 ? ' (com o comprometido)' : ''}
               </span>
-              <span className="ideal-t3">{fmt(linha.gasto)}</span>
+              <span className="ideal-t3">{fmtNum(linha.gasto)}</span>
             </div>
             <div className="linha-detalhe-cat total">
               <span className="ideal-t3">{linha.diferenca < 0 ? 'Estourou' : 'Posso economizar'}</span>
               <span className={`ideal-t3 ${linha.diferenca < 0 ? 'valor-neg' : 'valor-pos'}`}>
-                {fmt(Math.abs(linha.diferenca))}
+                {fmtNum(Math.abs(linha.diferenca))}
               </span>
             </div>
           </div>
@@ -1090,7 +1090,7 @@ function LinhaCat({
             <span className="ideal-t4">
               {linha.lancamentos.length} lançamento{linha.lancamentos.length === 1 ? '' : 's'}
             </span>
-            <span className="ideal-t3">{fmt(linha.lancamentos.reduce((s, l) => s + Math.abs(l.valor), 0))}</span>
+            <span className="ideal-t3">{fmtNum(linha.lancamentos.reduce((s, l) => s + Math.abs(l.valor), 0))}</span>
           </div>
         </>
       )}

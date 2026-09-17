@@ -14,7 +14,7 @@ import { janelaFatura, lancamentosDoCiclo, situacaoDaFatura, DIA_FECHAMENTO_PADR
 import { formatarCabecalhoData } from '../formatoData'
 import { fundoDaLinhaDeData } from '../statusPagamento'
 import SaldoDoCofrinho, { LinhaInformeSaldo } from '../components/SaldoDoCofrinho'
-import { fmtBRL } from '../formatoMoeda'
+import { fmtBRL, fmtNum } from '../formatoMoeda'
 import { useHojeSimuladoISO, hojeEfetivoISO } from '../hojeSimulado'
 import TituloTelaN1 from '../kit/CabecalhoN1'
 import { ExportSheet, type ExportRow } from '../kit/ExportSheet'
@@ -292,8 +292,8 @@ export default function Carteira({ mes, aoMudarMes, aoAbrirLancamento }: TelaPro
                 {recentesDaConta.map((l) => (
                   <div key={l.id} className="card-conta-preview-linha">
                     <span>{l.descricao}</span>
-                    <span className={l.valor < 0 ? 'valor-neg' : 'valor-pos'}>
-                      {l.valor < 0 ? '-' : '+'}{fmtBRL(l.valor)}
+                    <span className={l.valor < 0 ? 'valor-neutro' : 'valor-pos'}>
+                      {l.valor < 0 ? '-' : '+'}{fmtNum(l.valor)}
                     </span>
                   </div>
                 ))}
@@ -331,8 +331,8 @@ export default function Carteira({ mes, aoMudarMes, aoAbrirLancamento }: TelaPro
                 {recentesCofrinho.map((l) => (
                   <div key={l.id} className="card-conta-preview-linha">
                     <span>{l.descricao}</span>
-                    <span className={l.valor < 0 ? 'valor-neg' : 'valor-pos'}>
-                      {l.valor < 0 ? '-' : '+'}{fmtBRL(l.valor)}
+                    <span className={l.valor < 0 ? 'valor-neutro' : 'valor-pos'}>
+                      {l.valor < 0 ? '-' : '+'}{fmtNum(l.valor)}
                     </span>
                   </div>
                 ))}

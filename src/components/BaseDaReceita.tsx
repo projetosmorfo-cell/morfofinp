@@ -24,7 +24,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { db, type Categoria } from '../db'
 import { lerDoAmbiente } from '../ambiente'
 import { baseMetaDoMes } from '../baseMeta'
-import { fmtBRL } from '../formatoMoeda'
+import { fmtBRL, fmtNum } from '../formatoMoeda'
 import { marcarCategoriasEditadas } from '../kit/padraoCategorias'
 import { Sheet } from '../kit/kitBase'
 
@@ -108,7 +108,7 @@ export default function BaseDaReceita({ mes, onFechar }: { mes: string; onFechar
                 </span>
                 <span style={{ display: 'block', fontSize: 12, opacity: 0.7 }}>
                   {c.receitaFixa ? 'entra na base' : 'fora da base'}
-                  {valor !== 0 ? ` · ${fmtBRL(valor)} neste mês` : ' · sem lançamento neste mês'}
+                  {valor !== 0 ? ` · ${fmtNum(valor)} neste mês` : ' · sem lançamento neste mês'}
                 </span>
               </span>
             </label>

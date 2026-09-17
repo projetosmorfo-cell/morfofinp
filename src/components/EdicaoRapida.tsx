@@ -29,7 +29,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { db, type Categoria, type GrupoRegistro } from '../db'
 import { categoriaConsomeMeta } from '../orcamento'
 import ModalCadastro from './ModalCadastro'
-import { paraNumero, fmtBRL } from '../formatoMoeda'
+import { paraNumero, fmtBRL, fmtNum } from '../formatoMoeda'
 import { ROTULO_TIPO_GRUPO, comportamentoDoGrupo, tipoDoGrupo } from '../gruposUtil'
 import { lerDoAmbiente, marcaDoAmbiente } from '../ambiente'
 import { marcarCategoriasEditadas } from '../kit/padraoCategorias'
@@ -63,10 +63,10 @@ function SituacaoMetaDoGrupo({ grupo, baseEmReais }: { grupo: string; baseEmReai
   return (
     <div style={{ borderTop: '1px solid var(--borda)', marginTop: 10, paddingTop: 10 }}>
       <p className="texto-fraco" style={{ margin: 0, fontSize: 12.5 }}>
-        Grupo {grupo} · meta {fmtBRL(meta)} ({dados.pct}%) · {dados.qtd} categoria(s)
+        Grupo {grupo} · meta {fmtNum(meta)} ({dados.pct}%) · {dados.qtd} categoria(s)
       </p>
       <p className="texto-fraco" style={{ margin: '2px 0 0', fontSize: 12.5 }}>
-        Soma das metas das categorias: {fmtBRL(dados.soma)}
+        Soma das metas das categorias: {fmtNum(dados.soma)}
       </p>
       <p style={{ margin: '2px 0 0', fontSize: 12.5 }}>
         {Math.abs(dif) < 1 ? (

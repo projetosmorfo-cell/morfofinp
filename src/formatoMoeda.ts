@@ -15,7 +15,35 @@ export function formatarMoeda(v: number): string {
   return `${comMilhar},${decimais}`
 }
 
-// "1234567,89" -> "R$ 1.234.567,89" — usado em toda exibição de valor.
+/* BUILD 091 (17/09/2026) — a regra do "R$", decidida pelo Rafael:
+ *   "Não mostrar mais a máscara com R$ (...) manter R$ somente nos dados
+ *    conclusivos de TOTAIS finais, avalie os locais."
+ *
+ * Duas famílias, de propósito:
+ *   • `fmtNum` / `fmtNumComSinal` / `fmtNumSinalExplicito` — SEM "R$". É o
+ *     padrão do app: linhas de lançamento, "X de Y", "X / W", pontas de barra,
+ *     colunas, detalhes dentro de card, metas em cadastro.
+ *   • `fmtBRL` / `fmtComSinal` / `fmtSinalExplicito` — COM "R$". Só nos
+ *     totais finais conclusivos: os cinco números do funil da tela Hoje, a
+ *     faixa de totais das listas, os totais dos cards da Carteira e da fatura,
+ *     o fechamento do Planejamento e do medidor, e frases (o veredito, as
+ *     frases de impacto) — em texto corrido o "R$" é o que diz que o número é
+ *     dinheiro.
+ * Regra ao escrever tela nova: começa com `fmtNum`; `fmtBRL` só se for o
+ * número que fecha o card ou a tela. */
+
+// "1234567,89" -> "1.234.567,89" — o padrão do app (sem R$, sem sinal).
+export function fmtNum(v: number): string {
+  return formatarMoeda(v)
+}
+export function fmtNumComSinal(v: number): string {
+  return `${v < -0.005 ? '−' : ''}${formatarMoeda(v)}`
+}
+export function fmtNumSinalExplicito(v: number): string {
+  return v > 0.005 ? `+${formatarMoeda(v)}` : fmtNumComSinal(v)
+}
+
+// "1234567,89" -> "R$ 1.234.567,89" — SÓ nos totais finais (ver acima).
 export function fmtBRL(v: number): string {
   return `R$ ${formatarMoeda(v)}`
 }

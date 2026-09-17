@@ -9,8 +9,8 @@ import { tipoDoGrupo } from '../gruposUtil'
 import { PopupAceitavelCategoria, PopupMetaGrupo } from '../components/EdicaoRapida'
 import { GraficoMetasGrupos, type FatiaGrupo } from '../components/Graficos'
 import { PencilSquareIcon } from '@heroicons/react/24/outline'
-import BarraMeta, { fmtBRL as fmt } from '../components/BarraMeta'
-import { fmtSinalExplicito } from '../formatoMoeda'
+import BarraMeta from '../components/BarraMeta'
+import { fmtBRL as fmt, fmtNum, fmtNumSinalExplicito } from '../formatoMoeda'
 import SeletorMes from '../components/SeletorMes'
 import ListaLancamentosCategoria from '../components/ListaLancamentosCategoria'
 import { Icone } from '../icones'
@@ -345,7 +345,7 @@ export default function Planejamento({ mes, aoMudarMes, aoAbrirLancamento, aoAbr
             {rotulo}
           </span>
           <span className="texto-fraco barra-topo-valor">
-            {fmt(movimento)} {t.planejado > 0 ? `de ${fmt(t.planejado)}` : 'sem previsão'}
+            {fmtNum(movimento)} {t.planejado > 0 ? `de ${fmtNum(t.planejado)}` : 'sem previsão'}
           </span>
           {acao}
         </div>
@@ -359,7 +359,7 @@ export default function Planejamento({ mes, aoMudarMes, aoAbrirLancamento, aoAbr
               className={`barra-meta-resultado ${resultadoEntrada < 0 ? 'negativo' : 'positivo'}`}
               data-testid="barra-resultado"
             >
-              {fmtSinalExplicito(resultadoEntrada)}
+              {fmtNumSinalExplicito(resultadoEntrada)}
             </span>
           )}
         </div>
@@ -678,31 +678,33 @@ export default function Planejamento({ mes, aoMudarMes, aoAbrirLancamento, aoAbr
                     <div className="pct-grupo-a1">
                       <span className="numero" data-testid={`pct-card-${grupo}`}>
                         {Number(percentualDoGrupo(grupo).toFixed(2))}%
-                        {/* O PERCENTUAL RESULTANTE, entre parênteses ao lado do
-                            percentual do plano (build 086): quanto o grupo
-                            excedeu ou ainda tem de folga EM RELAÇÃO AO
-                            REALIZADO. O percentual grande é a decisão (quanto
-                            do 100% este grupo leva); este é o resultado dela
-                            neste mês. Sem realizado não há "em relação a quê",
-                            então ele some — nunca divide por zero. */}
+                        {/* A PARTICIPAÇÃO DO GRUPO NO GASTO DO MÊS, entre
+                            parênteses ao lado do percentual do plano. Build
+                            091 (17/09/2026), pedido do Rafael: "o cálculo está
+                            errado, deve ser o percentual de gastos total —
+                            quantos % do total gasto no mês foi nesse grupo — e
+                            do mesmo tamanho que a meta". Substitui o delta da
+                            build 086 (meta − realizado / realizado). A conta
+                            usa a MESMA medida da barra do grupo (realizado +
+                            comprometido) sobre a soma de TODOS os grupos de
+                            saída; só grupo de saída tem a fatia, e sem gasto
+                            no mês ela some — nunca divide por zero. Lê-se:
+                            "planejei 30%, e este mês o grupo levou 46% do que
+                            saiu". */}
                         {(() => {
-                          const realizadoGrupo = totalGrupo.realizado + totalGrupo.previsto
-                          const metaGrupo = metaEmReaisDoGrupo(grupo)
-                          if (metaGrupo <= 0 || realizadoGrupo <= 0.005) return null
-                          const delta = ((metaGrupo - realizadoGrupo) / realizadoGrupo) * 100
-                          if (Math.abs(delta) < 0.5) return null
-                          const sobra = delta > 0
+                          if (tipoGrupo !== 'saida') return null
+                          const gastoGrupo = totalGrupo.realizado + totalGrupo.previsto
+                          const gastoTotal = totalSaidas.realizado + totalSaidas.previsto
+                          if (gastoTotal <= 0.005 || gastoGrupo <= 0.005) return null
+                          const fatia = (gastoGrupo / gastoTotal) * 100
                           return (
-                            <span
-                              className={`pct-grupo-delta ${sobra ? 'valor-pos' : 'valor-neg'}`}
-                              data-testid={`pct-delta-${grupo}`}
-                            >
-                              {' '}({sobra ? '↑' : '↓'} {Math.abs(delta).toFixed(0)}%)
+                            <span className="pct-grupo-fatia" data-testid={`pct-fatia-${grupo}`}>
+                              {' '}({Number(fatia.toFixed(0))}%)
                             </span>
                           )
                         })()}
                       </span>
-                      <span className="texto-fraco">{fmt(metaEmReaisDoGrupo(grupo))}</span>
+                      <span className="texto-fraco">{fmtNum(metaEmReaisDoGrupo(grupo))}</span>
                     </div>
                   )}
                   {/* O lápis do GRUPO mora AQUI, no cabeçalho do card, ao lado

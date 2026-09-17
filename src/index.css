@@ -447,6 +447,15 @@ main .card-conta + .cartao.cartao-continuacao {
   white-space: nowrap;
 }
 
+/* Build 091 (17/09/2026): nas LISTAS de lançamento o negativo é o caso
+   normal (é uma lista de gastos) e fica NEUTRO — só a entrada é verde. O
+   vermelho continua reservado ao "estourou"/"falta", que é alerta de verdade. */
+.valor-neutro {
+  color: var(--texto);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 /* O `nowrap` acima existe pra um VALOR monetário nunca quebrar no meio
    ("R$ 1.234," numa linha e "56" na outra). Quando a mesma classe veste um
    PARÁGRAFO de texto (legenda de estouro, mensagem de erro de formulário),
@@ -3168,11 +3177,11 @@ html[data-mloc-tema='claro'] .tarja-inativa {
 }
 .pct-grupo-a1 .numero { font-size: 21px; font-weight: 800; color: var(--texto); }
 .pct-grupo-a1 .texto-fraco { font-size: 11.5px; }
-/* O percentual RESULTANTE, entre parênteses ao lado do percentual do plano
-   (build 086). Fonte pequena de propósito: ele é consequência, não a decisão —
-   o número de 21px continua sendo o percentual que a pessoa escolheu. `nowrap`
-   porque "(↑ 9%)" quebrando entre a seta e o número não quer dizer nada. */
-.pct-grupo-delta { font-size: 12px; font-weight: 700; white-space: nowrap; }
+/* A participação do grupo no gasto do mês, entre parênteses ao lado do
+   percentual do plano — build 091, no MESMO tamanho do plano (pedido do
+   Rafael; na 086 era 12px). Peso menor e cor fraca separam "o que planejei"
+   de "o que aconteceu" sem mudar o tamanho. `nowrap`: "(46%)" não quebra. */
+.pct-grupo-fatia { font-size: 21px; font-weight: 600; color: var(--texto-fraco); white-space: nowrap; }
 
 /* Atalho de edição do GRUPO, dentro do cabeçalho do card (13/09/2026 — antes
    era `.botao-editar-linha`, uma coluna de 38px à direita da linha inteira,

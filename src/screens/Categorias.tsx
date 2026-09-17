@@ -23,7 +23,7 @@ import MenuLinha from '../components/MenuLinha'
 import PacoteIconesN1 from '../components/PacoteIconesN1'
 import ModalCadastro from '../components/ModalCadastro'
 import { ROTULO_TIPO_GRUPO, comportamentoDoGrupo, gruposParaNatureza, tipoDoGrupo } from '../gruposUtil'
-import { fmtBRL, formatarMoeda, aplicarMascaraValor, paraNumero } from '../formatoMoeda'
+import { fmtBRL, fmtNum, formatarMoeda, aplicarMascaraValor, paraNumero } from '../formatoMoeda'
 import { baseMetaDoMes, categoriasDaBaseMeta, EXPLICACAO_BASE_META } from '../baseMeta'
 import { useConfiguracaoIcones, tamanhoIconePx, salvarConfiguracaoIcones } from '../configuracaoIcones'
 import { lerDoAmbiente, marcaDoAmbiente } from '../ambiente'
@@ -813,7 +813,7 @@ export default function Categorias(_props: TelaProps & { aoVoltar: () => void })
                   {g.nome}
                 </span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  {temExemplo && <span className="texto-fraco">{fmtBRL(metaGrupo)}</span>}
+                  {temExemplo && <span className="texto-fraco">{fmtNum(metaGrupo)}</span>}
                   <input
                     type="number"
                     inputMode="decimal"
@@ -894,10 +894,10 @@ export default function Categorias(_props: TelaProps & { aoVoltar: () => void })
                 <Fragment key={grupo}>
                   <span className="texto-fraco">{grupo}</span>
                   <span className="texto-fraco" style={{ textAlign: 'right' }}>
-                    {fmtBRL(meta)} ({percentualMeta.toFixed(0)}%)
+                    {fmtNum(meta)} ({percentualMeta.toFixed(0)}%)
                   </span>
                   <strong className={realizado > meta ? 'valor-neg' : 'valor-pos'} style={{ textAlign: 'right' }}>
-                    {fmtBRL(realizado)} ({pctRealizado.toFixed(0)}%)
+                    {fmtNum(realizado)} ({pctRealizado.toFixed(0)}%)
                   </strong>
                 </Fragment>
               )
@@ -947,7 +947,7 @@ export default function Categorias(_props: TelaProps & { aoVoltar: () => void })
               </h2>
               {temExemplo && (
                 <span className="texto-fraco" style={{ fontSize: 12, textAlign: 'right' }}>
-                  meta do grupo {fmtBRL(metaGrupo)} · metas das categorias {fmtBRL(somaAceitavel)} ({pctAceitavelDaMeta.toFixed(0)}%)
+                  meta do grupo {fmtNum(metaGrupo)} · metas das categorias {fmtNum(somaAceitavel)} ({pctAceitavelDaMeta.toFixed(0)}%)
                 </span>
               )}
             </div>
@@ -1192,10 +1192,10 @@ export default function Categorias(_props: TelaProps & { aoVoltar: () => void })
                         </span>
                       </div>
                       {c.natureza !== 'Receita' && c.aceitavelMensal > 0 && (
-                        <span className="texto-fraco" style={{ fontSize: 12 }}>até {fmtBRL(c.aceitavelMensal)}</span>
+                        <span className="texto-fraco" style={{ fontSize: 12 }}>até {fmtNum(c.aceitavelMensal)}</span>
                       )}
                       {c.natureza === 'Receita' && !!c.esperadoMensal && (
-                        <span className="texto-fraco" style={{ fontSize: 12 }}>~{fmtBRL(c.esperadoMensal)}/mês</span>
+                        <span className="texto-fraco" style={{ fontSize: 12 }}>~{fmtNum(c.esperadoMensal)}/mês</span>
                       )}
                       {temExemplo && categoriaConsomeMeta(c.natureza) && Math.abs(metaGrupo - somaAceitavel) >= 1 && (
                         <span
@@ -1205,7 +1205,7 @@ export default function Categorias(_props: TelaProps & { aoVoltar: () => void })
                             ? `Ainda sobra ${fmtBRL(metaGrupo - somaAceitavel)} da meta do grupo ${g.nome}`
                             : `As metas das categorias de ${g.nome} excedem a meta do grupo em ${fmtBRL(somaAceitavel - metaGrupo)}`}
                         >
-                          {metaGrupo - somaAceitavel > 0 ? `sobra ${fmtBRL(metaGrupo - somaAceitavel)}` : `excede ${fmtBRL(somaAceitavel - metaGrupo)}`}
+                          {metaGrupo - somaAceitavel > 0 ? `sobra ${fmtNum(metaGrupo - somaAceitavel)}` : `excede ${fmtNum(somaAceitavel - metaGrupo)}`}
                         </span>
                       )}
                       {confirmandoExclusaoId === c.id ? (

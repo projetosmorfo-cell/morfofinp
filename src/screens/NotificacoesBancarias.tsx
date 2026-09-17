@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, type Conta, type NotificacaoPendente } from '../db'
-import { fmtBRL } from '../formatoMoeda'
+import { fmtBRL, fmtNum } from '../formatoMoeda'
 import {
   ehNativo,
   sincronizarPendentesNativas,
@@ -319,7 +319,7 @@ export default function NotificacoesBancarias({
                     <span className="notif-quando">{dataHora(n.recebidoEm)}</span>
                   </div>
                   <div className={`notif-valor ${a.tipo === 'entrada' ? 'valor-pos' : 'valor-neg'}`}>
-                    {n.valor != null ? fmtBRL(n.valor) : '—'}
+                    {n.valor != null ? fmtNum(n.valor) : '—'}
                   </div>
                   <div className="notif-secao-rotulo">Texto original da notificação</div>
                   <p className="notif-texto-original">{[n.titulo, n.texto].filter(Boolean).join(' — ')}</p>
@@ -481,7 +481,7 @@ function CartaoNotificacao({
         <span className="notif-quando">{dataHora(n.recebidoEm)}</span>
       </div>
       <div className={`notif-valor ${a.tipo === 'entrada' ? 'valor-pos' : 'valor-neg'}`}>
-        {a.valor != null ? fmtBRL(a.valor) : 'valor não reconhecido'}
+        {a.valor != null ? fmtNum(a.valor) : 'valor não reconhecido'}
       </div>
 
       {/* Build 090 — o que o app ENTENDEU, em pares rótulo/valor. É a análise
@@ -580,7 +580,7 @@ function CartaoNotificacao({
                 >
                   <span style={{ fontSize: 12, minWidth: 0 }}>
                     {c.lancamento.dataCompetencia.slice(8, 10)}/{c.lancamento.dataCompetencia.slice(5, 7)} ·{' '}
-                    {c.lancamento.descricao} · {fmtBRL(Math.abs(c.lancamento.valor))}
+                    {c.lancamento.descricao} · {fmtNum(Math.abs(c.lancamento.valor))}
                     {soMes(c.lancamento.dataCompetencia) !== mesDaNotificacao && (
                       <span className="texto-fraco"> · de {mesLegivel(c.lancamento.dataCompetencia)}</span>
                     )}

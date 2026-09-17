@@ -6,14 +6,13 @@
 // 01/09/2026: formatação de moeda unificada em `formatoMoeda.ts` (separador
 // de milhar "." em toda exibição de valor do app) — reexportado aqui só
 // pra não quebrar os imports existentes (`Situacao.tsx`/`Planejamento.tsx`
-// importam `fmtBRL` daqui, apelidado de `fmt`). Precisa do import próprio
+// importam `fmtNum` daqui, apelidado de `fmt`). Precisa do import próprio
 // também, já que um `export { x } from 'mod'` reencaminha `x` pra quem
 // importa deste arquivo, mas não cria uma variável local `x` utilizável
 // aqui dentro (achado ao rodar `tsc` de verdade pela primeira vez nesta
 // sessão — ver nota no CLAUDE.md sobre o comando `tsc` correto do projeto).
 import type { ReactNode } from 'react'
-import { fmtBRL, fmtSinalExplicito } from '../formatoMoeda'
-export { fmtBRL }
+import { fmtNum, fmtNumSinalExplicito } from '../formatoMoeda'
 
 export default function BarraMeta({
   gasto,
@@ -56,7 +55,7 @@ export default function BarraMeta({
   /* O VALOR RESULTANTE, com sinal, na frente da barra (build 086, pedido do
      Rafael para o Planejamento: "em todas as barras mostre o valor resultante
      na frente da barra, positivo ou negativo").
-     Sempre por `fmtSinalExplicito` (que é `fmtComSinal` com o "+" escrito) —
+     Sempre por `fmtNumSinalExplicito` (que é `fmtNumComSinal` com o "+" escrito) —
      regra da build 061: onde o número aparece isolado, sem rótulo de sinal, a
      cor sozinha não informa, e aqui sobra e estouro convivem barra a barra.
      Fica na MESMA
@@ -91,7 +90,7 @@ export default function BarraMeta({
           {/* Padrão: nunca dar destaque de cor aqui — o destaque em valor (faltam/
               estourou) fica só na linha abaixo, pra não competir com ela. */}
           <span className="texto-fraco barra-topo-valor">
-            {fmtBRL(gasto)} de {temPrevisto ? fmtBRL(previsto) : 'sem meta'}
+            {fmtNum(gasto)} de {temPrevisto ? fmtNum(previsto) : 'sem meta'}
           </span>
           {acao}
         </div>
@@ -109,7 +108,7 @@ export default function BarraMeta({
             className={`barra-meta-resultado ${resultado < 0 ? 'negativo' : 'positivo'}`}
             data-testid="barra-resultado"
           >
-            {fmtSinalExplicito(resultado)}
+            {fmtNumSinalExplicito(resultado)}
           </span>
         )}
       </div>
@@ -121,10 +120,10 @@ export default function BarraMeta({
               {/* "faltam" é ambíguo (parece dívida, não sobra) — "margem" deixa claro
                   que é folga dentro do teto, não dinheiro livre de verdade (não
                   desconta compromissos ainda não lançados neste mês). */}
-              {estourou ? `estourou ${fmtBRL(diferenca)}` : `margem de ${fmtBRL(diferenca)}`}
+              {estourou ? `estourou ${fmtNum(diferenca)}` : `margem de ${fmtNum(diferenca)}`}
             </strong>
           )}
-          {!temPrevisto && gasto > 0 && <strong className="valor-neg">{fmtBRL(gasto)} sem meta</strong>}
+          {!temPrevisto && gasto > 0 && <strong className="valor-neg">{fmtNum(gasto)} sem meta</strong>}
         </div>
       )}
     </div>

@@ -29,7 +29,7 @@
    linha de base, 2px de respiro entre fatias vizinhas, rótulo direto no que
    importa (nunca um número em cada ponto), eixo/grade discretos. */
 import type { ReactNode } from 'react'
-import { fmtBRL } from '../formatoMoeda'
+import { fmtNum } from '../formatoMoeda'
 import { useTemaEfetivo } from '../configuracaoIcones'
 
 /* Ordem categórica fixa — nunca ciclada. Do 7º grupo em diante a cor se
@@ -180,10 +180,10 @@ export function GraficoMetasGrupos({ fatias }: { fatias: FatiaGrupo[] }) {
             ) : null,
           )}
           <text x={c} y={c - 4} textAnchor="middle" style={{ fill: 'var(--texto)', fontSize: 15, fontWeight: 700 }}>
-            {fmtBRL(realizadoTotal)}
+            {fmtNum(realizadoTotal)}
           </text>
           <text x={c} y={c + 13} textAnchor="middle" style={{ fill: 'var(--texto-fraco)', fontSize: 11 }}>
-            de {fmtBRL(metaTotal)}
+            de {fmtNum(metaTotal)}
           </text>
         </svg>
       </div>
@@ -195,8 +195,8 @@ export function GraficoMetasGrupos({ fatias }: { fatias: FatiaGrupo[] }) {
               {d.grupo} · {d.percentualMeta}%
             </span>
             <span style={{ whiteSpace: 'nowrap' }}>
-              {fmtBRL(d.realizado)}
-              <span className="texto-fraco"> / {fmtBRL(d.meta)}</span>
+              {fmtNum(d.realizado)}
+              <span className="texto-fraco"> / {fmtNum(d.meta)}</span>
             </span>
           </div>
         ))}

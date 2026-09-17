@@ -2,7 +2,7 @@ import { type Categoria, type Lancamento } from '../db'
 import { statusDoLancamento, ROTULO_STATUS, CLASSE_STATUS, FUNDO_STATUS, fundoDaLinhaDeData } from '../statusPagamento'
 import { alternarPago } from '../lancamentosUtil'
 import { formatarCabecalhoData } from '../formatoData'
-import { fmtBRL } from '../formatoMoeda'
+import { fmtNum } from '../formatoMoeda'
 
 // Listagem SIMPLES (linha única condensada) — aparece ao expandir a linha
 // de uma categoria (Resumo do Mês/Situação/Planejamento — nunca na tela
@@ -98,9 +98,10 @@ export default function ListaLancamentosCategoria({
                       {l.recorrencia === 'fixo' && ' (fixo)'}
                       {l.transferenciaId && ' (transferência)'}
                     </td>
-                    <td className="lci-valor">
+                    {/* Build 091: sem "R$"; negativo neutro, positivo verde. */}
+                    <td className={`lci-valor ${l.valor < 0 ? 'valor-neutro' : 'valor-pos'}`}>
                       {l.valor < 0 ? '-' : '+'}
-                      {fmtBRL(l.valor)}
+                      {fmtNum(l.valor)}
                     </td>
                     <td>
                       <span

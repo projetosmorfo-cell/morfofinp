@@ -33,7 +33,7 @@
  * renderizaria menos de 1px e sumiria da tela.
  */
 import type { ReactNode } from 'react'
-import { fmtBRL, fmtComSinal } from '../formatoMoeda'
+import { fmtNum, fmtNumComSinal } from '../formatoMoeda'
 
 /** Menor largura visível de um segmento, em % da barra. */
 const MIN_PCT = 2.5
@@ -127,7 +127,7 @@ export default function BarraIdeal({
           <div
             className="barra-ideal-livre negativo"
             style={{ width: `${livrePct}%` }}
-            title={`Déficit que veio do mês anterior: ${fmtBRL(saldoLivre)}`}
+            title={`Déficit que veio do mês anterior: ${fmtNum(saldoLivre)}`}
             data-testid="barra-ideal-deficit"
           />
         )}
@@ -155,7 +155,7 @@ export default function BarraIdeal({
                     className="barra-ideal-meta-valor"
                     style={naBorda ? { left: 'auto', right: 0, transform: 'none' } : undefined}
                   >
-                    {fmtBRL(meta)}
+                    {fmtNum(meta)}
                   </span>
                 )}
               </div>
@@ -169,7 +169,7 @@ export default function BarraIdeal({
             <div
               className="barra-ideal-livre positivo"
               style={{ width: `${livrePct}%` }}
-              title={`Livre, fora da meta: ${fmtBRL(saldoLivre)}`}
+              title={`Livre, fora da meta: ${fmtNum(saldoLivre)}`}
               data-testid="barra-ideal-livre"
             />
           </>
@@ -178,7 +178,7 @@ export default function BarraIdeal({
             de que o número era um estouro, e o mesmo valor aparecia com "−"
             logo abaixo, no bloco grande — dois jeitos de escrever a mesma
             coisa na mesma tela. */}
-        {!semValor && <span className={classeValor}>{fmtComSinal(valorMostrado)}</span>}
+        {!semValor && <span className={classeValor}>{fmtNumComSinal(valorMostrado)}</span>}
       </div>
       {legendaLivre && temLivre && (
         <div className="barra-ideal-legenda" data-testid="barra-ideal-legenda">
@@ -187,8 +187,8 @@ export default function BarraIdeal({
             {/* O nome do bloco vem PRIMEIRO: sem ele o Rafael leu a barrinha
                 separada como sendo o aporte. É o Saldo Livre, sempre. */}
             {livrePositivo
-              ? `Saldo livre — fora da meta: ${fmtBRL(saldoLivre)}`
-              : `Saldo livre negativo, veio do mês anterior: ${fmtBRL(saldoLivre)}`}
+              ? `Saldo livre — fora da meta: ${fmtNum(saldoLivre)}`
+              : `Saldo livre negativo, veio do mês anterior: ${fmtNum(saldoLivre)}`}
           </span>
         </div>
       )}

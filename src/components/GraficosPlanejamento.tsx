@@ -32,7 +32,7 @@
  * então cada chip só apagava parte dela.
  */
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
-import { fmtBRL, fmtComSinal, fmtSinalExplicito } from '../formatoMoeda'
+import { fmtBRL, fmtNumComSinal, fmtSinalExplicito, fmtNum, fmtNumSinalExplicito } from '../formatoMoeda'
 import { LEGENDA_BARRAS, corDoToken } from '../legendaBarras'
 import BarraIdeal from './BarraIdeal'
 import ListaLancamentosCategoria from './ListaLancamentosCategoria'
@@ -185,7 +185,7 @@ function BarraRegua({
         </span>
       </div>
       <span className={`regua-valor ${resultado < 0 ? 'valor-neg' : 'valor-pos'}`}>
-        {fmtComSinal(resultado)}
+        {fmtNumComSinal(resultado)}
       </span>
     </div>
   )
@@ -1002,7 +1002,7 @@ function ModeloMedidor({
                     >
                       <span className="texto-quebra">{g.grupo}</span>
                       <span className="medidor-linha-valor">
-                        {comSinal ? fmtSinalExplicito(valor) : fmtBRL(valor)}
+                        {comSinal ? fmtNumSinalExplicito(valor) : fmtNum(valor)}
                       </span>
                     </button>
 
@@ -1027,7 +1027,7 @@ function ModeloMedidor({
                                 >
                                   <span className="texto-quebra">{x.cat.nome}</span>
                                   <span className="medidor-linha-valor">
-                                    {comSinal ? fmtSinalExplicito(v) : fmtBRL(v)}
+                                    {comSinal ? fmtNumSinalExplicito(v) : fmtNum(v)}
                                   </span>
                                 </button>
                                 {aberta && (

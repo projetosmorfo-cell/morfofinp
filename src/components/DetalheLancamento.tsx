@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, type Periodicidade, type RegraRecorrencia, type Lancamento } from '../db'
 import { gerarIdSerie, gerarParcelas, reprocessarSerieAPartirDe, ROTULOS_PERIODICIDADE, NOMES_DIA_SEMANA } from '../recorrencia'
-import { fmtBRL, formatarMoeda, aplicarMascaraValor, paraNumero } from '../formatoMoeda'
+import { fmtBRL, fmtNum, formatarMoeda, aplicarMascaraValor, paraNumero } from '../formatoMoeda'
 import SeletorCategoriaComIcone from './SeletorCategoriaComIcone'
 import MemoriaDescricao from './MemoriaDescricao'
 import { lerDoAmbiente, marcaDoAmbiente } from '../ambiente'
@@ -1236,7 +1236,7 @@ export default function DetalheLancamento({
                       {parcelasPreview.map((p) => (
                         <div key={p.parcelaI} className="texto-fraco" style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
                           <span>{p.parcelaI}/{parcelasPreview.length} — {p.data.split('-').reverse().join('/')}</span>
-                          <span>{fmtBRL(p.valor)}</span>
+                          <span>{fmtNum(p.valor)}</span>
                         </div>
                       ))}
                     </div>
