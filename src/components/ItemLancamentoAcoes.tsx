@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { db, type Categoria, type Lancamento } from '../db'
 import { statusDoLancamento, FUNDO_STATUS } from '../statusPagamento'
+import ConfirmacaoAcao from './ConfirmacaoAcao'
 import LinhaLancamentoCompleta from './LinhaLancamentoCompleta'
 
 // Item 11 (15/09/2026): wrapper de arrastar-pra-esquerda + painel de 3 ações
@@ -107,49 +108,21 @@ export default function ItemLancamentoAcoes({
       </div>
 
       {confirmandoExclusao && (
-        <div className="modal-fundo" onClick={() => setConfirmandoExclusao(false)} style={{ alignItems: 'center' }}>
-          <div className="modal-conteudo" style={{ borderRadius: 16 }} onClick={(e) => e.stopPropagation()}>
-            <p>Excluir "{lancamento.descricao}"? Essa ação não pode ser desfeita.</p>
-            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-              <button
-                type="button"
-                style={{
-                  marginTop: 0,
-                  background: 'var(--vermelho)',
-                  border: 'none',
-                  borderRadius: 10,
-                  padding: '12px',
-                  flex: 1,
-                  cursor: 'pointer',
-                }}
-                onClick={() => {
-                  db.lancamentos.delete(lancamento.id!)
-                  setConfirmandoExclusao(false)
-                }}
-              >
-                Confirmar exclusão
-              </button>
-              <button
-                type="button"
-                style={{
-                  marginTop: 0,
-                  background: 'none',
-                  border: '1px solid var(--borda)',
-                  borderRadius: 10,
-                  padding: '12px',
-                  flex: 1,
-                  cursor: 'pointer',
-                }}
-                onClick={() => {
-                  setConfirmandoExclusao(false)
-                  setArrastadoX(0)
-                }}
-              >
-                Cancelar
-              </button>
-            </div>
-          </div>
-        </div>
+        /* Build 093 (item 5): a confirmação única do app (`ConfirmacaoAcao`),
+           no lugar do modal próprio com "Confirmar exclusão" à esquerda. */
+        <ConfirmacaoAcao
+          titulo={`Excluir "${lancamento.descricao}"?`}
+          testid="confirmacao-excluir-lancamento"
+          aviso="O lançamento é apagado de vez e sai de todos os totais. Não dá pra desfazer."
+          onCancelar={() => {
+            setConfirmandoExclusao(false)
+            setArrastadoX(0)
+          }}
+          onConfirmar={() => {
+            db.lancamentos.delete(lancamento.id!)
+            setConfirmandoExclusao(false)
+          }}
+        />
       )}
     </div>
   )

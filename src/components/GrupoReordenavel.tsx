@@ -44,7 +44,32 @@ import { MarcadorLinha, type Selecao } from './SelecaoETotais'
 //    cancelável ou não. Restaurado ao soltar.
 // `touch-action: none` na linha resolveria de um jeito só, mas mataria o
 // scroll de quem só quer descer a lista (a linha É a lista inteira).
+//
+// Build 093 (17/09/2026) — TERCEIRA REINCIDÊNCIA: "consigo mover apenas uma
+// linha pra baixo, pois a tela rola junto". A 092 ainda dependia de o
+// navegador ACEITAR o `preventDefault` do `touchmove` — e com `touch-action:
+// pan-y` no `html` o Android decide sozinho, na primeira movimentação, que o
+// gesto é rolagem; daí em diante todo `touchmove` chega não-cancelável e o
+// `overflow: hidden` do `<main>` não segura o compositor que já começou.
+// O que muda agora é a PREMISSA: a linha reordenável tem `touch-action:
+// none` (index.css, `.linha-reordenavel.toque-proprio`) — o navegador NUNCA
+// inicia rolagem nativa a partir de um toque que começa numa linha; quem
+// rola é este componente:
+//   • dedo se move ANTES dos 400ms → ROLAGEM EMULADA: `main.scrollTop` segue
+//     o dedo, e ao soltar continua por inércia (rAF, atrito 0,95/quadro);
+//   • dedo parado por 400ms → ARRASTO: a linha segue o dedo, a lista não se
+//     move (e perto das bordas do `<main>` rola devagar pra alcançar o resto).
+// Com isso o `touchmove` é SEMPRE cancelável e não existe mais disputa com o
+// compositor — é determinístico, não depende de timing do navegador. O
+// deslizar horizontal (Duplicar/Editar/Excluir, `ItemLancamentoAcoes`) segue
+// pelos handlers dele: um gesto predominantemente horizontal não emula
+// rolagem. Com a seleção múltipla ativa a classe sai e a rolagem volta a ser
+// nativa (não há gesto próprio nesse modo).
 const ATRASO_PRESSIONAR_MS = 400
+const FOLGA_MOVIMENTO_PX = 10
+const BORDA_AUTO_ROLAGEM_PX = 48
+const PASSO_AUTO_ROLAGEM_PX = 8
+const ATRITO_INERCIA = 0.95
 
 export default function GrupoReordenavel({
   itens,
@@ -165,15 +190,31 @@ export default function GrupoReordenavel({
     ordemRef.current = null
   }
 
-  /* ---- TOQUE: Touch Events nativos (build 092, ver cabeçalho) ---- */
+  /* ---- TOQUE: Touch Events nativos + rolagem emulada (build 093, ver cabeçalho) ---- */
+  const inerciaRef = useRef<number | null>(null)
+  function pararInercia() {
+    if (inerciaRef.current != null) {
+      cancelAnimationFrame(inerciaRef.current)
+      inerciaRef.current = null
+    }
+  }
   useEffect(() => {
     const el = containerRef.current
     if (!el) return
+    const mainDe = () => el.closest('main') as HTMLElement | null
     let toqueId: number | null = null
     let x0 = 0
     let y0 = 0
+    let scrollTop0 = 0
+    /* 'segurando' = ainda nos 400ms; 'rolando' = rolagem emulada; 'horizontal'
+       = gesto do painel de ações (nada a fazer aqui); 'arrastando' = reordenar. */
+    let modo: 'segurando' | 'rolando' | 'horizontal' | 'arrastando' = 'segurando'
+    let yAnt = 0
+    let tAnt = 0
+    let velocidade = 0 // px por ms, positivo = dedo descendo
     const acharToque = (e: TouchEvent) => [...e.changedTouches].find((t) => t.identifier === toqueId) ?? null
     const onTouchStart = (e: TouchEvent) => {
+      pararInercia()
       if (selecaoAtivaRef.current || toqueId != null || e.touches.length !== 1) return
       const linha = (e.target as HTMLElement | null)?.closest<HTMLElement>('[data-linha-id]')
       if (!linha || !el.contains(linha)) return
@@ -181,28 +222,72 @@ export default function GrupoReordenavel({
       toqueId = t.identifier
       x0 = t.clientX
       y0 = t.clientY
+      yAnt = y0
+      tAnt = e.timeStamp
+      velocidade = 0
+      scrollTop0 = mainDe()?.scrollTop ?? 0
+      modo = 'segurando'
       const id = Number(linha.dataset.linhaId)
       limparTimer()
       timerRef.current = setTimeout(() => {
         timerRef.current = null
+        if (modo !== 'segurando') return
+        modo = 'arrastando'
         ativarArrasto(id)
       }, ATRASO_PRESSIONAR_MS)
     }
     const onTouchMove = (e: TouchEvent) => {
       const t = acharToque(e)
       if (!t) return
-      if (arrastandoIdRef.current == null) {
-        // Ainda segurando: mexer mais que a folga é rolar ou deslizar pra
-        // agir — não é começo de arrasto. O timer cai e nada acontece.
-        if (Math.abs(t.clientX - x0) > 10 || Math.abs(t.clientY - y0) > 10) limparTimer()
+      const dx = t.clientX - x0
+      const dy = t.clientY - y0
+      if (modo === 'segurando') {
+        if (Math.abs(dx) <= FOLGA_MOVIMENTO_PX && Math.abs(dy) <= FOLGA_MOVIMENTO_PX) return
+        // Mexeu antes dos 400ms: é rolagem (vertical) ou o deslizar do painel
+        // de ações (horizontal). O timer cai — não é começo de arrasto.
+        limparTimer()
+        modo = Math.abs(dy) >= Math.abs(dx) ? 'rolando' : 'horizontal'
+      }
+      if (modo === 'horizontal') return
+      if (e.cancelable) e.preventDefault()
+      if (modo === 'rolando') {
+        const main = mainDe()
+        if (main) main.scrollTop = scrollTop0 - dy
+        const dt = e.timeStamp - tAnt
+        if (dt > 0) velocidade = (t.clientY - yAnt) / dt
+        yAnt = t.clientY
+        tAnt = e.timeStamp
         return
       }
-      if (e.cancelable) e.preventDefault()
+      // arrastando
       moverPara(t.clientY)
+      const main = mainDe()
+      if (main) {
+        const r = main.getBoundingClientRect()
+        if (t.clientY < r.top + BORDA_AUTO_ROLAGEM_PX) main.scrollTop -= PASSO_AUTO_ROLAGEM_PX
+        else if (t.clientY > r.bottom - BORDA_AUTO_ROLAGEM_PX) main.scrollTop += PASSO_AUTO_ROLAGEM_PX
+      }
     }
     const onTouchEnd = (e: TouchEvent) => {
       if (!acharToque(e)) return
       toqueId = null
+      const modoFinal = modo
+      modo = 'segurando'
+      if (modoFinal === 'rolando') {
+        limparTimer()
+        // Inércia: continua na velocidade do dedo, perdendo 5% por quadro.
+        const main = mainDe()
+        let v = velocidade * 16.7 // px por quadro
+        if (main && Math.abs(v) > 0.5 && e.type === 'touchend') {
+          const passo = () => {
+            main.scrollTop -= v
+            v *= ATRITO_INERCIA
+            inerciaRef.current = Math.abs(v) < 0.5 ? null : requestAnimationFrame(passo)
+          }
+          inerciaRef.current = requestAnimationFrame(passo)
+        }
+        return
+      }
       encerrar()
     }
     el.addEventListener('touchstart', onTouchStart, { passive: true })
@@ -210,6 +295,7 @@ export default function GrupoReordenavel({
     el.addEventListener('touchend', onTouchEnd)
     el.addEventListener('touchcancel', onTouchEnd)
     return () => {
+      pararInercia()
       el.removeEventListener('touchstart', onTouchStart)
       el.removeEventListener('touchmove', onTouchMove)
       el.removeEventListener('touchend', onTouchEnd)
@@ -274,7 +360,7 @@ export default function GrupoReordenavel({
             key={id}
             data-linha-id={id}
             data-testid={`linha-reordenavel-${id}`}
-            className={`linha-selecionavel linha-reordenavel ${emArrasto === id ? 'em-arrasto' : ''}`}
+            className={`linha-selecionavel linha-reordenavel ${selecao.ativa ? '' : 'toque-proprio'} ${emArrasto === id ? 'em-arrasto' : ''}`}
             onPointerDown={selecao.ativa ? undefined : (e) => onPointerDownLinha(id, e)}
             onPointerUp={(e) => { if (!ehToque(e)) limparTimer() }}
             onPointerLeave={(e) => { if (!ehToque(e)) limparTimer() }}

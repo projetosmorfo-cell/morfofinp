@@ -921,13 +921,30 @@ export function padraoDeFabrica(): { grupos: GrupoPadraoN0[]; categorias: Catego
   return { grupos, categorias }
 }
 
-export async function seedIfEmpty() {
+/* Build 093 (17/09/2026), item 7 — pedido do Rafael: "o app não deve carregar
+   qualquer valor na memória quando instalado pela primeira vez".
+
+   Até a 092 um banco NOVO nascia com a base de DEMONSTRAÇÃO inteira: as 3
+   contas do Rafael (Bradesco, Porto Seguro, C6), o salário de R$ 16.712, a
+   meta em R$ de cada categoria e os 827 lançamentos de março a setembro/2026.
+   Quem instalava o app via os números de outra pessoa até apagar tudo.
+
+   Agora a instalação nova recebe SÓ ESTRUTURA (`seedEstruturaLimpa`): os 4
+   grupos com percentual 50/30/20, as categorias com nome/natureza/ícone e
+   valor ZERO, uma conta corrente genérica ("Banco") e nenhum lançamento — e o
+   passo a passo do primeiro acesso (build 092) pede a receita fixa e as
+   metas. A base de demonstração continua existindo como FERRAMENTA DE MVP:
+   só entra quando o app é aberto com `#semente-demo` no endereço
+   (`demo: true`), num banco vazio. `padraoDeFabrica()` acima já lia só
+   estrutura; esta é a mesma régua aplicada à semente. */
+export async function seedIfEmpty(opcoes: { demo?: boolean } = {}) {
   /* 12/09/2026: conta só o ambiente deste aparelho — com o escopo por
      ambiente, um cliente de teste populado não pode fazer a semente achar que
      este aparelho já está semeado (nem o contrário). */
   const jaTemCategoria = doAmbiente(await db.categorias.toArray(), AMBIENTE_DESTE_APARELHO).length
   if (jaTemCategoria === 0) {
-    await seedCategoriasContasELancamentos()
+    if (opcoes.demo) await seedDemonstracao()
+    else await seedEstruturaLimpa()
   }
 
   // Semente de `planos` (08/09/2026, G59 — "Gerenciar Planos" migrou de
@@ -968,7 +985,40 @@ export async function seedIfEmpty() {
   }
 }
 
-async function seedCategoriasContasELancamentos() {
+/* A instalação nova (build 093): estrutura, sem nenhum valor. */
+async function seedEstruturaLimpa() {
+  await db.transaction('rw', db.categorias, db.grupos, db.contas, db.metas, async () => {
+    await db.grupos.bulkAdd(
+      [
+        { nome: 'Fixo', ativo: true, tipo: 'saida' as const, comportamento: 'fixo' as const },
+        { nome: 'Variável', ativo: true, tipo: 'saida' as const, comportamento: 'variavel' as const },
+        { nome: 'Investimento', ativo: true, tipo: 'saida' as const, comportamento: 'guardar' as const },
+        { nome: GRUPO_RECEITA, ativo: true, tipo: 'entrada' as const },
+      ].map(comIconePadraoGrupo),
+    )
+    /* As mesmas categorias da demonstração, mas com a meta ZERADA e sem
+       `esperadoMensal` — o valor é do dono do app, nunca de fábrica. */
+    await db.categorias.bulkAdd(CATEGORIAS_PADRAO.map((c) => ({ ...comIconePadraoCategoria(c), aceitavelMensal: 0 })))
+    await db.contas.add({
+      nome: 'Banco',
+      tipo: 'corrente',
+      instituicao: 'Banco',
+      saldoInicial: 0,
+      dataSaldoInicial: new Date().toISOString().slice(0, 10),
+      importavel: true,
+      ativa: true,
+    })
+    const mesVigencia = new Date().toISOString().slice(0, 7).replace('-', '')
+    await db.metas.bulkAdd([
+      { grupo: 'Fixo', percentual: 50, base: 'receita_real', mesVigencia },
+      { grupo: 'Variável', percentual: 30, base: 'receita_real', mesVigencia },
+      { grupo: 'Investimento', percentual: 20, base: 'receita_real', mesVigencia },
+    ])
+  })
+}
+
+/* A base de DEMONSTRAÇÃO (ferramenta de MVP — só com `#semente-demo`). */
+async function seedDemonstracao() {
   await db.transaction('rw', db.categorias, db.grupos, db.contas, db.metas, db.lancamentos, async () => {
     // 04/09/2026: novo banco (fresh install/demo) já nasce com os ícones que
     // o Rafael definiu como padrão do sistema (ver `iconesPadrao.ts`) — sem

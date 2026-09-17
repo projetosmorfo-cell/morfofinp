@@ -14,6 +14,7 @@ import {
   type ChaveParametroUsuario,
 } from '../notificacaoParametros'
 import { apagarAprendizado, salvarAprendizado } from '../vinculoNotificacao'
+import ConfirmacaoAcao from '../components/ConfirmacaoAcao'
 
 /* Configurações → "Regras de Notificação Bancária" (build 080; renomeada e
  * redesenhada na build 085).
@@ -158,28 +159,26 @@ export default function ParametrosNotificacao({ aoVoltar }: { aoVoltar: () => vo
             ? 'Você alterou algumas regras. "Voltar ao padrão do app" devolve todas pro valor que o app publica hoje — não pra um valor congelado de quando o app foi feito.'
             : 'Nada foi alterado: todas as regras estão no padrão do app.'}
         </p>
-        {!confirmandoRestauro ? (
-          <button
-            type="button"
-            className="secundario"
-            disabled={!personalizados}
-            data-testid="notif-restaurar-padrao"
-            onClick={() => setConfirmandoRestauro(true)}
-          >
-            Voltar ao padrão do app
-          </button>
-        ) : (
-          <div className="acoes-modal">
-            <button
-              type="button"
-              className="primario"
-              data-testid="notif-restaurar-confirmar"
-              onClick={async () => { await restaurarPadraoDoApp(); setConfirmandoRestauro(false); setAviso('Regras de volta ao padrão do app.') }}
-            >
-              Sim, voltar ao padrão
-            </button>
-            <button type="button" className="secundario" onClick={() => setConfirmandoRestauro(false)}>Cancelar</button>
-          </div>
+        <button
+          type="button"
+          className="secundario"
+          disabled={!personalizados}
+          data-testid="notif-restaurar-padrao"
+          onClick={() => setConfirmandoRestauro(true)}
+        >
+          Voltar ao padrão do app
+        </button>
+        {confirmandoRestauro && (
+          /* Build 093 (item 5): a confirmação única do app. */
+          <ConfirmacaoAcao
+            titulo="Voltar todas as regras ao padrão do app?"
+            testid="confirmacao-notif-restaurar"
+            aviso="Toda regra que você alterou volta pro valor que o app publica hoje. O de/para aprendido e os pares de apps não são apagados."
+            onCancelar={() => setConfirmandoRestauro(false)}
+            onConfirmar={() => {
+              void (async () => { await restaurarPadraoDoApp(); setConfirmandoRestauro(false); setAviso('Regras de volta ao padrão do app.') })()
+            }}
+          />
         )}
         {aviso && <p className="texto-fraco" style={{ marginBottom: 0 }}>{aviso}</p>}
       </div>

@@ -795,9 +795,16 @@ nav.rodape {
 /* Barra dupla: preenchido = gasto real, marcador = previsto/aceitável.
    Cor muda conforme estourou ou não; o valor de diferença fica em destaque
    logo abaixo, nunca só implícito na barra. */
+/* Build 093 (item 1): UMA espessura pra toda barra de linha do app — a da
+   tela Hoje (`.barra-ideal`, `.rio-bar-trilho`) passou a ter a MESMA da
+   `.barra-meta` do Planejamento. Pedido do Rafael: "ajustar a largura das
+   barras da tela Hoje na mesma largura das barras da tela Planejamento".
+   Só a barra de DESTAQUE (o gráfico principal, 18px) fica fora — é outra
+   peça, por decisão da build 058. */
+:root { --espessura-barra: 10px; }
 .barra-meta {
   position: relative;
-  height: 10px;
+  height: var(--espessura-barra);
   border-radius: 999px;
   background: var(--borda);
   overflow: hidden;
@@ -2037,38 +2044,9 @@ nav.rodape {
   background: var(--bg);
 }
 
-/* F-05: prévia de lançamentos recentes dentro de cada card da Carteira —
-   preenche o espaço vazio medido (549px/64%) sem exigir entrar no drill-in
-   da conta pra ver "o que teve aqui recentemente". */
-.card-conta-preview {
-  margin-top: 10px;
-  padding-top: 8px;
-  border-top: 1px solid var(--borda);
-}
-/* 04/09/2026, mesmo dia (pedido do Rafael): a prévia sozinha não deixava
-   claro que eram só os últimos lançamentos, nem que o card inteiro é
-   clicável pra ver mais — rótulo explícito acima da lista. */
-.card-conta-preview-titulo {
-  display: block;
-  font-size: 10px;
-  color: var(--texto-fraco);
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  margin-bottom: 4px;
-}
-.card-conta-preview-linha {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 3px 0;
-  font-size: 12px;
-  color: var(--texto-fraco);
-}
-.card-conta-preview-linha span:first-child {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
+/* F-05 (prévia de lançamentos nos cards da Carteira) saiu na build 093 —
+   pedido do Rafael: os cards não mostram mais os últimos lançamentos.
+   As classes .card-conta-preview* deixaram de existir. */
 
 /* F-10b: realce de borda no campo específico citado pela mensagem de erro
    do modal de lançamento (DetalheLancamento.tsx) — a mensagem já nomeia o
@@ -2646,6 +2624,16 @@ html[data-mloc-tema="escuro"] body {
   -webkit-touch-callout: none;
 }
 
+/* Build 093 (3ª reincidência do arrasto no celular): a linha passa a ter
+   `touch-action: none` — o navegador NUNCA começa uma rolagem nativa a partir
+   de um toque que nasce numa linha; a rolagem (com inércia) e o arrasto são
+   do componente, sempre com `touchmove` cancelável. A classe sai com a
+   seleção múltipla ativa (rolagem volta a ser nativa). Vale só ao TOQUE:
+   mouse/caneta não são afetados por `touch-action`. */
+.linha-reordenavel.toque-proprio {
+  touch-action: none;
+}
+
 .linha-reordenavel.em-arrasto {
   opacity: 0.6;
   background: var(--bg-elevado);
@@ -2789,7 +2777,7 @@ html[data-mloc-tema='claro'] .tarja-inativa {
 .barra-ideal-trilho {
   flex: 1 1 auto;
   min-width: 0;
-  height: 9px;
+  height: var(--espessura-barra);
   border-radius: 5px;
   background: var(--ideal-trilho);
   /* `overflow: hidden` recortaria a linha da meta, que estoura de propósito
@@ -2799,7 +2787,9 @@ html[data-mloc-tema='claro'] .tarja-inativa {
   display: flex;
   position: relative;
 }
-.barra-ideal.compacta .barra-ideal-trilho { height: 6px; }
+/* Build 093: `compacta` deixou de ser mais fina — mesma espessura das barras
+   do Planejamento. A classe fica (marca a barra de linha de lista). */
+.barra-ideal.compacta .barra-ideal-trilho { height: var(--espessura-barra); }
 /* A BARRA PRINCIPAL de uma tela é grossa — ela é o gráfico, não um detalhe de
    linha de lista (pedido do Rafael na build 058: "está muito fininho"). */
 .barra-ideal.destaque .barra-ideal-trilho { height: 18px; border-radius: 9px; }
@@ -2838,8 +2828,8 @@ html[data-mloc-tema='claro'] .tarja-inativa {
 .barra-ideal-seg.estouro { background: var(--ideal-vermelho); }
 /* o vão que separa a meta do que está fora dela */
 .barra-ideal-vao { width: 6px; flex: 0 0 6px; }
-.barra-ideal-livre { height: 9px; border-radius: 5px; flex: 0 0 auto; }
-.barra-ideal.compacta .barra-ideal-livre { height: 6px; }
+.barra-ideal-livre { height: var(--espessura-barra); border-radius: 5px; flex: 0 0 auto; }
+.barra-ideal.compacta .barra-ideal-livre { height: var(--espessura-barra); }
 .barra-ideal-livre.positivo { background: var(--ideal-verde); opacity: 0.55; }
 .barra-ideal-livre.negativo { background: var(--ideal-vermelho); margin-right: 6px; }
 /* Categoria de receita que entra na base das metas (13/09/2026): fundo próprio
@@ -3522,6 +3512,35 @@ html[data-mloc-tema='claro'] .tarja-inativa {
   flex: 1 1 0;
 }
 
+/* ===== A confirmação única do app (build 093) — `ConfirmacaoAcao.tsx` =====
+   Título, a caixa vermelha de ATENÇÃO com o que vai acontecer, e o par
+   Cancelar (esquerda, secundário) · Confirmar (direita, vermelho) — sempre
+   nessa ordem e com esses textos, em todo ponto de dupla checagem do N1. */
+.confirmacao-acao { max-width: 360px; }
+.confirmacao-acao-titulo { margin: 0 0 12px; font-size: 16px; }
+.confirmacao-atencao {
+  border: 1px solid var(--ideal-vermelho);
+  border-left-width: 4px;
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: color-mix(in srgb, var(--ideal-vermelho) 12%, transparent);
+}
+.confirmacao-atencao-rotulo {
+  display: block;
+  color: var(--ideal-vermelho-txt);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+.confirmacao-atencao-texto {
+  color: var(--ideal-vermelho-txt);
+  font-size: 13.5px;
+  line-height: 1.45;
+}
+.confirmacao-atencao-texto p { margin: 0 0 6px; }
+.confirmacao-atencao-texto p:last-child { margin-bottom: 0; }
+
 /* ===== Detalhe recolhível dentro de um cartão (build 066) ===== */
 .bloco-recolhivel {
   margin-top: 10px;
@@ -3594,7 +3613,7 @@ html[data-mloc-tema='claro'] .tarja-inativa {
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .rio-bar-trilho {
-  flex: 1 1 auto; height: 8px; min-width: 24px;
+  flex: 1 1 auto; height: var(--espessura-barra); min-width: 24px;
   background: var(--ideal-trilho); border-radius: 4px; overflow: hidden;
 }
 .rio-bar-fill { height: 100%; border-radius: 4px; }

@@ -5,6 +5,7 @@ import { gerarIdSerie, gerarParcelas, reprocessarSerieAPartirDe, ROTULOS_PERIODI
 import { fmtBRL, fmtNum, formatarMoeda, aplicarMascaraValor, paraNumero } from '../formatoMoeda'
 import SeletorCategoriaComIcone from './SeletorCategoriaComIcone'
 import MemoriaDescricao from './MemoriaDescricao'
+import ConfirmacaoAcao from './ConfirmacaoAcao'
 import { lerDoAmbiente, marcaDoAmbiente } from '../ambiente'
 import { hojeEfetivoISO } from '../hojeSimulado'
 import { DIA_FECHAMENTO_PADRAO, mesFaturaDaData, rotuloFatura, situacaoDaFatura } from '../faturaCiclo'
@@ -1330,41 +1331,33 @@ export default function DetalheLancamento({
                         existe origem pra limpar. Valor/situação/data ficam como
                         estão, e a linha abaixo avisa isso. */}
                     <div style={{ marginTop: 8 }}>
-                      {confirmandoDesvinculo ? (
-                        <>
-                          <p style={{ margin: '0 0 6px' }}>
-                            Desvincular limpa a origem e devolve a notificação pra Pendentes.{' '}
-                            <b>O valor, a situação e a data do lançamento ficam como estão</b> — se quiser mudá-los,
-                            edite aqui mesmo.
-                          </p>
-                          <div style={{ display: 'flex', gap: 8 }}>
-                            <button
-                              type="button"
-                              style={{ marginTop: 0, background: 'none', border: '1px solid var(--borda)', borderRadius: 10, color: 'var(--texto)', padding: '8px 12px', cursor: 'pointer', fontWeight: 600, fontSize: 12 }}
-                              data-testid="vinculo-desvincular-confirmar"
-                              onClick={async () => {
-                                if (original.id == null) return
-                                const r = await desvincularLancamento(original.id)
-                                setConfirmandoDesvinculo(false)
-                                setDesvincularAviso(
-                                  r.voltouParaPendentes
-                                    ? 'Vínculo desfeito. A notificação voltou pra Pendentes; o valor e a situação deste lançamento não foram alterados.'
-                                    : 'Vínculo desfeito. A notificação de origem não está mais no aparelho; o valor e a situação deste lançamento não foram alterados.',
-                                )
-                              }}
-                            >
-                              Sim, desvincular
-                            </button>
-                            <button
-                              type="button"
-                              style={{ marginTop: 0, background: 'none', border: 'none', color: 'var(--texto-fraco)', padding: '8px 4px', cursor: 'pointer', fontSize: 12 }}
-                              onClick={() => setConfirmandoDesvinculo(false)}
-                            >
-                              Cancelar
-                            </button>
-                          </div>
-                        </>
-                      ) : (
+                      {confirmandoDesvinculo && (
+                        /* Build 093 (item 5): a confirmação única do app. */
+                        <ConfirmacaoAcao
+                          titulo="Desvincular este lançamento da notificação?"
+                          testid="confirmacao-desvincular"
+                          aviso={
+                            <>
+                              <p>A origem (texto do banco) é apagada deste lançamento e a notificação volta pra Pendentes.</p>
+                              <p>O valor, a situação e a data do lançamento ficam como estão — se quiser mudá-los, edite aqui mesmo.</p>
+                            </>
+                          }
+                          onCancelar={() => setConfirmandoDesvinculo(false)}
+                          onConfirmar={() => {
+                            void (async () => {
+                              if (original.id == null) return
+                              const r = await desvincularLancamento(original.id)
+                              setConfirmandoDesvinculo(false)
+                              setDesvincularAviso(
+                                r.voltouParaPendentes
+                                  ? 'Vínculo desfeito. A notificação voltou pra Pendentes; o valor e a situação deste lançamento não foram alterados.'
+                                  : 'Vínculo desfeito. A notificação de origem não está mais no aparelho; o valor e a situação deste lançamento não foram alterados.',
+                              )
+                            })()
+                          }}
+                        />
+                      )}
+                      {(
                         <button
                           type="button"
                           style={{ marginTop: 0, background: 'none', border: '1px solid var(--borda)', borderRadius: 10, color: 'var(--texto)', padding: '8px 12px', cursor: 'pointer', fontWeight: 600, fontSize: 12 }}
@@ -1439,69 +1432,58 @@ export default function DetalheLancamento({
           um popup de verdade, no mesmo padrão `.modal-fundo`/`.modal-conteudo`
           já usado em outras confirmações do app (ex.: `ItemLancamentoAcoes`). */}
       {editando && confirmandoExclusao && (
-        <div className="modal-fundo" onClick={() => setConfirmandoExclusao(false)} style={{ alignItems: 'center' }}>
-          <div className="modal-conteudo" style={{ borderRadius: 16 }} onClick={(e) => e.stopPropagation()}>
-            <p style={{ margin: 0 }}>Excluir este lançamento? Essa ação não pode ser desfeita.</p>
-            {ehTransferenciaExistente && (
-              <p className="texto-fraco" style={{ margin: '8px 0 0' }}>
-                Isso exclui os dois lados da transferência.
+        /* Build 093 (item 5): a confirmação única do app (`ConfirmacaoAcao`).
+           A escolha do escopo (série) entra como conteúdo extra, entre o
+           aviso e os botões. */
+        <ConfirmacaoAcao
+          titulo={modoPagamentoFatura ? 'Excluir este pagamento de fatura?' : 'Excluir este lançamento?'}
+          testid="confirmacao-excluir-lancamento"
+          aviso={
+            <>
+              <p>
+                {ehTransferenciaExistente
+                  ? 'Os DOIS lados da transferência são apagados de vez e saem de todos os totais. Não dá pra desfazer.'
+                  : modoPagamentoFatura
+                    ? 'O pagamento é apagado de vez; a fatura volta a mostrar esse valor como "falta pagar". Não dá pra desfazer.'
+                    : 'O lançamento é apagado de vez e sai de todos os totais. Não dá pra desfazer.'}
               </p>
-            )}
-            {!ehTransferenciaExistente && original?.serieId && (
-              <div style={{ margin: '10px 0 0' }}>
-                <p className="texto-fraco" style={{ margin: '0 0 6px' }}>
-                  Este lançamento faz parte de uma série. O que excluir?
-                </p>
-                {/* Item 4 (16/09/2026): reescrito no mesmo padrão visual das
-                    listas de escolha já existentes no app (`.folha-escolha-item`)
-                    — linha inteira clicável, radio e rótulo imediatamente
-                    adjacentes. Antes o radio herdava `width: 100%` da regra
-                    genérica `input, select { width: 100% }` (index.css) dentro
-                    de um `label` flex, esticando-se e empurrando o texto pra
-                    longe — corrigido com `.opcao-escopo-item input` (largura
-                    fixa, `flex: 0 0 auto`). */}
-                <div className="lista-opcoes-escopo">
-                  {(['este', 'futuros', 'serie'] as const).map((opcao) => (
-                    <label
-                      key={opcao}
-                      className={`opcao-escopo-item${escopoExclusao === opcao ? ' ativo' : ''}`}
-                    >
-                      <input
-                        type="radio"
-                        name="escopo-exclusao"
-                        checked={escopoExclusao === opcao}
-                        onChange={() => setEscopoExclusao(opcao)}
-                      />
-                      <span>
-                        {opcao === 'este' && 'Só este lançamento'}
-                        {opcao === 'futuros' && 'Este e os futuros da série'}
-                        {opcao === 'serie' && 'Toda a série (incluindo os já passados)'}
-                      </span>
-                    </label>
-                  ))}
-                </div>
+              {!ehTransferenciaExistente && original?.serieId && (
+                <p>Este lançamento faz parte de uma série — escolha abaixo o que excluir.</p>
+              )}
+            </>
+          }
+          onCancelar={() => setConfirmandoExclusao(false)}
+          onConfirmar={() => void excluir()}
+        >
+          {!ehTransferenciaExistente && original?.serieId && (
+            <div style={{ margin: '10px 0 0' }}>
+              {/* Item 4 (16/09/2026): mesmo padrão visual das listas de escolha
+                  (`.folha-escolha-item`) — linha inteira clicável, radio e
+                  rótulo adjacentes (`.opcao-escopo-item input` com largura
+                  fixa, senão herda o `width: 100%` de `input, select`). */}
+              <div className="lista-opcoes-escopo">
+                {(['este', 'futuros', 'serie'] as const).map((opcao) => (
+                  <label
+                    key={opcao}
+                    className={`opcao-escopo-item${escopoExclusao === opcao ? ' ativo' : ''}`}
+                  >
+                    <input
+                      type="radio"
+                      name="escopo-exclusao"
+                      checked={escopoExclusao === opcao}
+                      onChange={() => setEscopoExclusao(opcao)}
+                    />
+                    <span>
+                      {opcao === 'este' && 'Só este lançamento'}
+                      {opcao === 'futuros' && 'Este e os futuros da série'}
+                      {opcao === 'serie' && 'Toda a série (incluindo os já passados)'}
+                    </span>
+                  </label>
+                ))}
               </div>
-            )}
-            <div className="acoes-modal" style={{ marginTop: 12 }}>
-              <button
-                type="button"
-                className="secundario"
-                onClick={() => setConfirmandoExclusao(false)}
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                className="perigo"
-                style={{ width: 'auto', marginTop: 0 }}
-                onClick={excluir}
-                data-testid="confirmar-exclusao"
-              >
-                Confirmar exclusão
-              </button>
             </div>
-          </div>
-        </div>
+          )}
+        </ConfirmacaoAcao>
       )}
     </div>
   )

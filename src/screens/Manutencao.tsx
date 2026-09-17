@@ -15,6 +15,7 @@ import {
 import { sair } from '../kit/auth'
 import { usePlanoAtual } from '../kit/planoAtual'
 import { contarDoAmbiente } from '../ambiente'
+import ConfirmacaoAcao from '../components/ConfirmacaoAcao'
 import {
   usePlatformN0,
   usePosicaoN1Proprio,
@@ -182,7 +183,6 @@ export default function Manutencao({
   // volta a gerar sozinha se um lançamento fixo novo for cadastrado depois.
   const totalLancamentos = useLiveQuery(() => contarDoAmbiente(db.lancamentos.toArray()), [])
   const [confirmandoLimpeza, setConfirmandoLimpeza] = useState(false)
-  const [entendiLimpeza, setEntendiLimpeza] = useState(false)
   const [resultadoLimpeza, setResultadoLimpeza] = useState<string | null>(null)
 
   async function limparTodosLancamentos() {
@@ -192,7 +192,6 @@ export default function Manutencao({
       `${total} lançamento(s) apagado(s), incluindo os de séries fixas e parcelas. Categorias, contas, grupos e configurações continuam intactos.`,
     )
     setConfirmandoLimpeza(false)
-    setEntendiLimpeza(false)
   }
 
   /* ---- Backup / Restaurar / Apagar tudo (10/09/2026, pedido do Rafael) ----
@@ -689,15 +688,24 @@ export default function Manutencao({
         {/* Confirmação da restauração: só depois de LER o arquivo e mostrar o
             que tem dentro dele — restaurar substitui tudo o que está no app. */}
         {pendenteRestauro && (
-          <div className="cartao" style={{ marginTop: 12, borderColor: 'var(--vermelho)' }}>
-            <div style={{ fontWeight: 700, fontSize: 13.5 }}>Restaurar “{pendenteRestauro.nome}”?</div>
-            <p className="texto-fraco" style={{ fontSize: 12.5, marginTop: 6 }}>
+          /* Build 093 (item 5): a confirmação única do app (`ConfirmacaoAcao`);
+             a lista de contagens do arquivo entra como conteúdo extra. */
+          <ConfirmacaoAcao
+            titulo={`Restaurar “${pendenteRestauro.nome}”?`}
+            testid="confirmacao-restaurar-backup"
+            aviso="Tudo o que está no app agora será substituído pelo conteúdo do arquivo. Não tem como desfazer — se o que está aqui hoje importa, faça um backup antes."
+            ocupado={ocupadoBackup !== ''}
+            rotuloOcupado="Restaurando…"
+            onCancelar={() => setPendenteRestauro(null)}
+            onConfirmar={() => void confirmarRestauro()}
+          >
+            <p className="texto-fraco" style={{ fontSize: 12.5, margin: '10px 0 4px' }}>
               Backup gerado em{' '}
               {pendenteRestauro.resumo.geradoEm ? new Date(pendenteRestauro.resumo.geradoEm).toLocaleString('pt-BR') : 'data desconhecida'}
               {pendenteRestauro.resumo.build ? ` · build ${String(pendenteRestauro.resumo.build).padStart(3, '0')}` : ''}.
               Ele tem {totalDeRegistros(pendenteRestauro.resumo.contagens)} registro(s):
             </p>
-            <ul style={{ margin: '0 0 10px', paddingLeft: 18 }}>
+            <ul style={{ margin: 0, paddingLeft: 18 }}>
               {Object.entries(pendenteRestauro.resumo.contagens)
                 .filter(([, n]) => n > 0)
                 .map(([t, n]) => (
@@ -706,24 +714,7 @@ export default function Manutencao({
                   </li>
                 ))}
             </ul>
-            <p className="valor-neg" style={{ fontSize: 12.5, fontWeight: 600, marginTop: 0 }}>
-              Tudo o que está no app agora será substituído por isso. Não tem como desfazer — se o que
-              está aqui hoje importa, faça um backup antes.
-            </p>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <button
-                type="button"
-                disabled={ocupadoBackup !== ''}
-                style={{ marginTop: 0, background: 'var(--vermelho)', borderColor: 'var(--vermelho)' }}
-                onClick={() => void confirmarRestauro()}
-              >
-                {ocupadoBackup === 'restaurando' ? 'Restaurando…' : 'Sim, substituir tudo'}
-              </button>
-              <button type="button" className="secundario" style={{ marginTop: 0, flex: 1 }} onClick={() => setPendenteRestauro(null)}>
-                Cancelar
-              </button>
-            </div>
-          </div>
+          </ConfirmacaoAcao>
         )}
       </div>
 
@@ -737,45 +728,26 @@ export default function Manutencao({
           Diferente de “Limpar dados” logo abaixo, que apaga só os lançamentos e preserva os
           cadastros. <strong>Faça um backup antes: não tem como desfazer.</strong>
         </p>
-        {confirmandoApagarTudo === 0 && (
-          <button type="button" className="perigo" onClick={() => setConfirmandoApagarTudo(1)}>
-            Apagar tudo
-          </button>
-        )}
-        {confirmandoApagarTudo === 1 && (
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {/* Item 19 da lista de 12/09/2026: estas duas opções eram botões
-                sem classe nenhuma — na tela pareciam dois pedaços de texto
-                lado a lado. Viraram botões de verdade, no par azul (seguir) e
-                neutro (cancelar), com o vermelho reservado pro passo final. */}
-            <button type="button" className="primario" style={{ marginTop: 0, flex: 1 }} onClick={() => setConfirmandoApagarTudo(2)}>
-              Entendi, continuar
-            </button>
-            <button type="button" className="secundario" style={{ marginTop: 0, flex: 1 }} onClick={() => setConfirmandoApagarTudo(0)}>
-              Cancelar
-            </button>
-          </div>
-        )}
-        {confirmandoApagarTudo === 2 && (
-          <>
-            <p className="valor-neg" style={{ fontSize: 13, fontWeight: 700 }}>
-              Última checagem: isto apaga os seus lançamentos reais e todos os cadastros, agora.
-            </p>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <button
-                type="button"
-                disabled={ocupadoBackup !== ''}
-                className="perigo"
-                style={{ marginTop: 0, flex: 1 }}
-                onClick={() => void executarApagarTudo()}
-              >
-                {ocupadoBackup === 'apagando' ? 'Apagando…' : 'Apagar tudo de vez'}
-              </button>
-              <button type="button" className="secundario" style={{ marginTop: 0, flex: 1 }} onClick={() => setConfirmandoApagarTudo(0)}>
-                Cancelar
-              </button>
-            </div>
-          </>
+        <button type="button" className="perigo" onClick={() => setConfirmandoApagarTudo(1)} data-testid="apagar-tudo">
+          Apagar tudo
+        </button>
+        {confirmandoApagarTudo > 0 && (
+          /* Build 093 (item 5): as três etapas viraram a confirmação única do
+             app — um modal, um aviso, Cancelar · Confirmar. */
+          <ConfirmacaoAcao
+            titulo="Apagar tudo e limpar o app?"
+            testid="confirmacao-apagar-tudo"
+            aviso={
+              <>
+                <p>Apaga agora os seus lançamentos reais e TODOS os cadastros: categorias, grupos, contas, metas, planos, usuários, notificações e configurações.</p>
+                <p>O app sai da conta na hora e volta pra tela de entrada, como recém instalado. Não tem como desfazer — faça um backup antes.</p>
+              </>
+            }
+            ocupado={ocupadoBackup !== ''}
+            rotuloOcupado="Apagando…"
+            onCancelar={() => setConfirmandoApagarTudo(0)}
+            onConfirmar={() => void executarApagarTudo()}
+          />
         )}
       </div>
 
@@ -786,95 +758,32 @@ export default function Manutencao({
           fixa e por parcelamento. Categorias, contas, grupos e configurações (ícones, visão do app)
           não são afetados. <strong>Não tem como desfazer.</strong>
         </p>
-        {confirmandoLimpeza ? (
-          <>
-            <button
-              type="button"
-              onClick={() => setEntendiLimpeza((v) => !v)}
-              style={{
-                display: 'flex',
-                alignItems: 'flex-start',
-                gap: 10,
-                marginBottom: 12,
-                width: '100%',
-                textAlign: 'left',
-                background: 'none',
-                border: 'none',
-                padding: 0,
-                cursor: 'pointer',
-              }}
-            >
-              <div
-                style={{
-                  width: 20,
-                  height: 20,
-                  borderRadius: 6,
-                  border: `2px solid ${entendiLimpeza ? 'var(--vermelho)' : 'var(--borda)'}`,
-                  background: entendiLimpeza ? 'var(--vermelho)' : 'transparent',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  flexShrink: 0,
-                  marginTop: 1,
-                  color: '#fff',
-                  fontSize: 12,
-                  fontWeight: 900,
-                  lineHeight: 1,
-                }}
-              >
-                {entendiLimpeza && '✓'}
-              </div>
-              <span className="texto-fraco" style={{ fontSize: 13 }}>
-                Entendo que isso apaga todos os lançamentos ({totalLancamentos ?? 0} hoje), inclusive os
-                de séries fixas e parceladas, e não tem como desfazer.
-              </span>
-            </button>
-            {/* Backup ANTES de apagar (12/09/2026, pedido do Rafael: "limpar
-                dados [...] este deve oferecer backup antes de limpar"). Mesma
-                função do cartão "Backup de tudo" — nada de um 2º caminho de
-                backup pra divergir depois. */}
+        <button type="button" className="perigo" onClick={() => setConfirmandoLimpeza(true)} data-testid="limpar-dados">
+          Limpar dados
+        </button>
+        {confirmandoLimpeza && (
+          /* Build 093 (item 5): a confirmação única do app. O "backup antes"
+             (12/09/2026) continua — entra como conteúdo extra do modal, pela
+             MESMA função do cartão "Backup de tudo". A caixa "entendo que…"
+             saiu: o modelo único não tem checkbox. */
+          <ConfirmacaoAcao
+            titulo="Apagar todos os lançamentos?"
+            testid="confirmacao-limpar-dados"
+            aviso={`Apaga os ${totalLancamentos ?? 0} lançamentos de hoje, inclusive os de séries fixas e parcelas. Categorias, contas, grupos e configurações continuam. Não tem como desfazer.`}
+            ocupado={ocupadoBackup !== ''}
+            onCancelar={() => setConfirmandoLimpeza(false)}
+            onConfirmar={() => void limparTodosLancamentos()}
+          >
             <button
               type="button"
               className="primario"
-              style={{ marginTop: 0, marginBottom: 10 }}
+              style={{ marginTop: 12 }}
               disabled={ocupadoBackup !== ''}
               onClick={() => void gerarBackup()}
             >
               {ocupadoBackup === 'gerando' ? 'Gerando…' : 'Fazer backup antes de limpar'}
             </button>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button
-                type="button"
-                className="perigo"
-                disabled={!entendiLimpeza}
-                style={{ marginTop: 0, flex: 1 }}
-                onClick={limparTodosLancamentos}
-              >
-                Sim, apagar todos os lançamentos
-              </button>
-              <button
-                type="button"
-                style={{
-                  marginTop: 0,
-                  background: 'none',
-                  border: '1px solid var(--borda)',
-                  borderRadius: 10,
-                  padding: '12px',
-                  cursor: 'pointer',
-                }}
-                onClick={() => {
-                  setConfirmandoLimpeza(false)
-                  setEntendiLimpeza(false)
-                }}
-              >
-                Cancelar
-              </button>
-            </div>
-          </>
-        ) : (
-          <button type="button" className="perigo" onClick={() => setConfirmandoLimpeza(true)}>
-            Limpar dados
-          </button>
+          </ConfirmacaoAcao>
         )}
         {resultadoLimpeza && (
           <p style={{ marginTop: 12 }} className="texto-fraco">

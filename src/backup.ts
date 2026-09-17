@@ -219,8 +219,9 @@ export async function restaurarBackup(arquivo: ArquivoBackup): Promise<Record<st
 /* Apaga TUDO — as 11 tabelas, incluindo cadastros, configurações e a sessão.
    Diferente de "Limpar todos os dados", que só apaga lançamentos e preserva
    categorias/contas/grupos. Depois disso o app volta ao estado de instalação
-   nova: ao reabrir, a semente de demonstração é recriada por `seedIfEmpty()`
-   e o Login volta a pedir cadastro. */
+   nova: ao reabrir, `seedIfEmpty()` recria SÓ a estrutura (build 093 — sem
+   valor nenhum; a demonstração só com `#semente-demo`) e o Login volta a
+   pedir cadastro. */
 export async function apagarTudo(): Promise<Record<string, number>> {
   const tabelas = TABELAS_BACKUP.map((n) => db.table(n))
   const apagados: Record<string, number> = {}

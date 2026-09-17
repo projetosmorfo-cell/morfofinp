@@ -23,16 +23,26 @@ import { db, type ConfiguracaoIcones } from './db'
 // categoria e aparecia como o menor elemento da hierarquia. Junto disso, a
 // régua do grupo passou a ser a mesma da categoria (40px, abaixo), então
 // "60%" quer dizer exatamente o mesmo tamanho nos dois lugares.
+//
+// 17/09/2026 (build 093) — padrão de FÁBRICA da Morfo, decisão do Rafael:
+// "Tamanho dos ícones deve ter novo padrão já na Morfo toda vez que gerar o
+// app: Categorias = 60, Lançamentos = 40 e Grupos = 70". Todo app gerado
+// nasce com estes três; uma instalação que já existe recebe os novos pela
+// migração `migrarPctPadrao093()` abaixo — só onde o valor salvo é o padrão
+// antigo (ninguém escolheu nada ali).
 export const CONFIG_ICONES_PADRAO: Omit<ConfiguracaoIcones, 'id'> = {
   pctCategoria: 60, // linha de categoria cadastrada — tela Categorias e Grupos
-  pctCompleta: 30, // listagem Completa — Lançamentos e drill-in de Carteira
-  pctGrupo: 60, // cabeçalho de grupo — Categorias, Situação, Resumo, Planejamento
+  pctCompleta: 40, // listagem Completa — Lançamentos e drill-in de Carteira
+  pctGrupo: 70, // cabeçalho de grupo — Categorias, Situação, Resumo, Planejamento
 }
 
 // Valor antigo de fábrica do percentual de grupo (nunca escolhido por
 // ninguém — era só o padrão do código). É o que `migrarPctGrupo()` abaixo
 // procura pra corrigir uma instalação que já existe.
 const PCT_GRUPO_PADRAO_ANTIGO = 30
+// Os padrões de fábrica que valeram da build 033 até a 092 (build 093 os
+// trocou): é o que `migrarPctPadrao093()` procura.
+const PCT_PADRAO_ATE_092 = { pctCompleta: 30, pctGrupo: 60 }
 
 // Alturas de referência (px), FIXAS por CSS (`min-height`/`height`
 // explícitos nas classes correspondentes — ver index.css), de cada tipo de
@@ -113,6 +123,7 @@ export function useConfiguracaoIcones(): Required<
     | 'memoriaDescricaoDias'
     | 'logosInstituicoes'
     | 'pctGrupoRevisado'
+    | 'pctPadrao093Revisado'
     | 'receitaFixaRevisada'
     | 'gruposTipoRevisado'
     | 'gruposComportamentoRevisado'
@@ -216,6 +227,22 @@ export async function migrarPctGrupo() {
     pctGrupoRevisado: true,
     ...(precisa ? { pctGrupo: CONFIG_ICONES_PADRAO.pctGrupo } : {}),
   })
+}
+
+// Build 093 (17/09/2026): o padrão de fábrica mudou (Lançamentos 30 → 40,
+// Grupos 60 → 70). Mesma disciplina de `migrarPctGrupo()`: só troca onde o
+// valor salvo é EXATAMENTE o padrão antigo (ninguém escolheu), roda uma vez
+// (marca `pctPadrao093Revisado`), e um número escolhido de propósito — ou
+// digitado depois — fica intocado. Precisa rodar DEPOIS de `migrarPctGrupo()`
+// (que leva o 30 antigo do grupo até 60, o padrão da 033-092, que esta leva
+// a 70) — por isso a ordem na cadeia do `App`.
+export async function migrarPctPadrao093() {
+  const atual = await db.configuracoes.get(1)
+  if (!atual || atual.pctPadrao093Revisado) return
+  const patch: Partial<ConfiguracaoIcones> = { pctPadrao093Revisado: true }
+  if ((atual.pctCompleta ?? PCT_PADRAO_ATE_092.pctCompleta) === PCT_PADRAO_ATE_092.pctCompleta) patch.pctCompleta = CONFIG_ICONES_PADRAO.pctCompleta
+  if ((atual.pctGrupo ?? PCT_PADRAO_ATE_092.pctGrupo) === PCT_PADRAO_ATE_092.pctGrupo) patch.pctGrupo = CONFIG_ICONES_PADRAO.pctGrupo
+  await salvarConfiguracaoIcones(patch)
 }
 
 /* ================= FIM DO CONCEITO DE "VERSÃO" (build 087, 16/09/2026) =====

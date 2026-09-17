@@ -8,6 +8,7 @@ import MenuLinha from '../components/MenuLinha'
 import SeletorComExplicacao, { type OpcaoExplicada } from '../components/SeletorComExplicacao'
 import { PencilSquareIcon } from '@heroicons/react/24/outline'
 import { lerDoAmbiente, marcaDoAmbiente } from '../ambiente'
+import ConfirmacaoAcao from '../components/ConfirmacaoAcao'
 import { AVISO_ULTIMO_COFRINHO, AVISO_COFRINHO_PADRAO_FIXO, MOTIVO_COFRINHO_PADRAO_TRAVADO, ehCofrinhoPadrao, ehUltimoCofrinho } from '../contasCofrinho'
 
 const ROTULO_TIPO: Record<TipoConta, string> = {
@@ -317,24 +318,18 @@ export default function Contas({ aoVoltar }: { aoVoltar: () => void }) {
                     </span>
                   </span>
                 </div>
-                {confirmandoExclusaoId === c.id ? (
-                  <>
-                    <button
-                      type="button"
-                      style={{ background: 'none', border: 'none', color: 'var(--vermelho)', cursor: 'pointer', padding: 0, fontSize: 12 }}
-                      onClick={() => excluir(c.id!)}
-                    >
-                      Confirmar
-                    </button>
-                    <button
-                      type="button"
-                      style={{ background: 'none', border: 'none', color: 'var(--texto-fraco)', cursor: 'pointer', padding: 0, fontSize: 12 }}
-                      onClick={() => setConfirmandoExclusaoId(null)}
-                    >
-                      Cancelar
-                    </button>
-                  </>
-                ) : (
+                {confirmandoExclusaoId === c.id && (
+                  /* Build 093 (item 5): a confirmação única do app
+                     (`ConfirmacaoAcao`) no lugar dos dois links de texto. */
+                  <ConfirmacaoAcao
+                    titulo={`Excluir a conta "${c.nome}"?`}
+                    testid="confirmacao-excluir-conta"
+                    aviso="A conta é apagada de vez. Só é possível excluir uma conta sem lançamento — por isso nenhum lançamento é afetado. O cofrinho padrão do app e o último cofrinho ativo não podem ser excluídos."
+                    onCancelar={() => setConfirmandoExclusaoId(null)}
+                    onConfirmar={() => void excluir(c.id!)}
+                  />
+                )}
+                {(
                   <>
                     <button
                       type="button"

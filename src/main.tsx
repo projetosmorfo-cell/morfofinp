@@ -14,7 +14,11 @@ function renderApp() {
 
 // Se o IndexedDB não abrir (alguns navegadores restringem isso sob file://,
 // principalmente Safari), mostra uma mensagem clara em vez de tela em branco.
-seedIfEmpty().then(renderApp, (erro) => {
+//
+// Build 093: instalação nova nasce SEM valor nenhum (só estrutura). A base de
+// demonstração é ferramenta de MVP e só entra com `#semente-demo` no endereço
+// (ex.: `MorfoFinP.html#semente-demo`), num banco ainda vazio.
+seedIfEmpty({ demo: /semente-demo/.test(window.location.hash) }).then(renderApp, (erro) => {
   console.error('Falha ao abrir o banco local (IndexedDB):', erro)
   const raiz = document.getElementById('root')!
   raiz.innerHTML = `

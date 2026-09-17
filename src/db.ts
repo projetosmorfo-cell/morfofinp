@@ -465,6 +465,9 @@ export interface ConfiguracaoIcones {
   // `src/configuracaoIcones.ts`. Campo aditivo, não indexado, sem bump de
   // schema (mesma regra de sempre pra esta tabela singleton).
   pctGrupoRevisado?: boolean
+  // Build 093: marca da migração do padrão de fábrica 60/40/70 — ver
+  // `migrarPctPadrao093()` em `src/configuracaoIcones.ts`.
+  pctPadrao093Revisado?: boolean
   /* Marca da migração da flag "receita fixa" (build 053). Ver
      `migrarReceitaFixa()` em `src/baseMeta.ts`: a flag nasceu marcada só em
      banco NOVO, então toda base criada antes da build 051 ficava com a base

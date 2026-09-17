@@ -20,6 +20,7 @@ import {
   type RascunhoGrupo,
 } from '../components/FormulariosCadastro'
 import MenuLinha from '../components/MenuLinha'
+import ConfirmacaoAcao from '../components/ConfirmacaoAcao'
 import { avaliarPassos } from '../components/PrimeirosPassos'
 import PacoteIconesN1 from '../components/PacoteIconesN1'
 import ModalCadastro from '../components/ModalCadastro'
@@ -642,25 +643,25 @@ export default function Categorias(
               fábrica), com ícones, receita fixa e os percentuais dos grupos. O que você já tem com o mesmo nome
               é mantido e ajustado; o que faltar é criado; nada é apagado.
             </p>
-            {confirmandoRestaurarCadastro ? (
-              <>
-                <p className="valor-neg texto-quebra" style={{ fontSize: 13, margin: '0 0 10px' }} data-testid="aviso-restaurar-cadastro">
-                  Atenção: se você tiver lançamentos ligados a categorias que não existem mais, eles podem ficar
-                  sem categoria vinculada — depois de restaurar, abra esses lançamentos e escolha a categoria.
-                </p>
-                <div className="acoes-modal">
-                  <button type="button" className="secundario" onClick={() => setConfirmandoRestaurarCadastro(false)}>
-                    Cancelar
-                  </button>
-                  <button type="button" className="primario" onClick={restaurarCadastroPadrao} data-testid="confirmar-restaurar-cadastro">
-                    Sim, restaurar o padrão
-                  </button>
-                </div>
-              </>
-            ) : (
-              <button type="button" className="primario" style={{ marginTop: 0 }} onClick={() => setConfirmandoRestaurarCadastro(true)} data-testid="restaurar-cadastro">
-                Restaurar categorias e grupos padrão
-              </button>
+            {/* Build 093 (item 5): a dupla checagem é a CONFIRMAÇÃO ÚNICA do
+                app (`ConfirmacaoAcao`) — mesmo modal, mesmos botões, em toda
+                tela. */}
+            <button type="button" className="primario" style={{ marginTop: 0 }} onClick={() => setConfirmandoRestaurarCadastro(true)} data-testid="restaurar-cadastro">
+              Restaurar categorias e grupos padrão
+            </button>
+            {confirmandoRestaurarCadastro && (
+              <ConfirmacaoAcao
+                titulo="Restaurar categorias e grupos padrão?"
+                testid="confirmacao-restaurar-cadastro"
+                aviso={
+                  <>
+                    <p>Os grupos e as categorias do padrão serão recriados ou ajustados pelo nome (ícone, receita fixa e percentuais dos grupos). Nada é apagado.</p>
+                    <p>Lançamentos ligados a categorias que não existem mais podem ficar sem categoria — depois, abra esses lançamentos e escolha a categoria.</p>
+                  </>
+                }
+                onCancelar={() => setConfirmandoRestaurarCadastro(false)}
+                onConfirmar={() => void restaurarCadastroPadrao()}
+              />
             )}
             {resultadoRestaurarCadastro && (
               <p className="texto-fraco" style={{ marginTop: 8 }} data-testid="resultado-restaurar-cadastro">
@@ -682,30 +683,17 @@ export default function Categorias(
               do app — sobrescreve qualquer ajuste feito depois. Categoria/grupo sem padrão salvo não é
               afetado.
             </p>
-            {confirmandoRestaurarPadrao ? (
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button type="button" className="primario" style={{ marginTop: 0 }} onClick={restaurarPadraoGeral}>
-                  Confirmar — restaurar tudo
-                </button>
-                <button
-                  type="button"
-                  style={{
-                    marginTop: 0,
-                    background: 'none',
-                    border: '1px solid var(--borda)',
-                    borderRadius: 10,
-                    padding: '12px',
-                    cursor: 'pointer',
-                  }}
-                  onClick={() => setConfirmandoRestaurarPadrao(false)}
-                >
-                  Cancelar
-                </button>
-              </div>
-            ) : (
-              <button type="button" className="primario" style={{ marginTop: 0 }} onClick={() => setConfirmandoRestaurarPadrao(true)}>
-                Restaurar ícones no padrão Morfo
-              </button>
+            <button type="button" className="primario" style={{ marginTop: 0 }} onClick={() => setConfirmandoRestaurarPadrao(true)} data-testid="restaurar-icones">
+              Restaurar ícones no padrão Morfo
+            </button>
+            {confirmandoRestaurarPadrao && (
+              <ConfirmacaoAcao
+                titulo="Restaurar os ícones no padrão Morfo?"
+                testid="confirmacao-restaurar-icones"
+                aviso="O ícone, o estilo e a cor de todas as categorias e grupos voltam ao padrão oficial — qualquer ícone que você escolheu depois é sobrescrito. Categoria ou grupo sem padrão salvo não muda."
+                onCancelar={() => setConfirmandoRestaurarPadrao(false)}
+                onConfirmar={() => void restaurarPadraoGeral()}
+              />
             )}
             {resultadoRestaurarPadrao && (
               <p className="texto-fraco" style={{ marginTop: 8 }}>
@@ -747,26 +735,17 @@ export default function Categorias(
                     mobile (390px) isso também corrige a quebra de linha que
                     "Restaurar ícone padrão" causava (medido no relatório de
                     04/09/2026). */}
-                {confirmandoExclusaoGrupoId === g.id ? (
-                  /* Item 5 (16/09/2026) — mesma correção da linha de
-                     categoria, acima: de texto solto pra botões de verdade. */
-                  <div className="confirmacao-inline-linha">
-                    <button
-                      type="button"
-                      className="botao-mini-perigo"
-                      onClick={() => excluirGrupo(g.id!)}
-                    >
-                      Confirmar
-                    </button>
-                    <button
-                      type="button"
-                      className="botao-mini-secundario"
-                      onClick={() => setConfirmandoExclusaoGrupoId(null)}
-                    >
-                      Cancelar
-                    </button>
-                  </div>
-                ) : (
+                {confirmandoExclusaoGrupoId === g.id && (
+                  /* Build 093 (item 5): a confirmação única do app, em modal. */
+                  <ConfirmacaoAcao
+                    titulo={`Excluir o grupo "${g.nome}"?`}
+                    testid="confirmacao-excluir-grupo"
+                    aviso="O grupo é apagado de vez, com a meta (percentual) dele. Só é possível excluir um grupo sem categoria — por isso nenhum lançamento é afetado."
+                    onCancelar={() => setConfirmandoExclusaoGrupoId(null)}
+                    onConfirmar={() => void excluirGrupo(g.id!)}
+                  />
+                )}
+                {(
                   <MenuLinha
                     aberto={menuGrupoAberto === g.id}
                     onAbrirFechar={() => setMenuGrupoAberto((atual) => (atual === g.id ? null : g.id!))}
@@ -1210,14 +1189,13 @@ export default function Categorias(
                       </fieldset>
 
                       {confirmandoExclusaoId === c.id && (
-                        <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-                          <button type="button" className="perigo" style={{ flex: 1 }} onClick={() => void excluir(c.id!)}>
-                            Excluir de vez
-                          </button>
-                          <button type="button" className="secundario" style={{ flex: 1 }} onClick={() => setConfirmandoExclusaoId(null)}>
-                            Cancelar
-                          </button>
-                        </div>
+                        <ConfirmacaoAcao
+                          titulo={`Excluir a categoria "${c.nome}"?`}
+                          testid="confirmacao-excluir-categoria"
+                          aviso="A categoria é apagada de vez, com a meta dela. Só é possível excluir uma categoria sem lançamento — por isso nenhum lançamento é afetado."
+                          onCancelar={() => setConfirmandoExclusaoId(null)}
+                          onConfirmar={() => void excluir(c.id!)}
+                        />
                       )}
                     </div>
                   )
@@ -1299,30 +1277,18 @@ export default function Categorias(
                           {metaGrupo - somaAceitavel > 0 ? `sobra ${fmtNum(metaGrupo - somaAceitavel)}` : `excede ${fmtNum(somaAceitavel - metaGrupo)}`}
                         </span>
                       )}
-                      {confirmandoExclusaoId === c.id ? (
-                        /* Item 5 (16/09/2026): eram dois links de texto solto
-                           ("Confirmar"/"Cancelar", sem fundo nem borda) — viraram
-                           botões de verdade, pequenos, em harmonia com a linha
-                           compacta (mesmo padrão de "dupla confirmação" já usado
-                           em Manutenção/apagar-dados, só em versão mini pra caber
-                           numa única linha em vez de um bloco cheio). */
-                        <div className="confirmacao-inline-linha">
-                          <button
-                            type="button"
-                            className="botao-mini-perigo"
-                            onClick={() => excluir(c.id!)}
-                          >
-                            Confirmar
-                          </button>
-                          <button
-                            type="button"
-                            className="botao-mini-secundario"
-                            onClick={() => setConfirmandoExclusaoId(null)}
-                          >
-                            Cancelar
-                          </button>
-                        </div>
-                      ) : (
+                      {confirmandoExclusaoId === c.id && (
+                        /* Build 093 (item 5): a confirmação única do app, em
+                           modal — o par inline de mini-botões saiu. */
+                        <ConfirmacaoAcao
+                          titulo={`Excluir a categoria "${c.nome}"?`}
+                          testid="confirmacao-excluir-categoria"
+                          aviso="A categoria é apagada de vez, com a meta dela. Só é possível excluir uma categoria sem lançamento — por isso nenhum lançamento é afetado."
+                          onCancelar={() => setConfirmandoExclusaoId(null)}
+                          onConfirmar={() => void excluir(c.id!)}
+                        />
+                      )}
+                      {(
                         <>
                           <button
                             type="button"

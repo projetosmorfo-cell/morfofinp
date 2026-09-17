@@ -31,7 +31,7 @@ import { PopupPermissoesNotificacao, usarAvisoPermissoes } from './components/Pe
 
 /* Sentinela de "consulta ainda não respondeu" (mesmo padrão de `AppRoot.tsx`). */
 const CARREGANDO = Symbol('carregando')
-import { migrarFimDasVersoes, migrarPctGrupo, salvarConfiguracaoIcones, useOrdemAbas, useOrdemMenuEngrenagem, useTemaEfetivo } from './configuracaoIcones'
+import { migrarFimDasVersoes, migrarPctGrupo, migrarPctPadrao093, salvarConfiguracaoIcones, useOrdemAbas, useOrdemMenuEngrenagem, useTemaEfetivo } from './configuracaoIcones'
 import { TopIconMenu, UserHoverIcon, ThemeToggleIcon } from './kit/TopoIcones'
 import { Settings, MessageCircle, RefreshCw, LogOut } from 'lucide-react'
 import SuporteChat from './kit/SuporteChat'
@@ -697,7 +697,9 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: ModoConsultaN
     avancarSeriesFixasPendentes()
     // Correção única do percentual do ícone de grupo numa base que já existe
     // (11/09/2026) — ver `migrarPctGrupo()` em `src/configuracaoIcones.ts`.
-    migrarPctGrupo()
+    // Build 093: em seguida (e só depois dela) o novo padrão de fábrica dos
+    // três percentuais (60/40/70) — `migrarPctPadrao093()`.
+    void migrarPctGrupo().then(() => migrarPctPadrao093())
     // Tipo de grupo (entrada × saída) numa base que já existe: atribui o tipo
     // a cada grupo e move pro grupo "Receita" toda categoria de receita que
     // estiver dentro de grupo de saída (11/09/2026) — roda uma vez só, ver

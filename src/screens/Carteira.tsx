@@ -14,7 +14,7 @@ import { janelaFatura, lancamentosDoCiclo, situacaoDaFatura, DIA_FECHAMENTO_PADR
 import { formatarCabecalhoData } from '../formatoData'
 import { fundoDaLinhaDeData } from '../statusPagamento'
 import SaldoDoCofrinho, { LinhaInformeSaldo } from '../components/SaldoDoCofrinho'
-import { fmtBRL, fmtNum } from '../formatoMoeda'
+import { fmtBRL } from '../formatoMoeda'
 import { useHojeSimuladoISO, hojeEfetivoISO } from '../hojeSimulado'
 import TituloTelaN1 from '../kit/CabecalhoN1'
 import { ExportSheet, type ExportRow } from '../kit/ExportSheet'
@@ -241,14 +241,11 @@ export default function Carteira({ mes, aoMudarMes, aoAbrirLancamento }: TelaPro
           valorNumero = (conta.saldoInicial ?? 0) + lancamentosDaConta.filter((l) => l.dataCompetencia <= hojeISO).reduce((s, l) => s + l.valor, 0)
           rotuloValor = 'Saldo atual'
         }
-        // F-05 da revisão de UI (04/09/2026): medido 549px (64% da área
-        // útil) vazios abaixo do último card, com só 3 contas cadastradas —
-        // uma prévia dos lançamentos mais recentes de cada conta usa parte
-        // desse espaço, sem precisar entrar no drill-in só pra "ver o que
-        // teve aqui ultimamente".
-        const recentesDaConta = [...lancamentosDaConta]
-          .sort((a, b) => b.dataCompetencia.localeCompare(a.dataCompetencia))
-          .slice(0, 3)
+        // Build 093 (item 4): a prévia dos 3 últimos lançamentos (F-05 da
+        // revisão de UI de 04/09/2026) SAIU dos cards — pedido do Rafael: "os
+        // cards não devem mais mostrar os últimos lançamentos". O card volta a
+        // ser só nome · número · o que é o número (+ o informe de saldo no
+        // cofrinho); a lista vive no toque.
         return (
           <button
             key={conta.id}
@@ -282,23 +279,6 @@ export default function Carteira({ mes, aoMudarMes, aoAbrirLancamento }: TelaPro
             {conta.tipo === 'cofre' && (
               <LinhaInformeSaldo contaId={conta.id!} calculado={valorNumero} />
             )}
-            {recentesDaConta.length > 0 && (
-              <div className="card-conta-preview">
-                {/* Pedido do Rafael (04/09/2026, mesmo dia): a prévia não
-                    deixava claro que eram só os ÚLTIMOS lançamentos, nem que
-                    tocar no card mostra mais — rótulo explícito resolve os
-                    dois de uma vez. */}
-                <span className="card-conta-preview-titulo">Últimos lançamentos — toque pra ver todos</span>
-                {recentesDaConta.map((l) => (
-                  <div key={l.id} className="card-conta-preview-linha">
-                    <span>{l.descricao}</span>
-                    <span className={l.valor < 0 ? 'valor-neutro' : 'valor-pos'}>
-                      {l.valor < 0 ? '-' : '+'}{fmtNum(l.valor)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
           </button>
         )
       })}
@@ -319,27 +299,7 @@ export default function Carteira({ mes, aoMudarMes, aoAbrirLancamento }: TelaPro
             ) : undefined
           }
         />
-        {(() => {
-          const recentesCofrinho = todosLancamentos
-            .filter((l) => naturezaDoLancamento(l) === 'Aporte' || naturezaDoLancamento(l) === 'Gasto de cofrinho')
-            .sort((a, b) => b.dataCompetencia.localeCompare(a.dataCompetencia))
-            .slice(0, 3)
-          return (
-            recentesCofrinho.length > 0 && (
-              <div className="card-conta-preview">
-                <span className="card-conta-preview-titulo">Últimos lançamentos — toque pra ver todos</span>
-                {recentesCofrinho.map((l) => (
-                  <div key={l.id} className="card-conta-preview-linha">
-                    <span>{l.descricao}</span>
-                    <span className={l.valor < 0 ? 'valor-neutro' : 'valor-pos'}>
-                      {l.valor < 0 ? '-' : '+'}{fmtNum(l.valor)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )
-          )
-        })()}
+        {/* Build 093 (item 4): sem prévia de lançamentos aqui também. */}
       </button>
 
       {/* Botão flutuante presente em toda tela principal (31/08/2026, mesmo
@@ -483,14 +443,30 @@ function DetalheConta({
   // a quitação usam, nunca uma cópia aqui.
   const dentroDaJanela = (l: Lancamento, j: { inicio: string; fim: string }) =>
     l.dataCompetencia >= j.inicio && l.dataCompetencia <= j.fim
-  const doPeriodoBruto =
-    modoPeriodo || !isCartao
-      ? lancamentosDoLugar.filter((l) => dentroDaJanela(l, janela))
-      : lancamentosDoCiclo(lancamentosDoLugar, conta?.diaFechamento ?? DIA_FECHAMENTO_PADRAO, mes)
   /* Situação da fatura (build 090): total, o que já foi pago e o que falta —
      ver `situacaoDaFatura`. Fora do modo período (que não é um ciclo). */
   const fatura =
     isCartao && conta && !modoPeriodo ? situacaoDaFatura(todosLancamentos, categoriaPorId, conta, mes) : null
+  /* Build 093 (item 2 — "o total da fatura não bate com o total no fim da
+     lista"): no cartão a LISTA e o FECHAMENTO passam a ser `fatura.itens`, a
+     MESMA lista que o card de quitação soma — nunca uma segunda seleção. Até
+     a 092 a lista era `lancamentosDoCiclo(...)` cru, e `situacaoDaFatura`
+     tira do total tudo que tem a categoria "Pagamento de fatura": um
+     pagamento lançado NO PRÓPRIO CARTÃO (a perna de crédito de uma
+     transferência, ou um pagamento gravado na conta errada) entrava na lista
+     e no fechamento, mas não no "Total da fatura" do card — era esse o
+     descompasso. Esses lançamentos não somem: vão pra seção própria abaixo
+     do card de quitação (`foraDaFatura`), com a explicação. */
+  const doPeriodoBruto = fatura
+    ? fatura.itens
+    : modoPeriodo || !isCartao
+      ? lancamentosDoLugar.filter((l) => dentroDaJanela(l, janela))
+      : []
+  const foraDaFatura = fatura
+    ? lancamentosDoCiclo(lancamentosDoLugar, conta?.diaFechamento ?? DIA_FECHAMENTO_PADRAO, mes).filter(
+        (l) => !fatura.itens.includes(l),
+      )
+    : []
 
   /* Build 092 — "Saldo do mês anterior": saldo-base da conta + tudo que
      aconteceu ANTES do início da janela (mês civil ou período escolhido).
@@ -724,6 +700,23 @@ function DetalheConta({
               {fatura.pagamentos.length > 0 ? 'Pagar o restante' : 'Pagar esta fatura'}
             </button>
           )}
+        </div>
+      )}
+
+      {/* Build 093 (item 2): o que está NO CARTÃO neste ciclo mas FORA da
+          fatura — lançamentos com a categoria "Pagamento de fatura" gravados
+          no próprio cartão. Ficam visíveis aqui (nunca somem), fora da lista
+          e do fechamento, que agora somam exatamente o que o card de quitação
+          soma. */}
+      {foraDaFatura.length > 0 && (
+        <div className="cartao" style={{ marginBottom: 10 }} data-testid="fora-da-fatura">
+          <strong style={{ fontSize: 13 }}>Pagamentos lançados neste cartão</strong>
+          <p className="texto-fraco" style={{ marginTop: 4, marginBottom: 8 }}>
+            Estes lançamentos têm a categoria "Pagamento de fatura" e estão gravados no próprio cartão. Eles não entram
+            no total da fatura: o pagamento de uma fatura mora na conta que paga (a conta corrente). Abra cada um e
+            troque a conta — ou exclua, se for uma cópia do pagamento já registrado.
+          </p>
+          {foraDaFatura.map(linhaDe)}
         </div>
       )}
 
