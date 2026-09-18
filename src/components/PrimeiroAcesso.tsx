@@ -25,7 +25,7 @@
  *              onde o dinheiro está, com SALDO INICIAL e data de cada conta.
  *              (build 096, pedido do Rafael: "abrir tela pra informar saldo
  *              inicial e data após ou junto com cadastro de contas".)
- *     PASSO 3  a própria tela "Categorias, Grupos e Metas", em modo primeiro
+ *     PASSO 3  a própria tela "Grupos, Categorias e Metas", em modo primeiro
  *              acesso (sem "Voltar", com o botão "Concluir e ir para o
  *              Planejamento" no rodapé, liberado só quando os percentuais
  *              dos grupos somam 100% e a receita fixa continua válida).
@@ -250,7 +250,7 @@ function FormularioReceitaFixa({
         </p>
         <p className="texto-fraco texto-quebra" style={{ margin: 0 }}>
           Mesmo que o valor varie de um mês pro outro, coloque um valor de referência. Dá
-          pra ajustar depois em Configurações → Categorias, Grupos e Metas.
+          pra ajustar depois em Configurações → Grupos, Categorias e Metas.
         </p>
       </div>
 

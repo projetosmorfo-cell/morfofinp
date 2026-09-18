@@ -3,6 +3,7 @@ import { comIconePadraoCategoria, comIconePadraoGrupo } from './iconesPadrao'
 import { GRUPO_RECEITA } from './gruposUtil'
 import type { GrupoPadraoN0, CategoriaPadraoN0 } from './kit/kitPlatform'
 import { doAmbiente, AMBIENTE_DESTE_APARELHO } from './ambiente'
+import { contasDoModeloInicial } from './contasCofrinho'
 
 /* Primeiro mês que a base de demonstração entrega EM ABERTO (`pago: false`).
    Tudo anterior a ele chega liquidado; ele e os seguintes chegam por marcar.
@@ -999,15 +1000,12 @@ async function seedEstruturaLimpa() {
     /* As mesmas categorias da demonstração, mas com a meta ZERADA e sem
        `esperadoMensal` — o valor é do dono do app, nunca de fábrica. */
     await db.categorias.bulkAdd(CATEGORIAS_PADRAO.map((c) => ({ ...comIconePadraoCategoria(c), aceitavelMensal: 0 })))
-    await db.contas.add({
-      nome: 'Banco',
-      tipo: 'corrente',
-      instituicao: 'Banco',
-      saldoInicial: 0,
-      dataSaldoInicial: new Date().toISOString().slice(0, 10),
-      importavel: true,
-      ativa: true,
-    })
+    /* Build 099: a carteira nasce no MODELO INICIAL — "Banco Modelo" e o
+       Cofrinho padrão, os dois zerados (a mesma função que "Restaurar padrão
+       de fábrica" usa; pedido do Rafael: "nunca deve trazer qualquer conta
+       cadastrada (...) o que pode manter é já vir com a conta cofrinho padrão
+       cadastrada"). Nenhum lançamento, nenhum valor. */
+    await db.contas.bulkAdd(contasDoModeloInicial({}, new Date().toISOString().slice(0, 10)))
     const mesVigencia = new Date().toISOString().slice(0, 7).replace('-', '')
     await db.metas.bulkAdd([
       { grupo: 'Fixo', percentual: 50, base: 'receita_real', mesVigencia },

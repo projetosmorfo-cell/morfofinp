@@ -47,9 +47,15 @@ export default function SeletorMes({
   mes,
   onMudar,
   periodo,
+  rotuloCentro: rotuloForcado,
 }: {
   mes: string
   onMudar: (mes: string) => void
+  /* Build 099: o drill-in do CARTÃO mostra no centro o PERÍODO DA FATURA
+     ("08/08 – 07/09") no lugar do nome do mês — as setas continuam andando
+     mês a mês. Só substitui o texto; a mecânica (popup de período, "Hoje",
+     reprocessar) é a mesma. */
+  rotuloCentro?: string
   /* Item 2 (16/09/2026): quando presente, o nome do mês (ou o período, se
      `periodo.ativo`) vira clicável e abre um POPUP pra escolher um intervalo
      de datas (De/Até) ou voltar pra um mês específico fechado — usado só em
@@ -115,7 +121,7 @@ export default function SeletorMes({
 
   const rotuloCentro = periodo?.ativo
     ? `${formatarDataCurta(periodo.de)} – ${formatarDataCurta(periodo.ate)}`
-    : formatarMesCurto(mes)
+    : rotuloForcado ?? formatarMesCurto(mes)
 
   return (
     <>

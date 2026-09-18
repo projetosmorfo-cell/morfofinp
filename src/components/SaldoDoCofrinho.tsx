@@ -212,7 +212,12 @@ export function LinhaInformeSaldo({
     setAberto(false)
   }
 
-  const diferenca = informe ? informe.valor - calculado : 0
+  /* Build 099 (item 3 da lista do Rafael): "ficou confuso ter dois lugares,
+     mostre apenas o que eu pedi". Saiu a diferença "desde os lançamentos"; o
+     que fica é UMA linha com o saldo real informado, quando foi, e a
+     variação desde a atualização anterior (build 096). O número grande do
+     card é o REAL pelos lançamentos — o mesmo do fechamento da lista. */
+  void calculado
 
   return (
     <>
@@ -221,16 +226,10 @@ export function LinhaInformeSaldo({
           className={`ideal-t4 ${informe.velho ? 'informe-velho' : 'texto-fraco'}`}
           data-testid="linha-informe"
         >
-          informado {emPortugues(informe.dias)}
-          {Math.abs(diferenca) >= 0.005 && (
-            <>
-              {' · '}
-              {diferenca > 0 ? '+' : '−'}
-              {fmtBRL(Math.abs(diferenca))} desde os lançamentos
-            </>
-          )}
+          Saldo real informado {fmtBRL(informe.valor)} · {emPortugues(informe.dias)}
         </span>
       )}
+      <LinhaVariacaoCofrinho contaId={contaId} />
 
       <span
         role="button"
@@ -294,11 +293,15 @@ export function LinhaInformeSaldo({
 export default function SaldoDoCofrinho({
   contaId = COFRINHO_VIRTUAL_ID,
   calculado,
+  comprometido,
   nome = 'Cofrinho',
   selo,
 }: {
   contaId?: number
+  /** O REAL pelos lançamentos (só o que já aconteceu) — o número grande. */
   calculado: number
+  /** Executado + comprometido (aportes ainda a fazer) — a linha de baixo. */
+  comprometido?: number
   /* Nome e selo vêm da CONTA do cofrinho padrão desde a build 087 — o card
      virtual passou a ter um registro no cadastro, e é ele que dá manutenção de
      nome e ícone a este card (ver `src/contasCofrinho.ts`). Os padrões mantêm
@@ -306,13 +309,15 @@ export default function SaldoDoCofrinho({
   nome?: string
   selo?: ReactNode
 }) {
-  const informe = useUltimoInforme(contaId)
-  const mostrado = informe ? informe.valor : calculado
+  /* Build 099: o número principal passou a ser o REAL pelos lançamentos — o
+     mesmo número do fechamento da lista lá dentro (o Rafael viu um valor no
+     card e "um cálculo diferente desconexo" no rodapé: era o informado aqui
+     contra o calculado lá). O saldo informado continua no card, como a linha
+     de contexto, com a variação desde a última atualização. */
+  const mostrado = calculado
 
   return (
     <>
-      {/* Build 096: a variação vem ACIMA do total, como pedido. */}
-      <LinhaVariacaoCofrinho contaId={contaId} />
       <div className="linha-destaque" style={{ marginTop: 0 }}>
         <strong style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
           {selo}
@@ -329,7 +334,14 @@ export default function SaldoDoCofrinho({
         </strong>
       </div>
 
-      {!informe && <span className="texto-fraco">Total acumulado pelos lançamentos</span>}
+      <div className="card-dois-totais">
+        <span className="texto-fraco">Total real (já executado)</span>
+        {comprometido != null && (
+          <span className="texto-fraco card-total-comprometido" data-testid="card-total-comprometido">
+            Com comprometido {comprometido < 0 ? '−' : ''}{fmtBRL(Math.abs(comprometido))}
+          </span>
+        )}
+      </div>
 
       {/* A linha de informe e o botão vivem em `LinhaInformeSaldo` desde a
           build 086 — a mesma peça que toda conta de cofrinho REAL usa. */}

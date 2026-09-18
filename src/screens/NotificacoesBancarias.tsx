@@ -14,7 +14,10 @@ import {
   obterPacotesIgnorados,
   ignorarPacote,
   deixarDeIgnorarPacote,
+  limparHistorico,
+  limparHistoricoPorIdade,
 } from '../notificacaoBancaria'
+import ConfirmacaoAcao from '../components/ConfirmacaoAcao'
 import { BotoesPermissaoNotificacao, lerPermissoes, type EstadoPermissoes } from '../components/PermissoesNotificacao'
 import { lerDoAmbiente } from '../ambiente'
 import { analisarNotificacao, casarContaDaNotificacao, ROTULO_MOVIMENTO } from '../parseNotificacao'
@@ -152,12 +155,26 @@ export default function NotificacoesBancarias({
   const [aviso, setAviso] = useState<string | null>(null)
   const [ignorados, setIgnorados] = useState<string[]>([])
 
+  /* Build 099: a limpeza automática do histórico pela idade (parâmetro
+     "Guardar histórico por (dias)") roda ao abrir a tela e a cada volta a
+     ela — no navegador também, porque histórico existe nos dois lugares. */
+  const [confirmandoLimparHistorico, setConfirmandoLimparHistorico] = useState(false)
+  const [avisoHistorico, setAvisoHistorico] = useState<string | null>(null)
+
   async function atualizarStatus() {
+    const apagadas = await limparHistoricoPorIdade()
+    if (apagadas > 0) setAvisoHistorico(`${apagadas} notificação(ões) já tratada(s) mais velha(s) que ${params.retencaoHistoricoDias} dias foram apagadas sozinhas.`)
     if (!nativo) return
     setPermissoes(await lerPermissoes())
     setIgnorados(await obterPacotesIgnorados())
     const novas = await sincronizarPendentesNativas()
     if (novas > 0) setAviso(`${novas} notificação(ões) nova(s) lida(s) do aparelho.`)
+  }
+
+  async function executarLimparHistorico() {
+    const n = await limparHistorico()
+    setAvisoHistorico(`${n} notificação(ões) apagada(s) do histórico e das ignoradas. Pendentes e o que o app aprendeu continuam.`)
+    setConfirmandoLimparHistorico(false)
   }
 
   useEffect(() => {
@@ -354,6 +371,41 @@ export default function NotificacoesBancarias({
             })}
           </div>
         </>
+      )}
+
+      {/* Build 099 — LIMPEZA DO HISTÓRICO, nas duas abas que são histórico
+          (Ignoradas e Histórico). Automática pela idade (parâmetro em
+          Configurações → Regras de Notificação Bancária) e manual aqui. Só
+          apaga o que já foi tratado; pendentes nunca. O que o app aprendeu
+          (o de/para) mora em outra lista e não é tocado. */}
+      {(aba === 'ignoradas' || aba === 'historico') && (
+        <div className="cartao" data-testid="notif-limpeza-historico">
+          <p className="texto-fraco" style={{ marginTop: 0 }}>
+            {params.retencaoHistoricoDias > 0
+              ? `Confirmadas e ignoradas mais velhas que ${params.retencaoHistoricoDias} dias são apagadas sozinhas ao abrir esta tela (ajuste em Regras de Notificação Bancária). `
+              : 'A limpeza automática está desligada (0 dias em Regras de Notificação Bancária). '}
+            Apagar o histórico não desensina nada: o de/para aprendido fica. Pendentes nunca são apagadas.
+          </p>
+          <button
+            type="button"
+            className="perigo"
+            data-testid="notif-limpar-historico"
+            disabled={(confirmadas?.length ?? 0) + (descartadas?.length ?? 0) === 0}
+            onClick={() => setConfirmandoLimparHistorico(true)}
+          >
+            Limpar histórico agora ({(confirmadas?.length ?? 0) + (descartadas?.length ?? 0)})
+          </button>
+          {avisoHistorico && <p className="texto-fraco" style={{ marginBottom: 0 }} data-testid="notif-aviso-historico">{avisoHistorico}</p>}
+          {confirmandoLimparHistorico && (
+            <ConfirmacaoAcao
+              titulo="Apagar o histórico de notificações?"
+              testid="confirmacao-limpar-historico"
+              aviso={`Apaga ${(confirmadas?.length ?? 0) + (descartadas?.length ?? 0)} notificação(ões) já tratada(s) — confirmadas e as que você descartou. Os lançamentos que nasceram delas e o que o app aprendeu continuam. Pendentes não são tocadas.`}
+              onCancelar={() => setConfirmandoLimparHistorico(false)}
+              onConfirmar={() => void executarLimparHistorico()}
+            />
+          )}
+        </div>
       )}
 
       <h2>Leitura no Celular</h2>

@@ -1607,6 +1607,20 @@ nav.rodape {
   opacity: 0.85;
 }
 
+/* Build 099 — as linhas abaixo do número em destaque do card (o "Total real
+   (já executado)" e o "Com comprometido …"; no cartão, o período da fatura,
+   a fatura inteira e o status). Uma por linha, com menos destaque que o
+   número do cabeçalho — é o "menor destaque" do pedido do Rafael. */
+.card-dois-totais {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 4px;
+  font-size: 12.5px;
+}
+.card-dois-totais > span { display: block; font-size: 12.5px; }
+.card-dois-totais .card-status-fatura { font-weight: 600; margin-top: 2px; }
+
 /* Totalizador geral — padrão visual único (30/08/2026) pra QUALQUER linha
    de fechamento/total em qualquer card do app (com ou sem barra de
    progresso dentro): fundo destacado, ocupa a linha inteira, nunca se
@@ -2681,11 +2695,18 @@ html[data-mloc-tema="escuro"] body {
   touch-action: none;
 }
 
+/* Build 099 — a linha "presa" no dedo/ponteiro precisa GRITAR que está em
+   arrasto (pedido do Rafael: "a cor da linha que está em arrasto deve ter
+   mais destaque"): fundo azul translúcido, borda azul, um leve levantar. */
 .linha-reordenavel.em-arrasto {
-  opacity: 0.6;
-  background: var(--bg-elevado);
+  opacity: 0.95;
+  background: color-mix(in srgb, var(--azul) 22%, var(--bg-elevado));
+  box-shadow: 0 0 0 2px var(--azul), 0 8px 20px rgba(0, 0, 0, 0.35);
   border-radius: 8px;
   cursor: grabbing;
+  transform: scale(1.01);
+  position: relative;
+  z-index: 2;
 }
 
 /* ==========================================================================
@@ -3925,4 +3946,282 @@ html[data-mloc-tema='claro'] .tarja-inativa {
   border-radius: 10px;
   padding: 8px 10px;
   overflow: hidden;
+}
+
+/* ==========================================================================
+   TELA DE LANÇAMENTO — build 099 (18/09/2026). `DetalheLancamento.tsx`.
+   O protótipo do relatório "Revisão UI - Tela de Lançamento 17-09-2026"
+   (07 - Gestão), aprovado pelo Rafael com dois ajustes: os chips (Data ·
+   Conta · Já saiu · Parcela · Veio do…) centralizados e bem distribuídos, e
+   o rodapé "Repetir" maior e mais visível ("não muito"). Prefixo `dl-` =
+   detalhe do lançamento; nada aqui vaza pra outra tela. Alvos de toque de
+   44px (V-02) e anel de teclado em tudo que é botão (V-08).
+   ========================================================================== */
+.dl-modal { padding-top: 10px; }
+
+.dl-cabecalho {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 6px;
+}
+.dl-titulo {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+.dl-cabecalho .menu-linha-wrap { flex-shrink: 0; }
+.dl-cabecalho .menu-linha-wrap > button { min-width: 44px; min-height: 44px; }
+.dl-fechar {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  margin-right: -10px;
+  border: none;
+  border-radius: 10px;
+  background: none;
+  color: var(--texto-fraco);
+  font-size: 18px;
+  cursor: pointer;
+}
+.dl-fechar:hover, .dl-fechar:active { background: var(--bg); color: var(--texto); }
+.menu-linha-popover button.dl-menu-perigo { color: var(--vermelho); }
+
+/* Chips — a linha "Hoje ‹ › · no Bradesco ✎ · já saiu da conta" abaixo do
+   valor, e a linha de identidade (Parcela 2/6 · Veio do banco) no topo.
+   Centralizados e distribuídos: cada linha ocupa a largura toda, com o
+   mesmo respiro entre os chips, e quebra sem espremer ninguém. */
+.dl-chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 8px 10px;
+  margin: 10px 0 2px;
+}
+.dl-chips-identidade { margin: 0 0 10px; }
+.dl-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 38px;
+  padding: 6px 13px;
+  border-radius: 999px;
+  border: 1px solid var(--borda);
+  background: var(--bg);
+  color: var(--texto);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.2;
+  cursor: pointer;
+  white-space: nowrap;
+}
+button.dl-chip:disabled, .dl-chip-fixo { cursor: default; opacity: 0.9; }
+.dl-chip-on { border-color: var(--azul); color: var(--azul); }
+.dl-chip-atencao { border-color: var(--amarelo); color: var(--amarelo); font-weight: 600; }
+.dl-chip-vazio { border-style: dashed; color: var(--texto-fraco); }
+.dl-chip-info { cursor: default; background: var(--bg-elevado); color: var(--texto-fraco); font-size: 12px; min-height: 30px; padding: 4px 11px; }
+.dl-chip-editar { color: var(--texto-fraco); font-size: 12px; margin-left: 2px; }
+.dl-chip.campo-com-erro { border-color: var(--vermelho); color: var(--vermelho); }
+
+/* O chip de DATA é um <span> com três botões dentro (‹ · texto · ›), pra
+   cada seta ter o próprio alvo de 44px sem virar três chips. */
+.dl-chip-data { padding: 0 2px; position: relative; }
+.dl-chip-seta, .dl-chip-texto {
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  min-height: 36px;
+  border-radius: 999px;
+}
+.dl-chip-seta { width: 34px; font-size: 20px; line-height: 1; padding: 0; }
+.dl-chip-seta:active, .dl-chip-texto:active { background: rgba(127, 127, 127, 0.15); }
+.dl-chip-texto { padding: 0 6px; font-weight: 600; }
+.dl-data-oculta {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Rótulo de campo em Título Caso, menor e mais próximo do campo. */
+.dl-rotulo {
+  display: block;
+  font-size: 12.5px;
+  color: var(--texto-fraco);
+  margin: 12px 0 4px;
+}
+
+/* V-04: o Valor em destaque, com o "R$" desenhado dentro do campo. */
+.dl-valor-wrap { position: relative; }
+.dl-valor-prefixo {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--texto-fraco);
+  pointer-events: none;
+}
+.dl-valor {
+  font-size: 26px;
+  font-weight: 700;
+  min-height: 56px;
+  padding: 10px 14px 10px 50px;
+  letter-spacing: 0.2px;
+}
+.dl-valor::placeholder { color: var(--texto-fraco); opacity: 0.55; font-weight: 500; }
+
+/* Abas de tipo — trilho com contraste real (V-01), 44px (V-02). */
+.dl-abas {
+  display: flex;
+  gap: 4px;
+  background: var(--bg);
+  border: 1px solid var(--borda);
+  border-radius: 12px;
+  padding: 4px;
+  margin: 4px 0 6px;
+}
+.dl-aba {
+  flex: 1;
+  min-height: 40px;
+  border: none;
+  border-radius: 9px;
+  background: none;
+  color: var(--texto-fraco);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.dl-aba.ativa { background: var(--azul); color: #fff; font-weight: 700; }
+.dl-aba:disabled { opacity: 0.45; cursor: default; }
+
+.dl-erro { margin: 4px 0 0; font-size: 12.5px; }
+.dl-anota { margin: 4px 0 0; font-size: 12px; color: var(--texto-fraco); }
+.dl-origem-sugestao { margin: 4px 0 0; font-size: 12px; color: var(--verde); }
+.dl-link {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 6px 0;
+  border: none;
+  background: none;
+  color: var(--azul);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.dl-aviso-clone {
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--amarelo);
+  background: color-mix(in srgb, var(--amarelo) 12%, transparent);
+  font-size: 12.5px;
+}
+.dl-aviso-clone .dl-link { margin: 2px 0 0 8px; padding: 2px 0; }
+
+/* Painel "Repetir" — só aparece quando o rodapé é tocado. */
+.dl-painel-repetir {
+  margin-top: 12px;
+  padding: 10px 12px 12px;
+  border: 1px solid var(--borda);
+  border-radius: 12px;
+  background: var(--bg);
+}
+.dl-segmentado {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--bg-elevado);
+  border: 1px solid var(--borda);
+}
+.dl-segmento {
+  flex: 1;
+  min-height: 38px;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  color: var(--texto-fraco);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.dl-segmento.ativo { background: var(--azul); color: #fff; font-weight: 600; }
+
+/* O rodapé "↻ Repetir…" — maior e mais visível que o protótipo, sem
+   competir com Salvar: largura toda, 46px, azul suave; quando há repetição
+   escolhida ele fica preenchido e diz o que está valendo. */
+.dl-repetir {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 46px;
+  margin-top: 10px;
+  padding: 8px 12px;
+  border: 1px dashed color-mix(in srgb, var(--azul) 55%, var(--borda));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--azul) 8%, transparent);
+  color: var(--azul);
+  font: inherit;
+  font-size: 14.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.dl-repetir.ativo {
+  border-style: solid;
+  background: color-mix(in srgb, var(--azul) 16%, transparent);
+}
+.dl-repetir svg { flex-shrink: 0; }
+.dl-repetir-seta { font-size: 16px; opacity: 0.8; }
+
+.dl-vinculo {
+  margin-top: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--borda);
+  border-radius: 10px;
+}
+
+/* V-08: anel de teclado em tudo que é clicável na tela. */
+.dl-modal button:focus-visible,
+.dl-modal input:focus-visible,
+.dl-modal .campo-como-botao:focus-visible {
+  outline: 2px solid var(--azul);
+  outline-offset: 2px;
+}
+
+/* V-07: o bloco fixo do PAGAMENTO DE FATURA (build 090) — a classe existia no
+   JSX desde a 090 e nunca teve regra. */
+.bloco-fatura-pagamento {
+  margin: 4px 0 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--borda);
+  border-left: 4px solid var(--azul);
+  border-radius: 10px;
+  background: var(--bg);
+  font-size: 13.5px;
+}
+
+/* Linha secundária de um item da folha de escolha ("cartão", "fecha 09/out"). */
+.folha-escolha-item-sub {
+  display: block;
+  font-size: 11.5px;
+  color: var(--texto-fraco);
+  margin-top: 1px;
 }

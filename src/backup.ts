@@ -93,7 +93,7 @@ export async function montarBackup(build: number): Promise<ArquivoBackup> {
 }
 
 /* Nome do arquivo de backup — formato pedido pelo Rafael na build 089:
-   `Bkp MorfoFinp <Usuário> DDMMAAAA HHMM.json`.
+   `Bkp MFinp <Usuário> DDMMAA_HHMM.json` (build 099; até a 098 era `Bkp MorfoFinp <Usuário> DDMMAAAA HHMM.json`).
 
    Por que a data vai DD-MM-AAAA e não AAAA-MM-DD: ele lê esses arquivos numa
    pasta do Drive, na ordem em que o Windows mostra, e o formato pedido é o
@@ -123,11 +123,16 @@ export function nomeParaArquivo(nome: string | undefined | null): string {
   return limpo || 'Sem usuario'
 }
 
+/* O NOME DO ARQUIVO — build 099 (18/09/2026), na forma que o Rafael pediu
+   duas vezes ("o nome do backup continua o mesmo e já pedi pra mudar pra
+   'Bkp MFinp usuario DDMMAA_HHMM'"): `Bkp MFinp <Usuário> DDMMAA_HHMM.json`.
+   Ano com DOIS dígitos e um `_` entre data e hora — antes era
+   `Bkp MorfoFinp <Usuário> DDMMAAAA HHMM.json` (build 089). */
 export function nomeArquivoBackup(usuario?: string, agora = new Date()) {
   const p = (n: number) => String(n).padStart(2, '0')
-  const data = `${p(agora.getDate())}${p(agora.getMonth() + 1)}${agora.getFullYear()}`
+  const data = `${p(agora.getDate())}${p(agora.getMonth() + 1)}${p(agora.getFullYear() % 100)}`
   const hora = `${p(agora.getHours())}${p(agora.getMinutes())}`
-  return `Bkp MorfoFinp ${nomeParaArquivo(usuario)} ${data} ${hora}.json`
+  return `Bkp MFinp ${nomeParaArquivo(usuario)} ${data}_${hora}.json`
 }
 
 /* Quem é o "Usuário" do nome do arquivo: o usuário logado no ambiente deste

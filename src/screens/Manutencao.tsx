@@ -3,9 +3,11 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../db'
 import { exportarConfiguracaoIcones } from '../iconesPadrao'
 import {
-  montarBackup, nomeArquivoBackup, usuarioDoBackup, lerArquivoBackup, restaurarBackup, apagarTudo,
+  montarBackup, nomeArquivoBackup, usuarioDoBackup, lerArquivoBackup, restaurarBackup,
   totalDeRegistros, tabelasForaDoBackup, ROTULO_TABELA, type ResumoBackup,
 } from '../backup'
+import { limparCacheDoNavegador, resumoCache } from '../cacheApp'
+import { limparLancamentosEHistorico, restaurarPadraoDeFabrica } from '../padraoDeFabrica'
 import { salvarArquivoTexto, escolherArquivoTexto } from '../arquivoLocal'
 import { BUILD_NUMBER } from '../buildInfo'
 import {
@@ -185,13 +187,25 @@ export default function Manutencao({
   const [confirmandoLimpeza, setConfirmandoLimpeza] = useState(false)
   const [resultadoLimpeza, setResultadoLimpeza] = useState<string | null>(null)
 
+  /* Build 099: "Limpar dados" apaga os lançamentos e o que depende deles
+     (notificações do banco, saldos informados) — e limpa o cache junto,
+     pedido do Rafael. Contas, categorias, grupos, metas e configurações
+     ficam exatamente como estão. */
   async function limparTodosLancamentos() {
-    const total = await contarDoAmbiente(db.lancamentos.toArray())
-    await db.lancamentos.clear()
-    setResultadoLimpeza(
-      `${total} lançamento(s) apagado(s), incluindo os de séries fixas e parcelas. Categorias, contas, grupos e configurações continuam intactos.`,
-    )
+    setOcupadoBackup('apagando')
+    try {
+      const r = await limparLancamentosEHistorico()
+      const cache = await limparCacheDoNavegador()
+      setResultadoLimpeza(
+        `${r.lancamentos} lançamento(s) apagado(s), incluindo os de séries fixas e parcelas` +
+          (r.notificacoes ? `, mais ${r.notificacoes} notificação(ões) do banco` : '') +
+          `. Contas, categorias, grupos, metas e configurações continuam intactos. ${resumoCache(cache)}`,
+      )
+    } catch (e) {
+      setResultadoLimpeza('Não consegui limpar: ' + ((e as Error)?.message || 'erro desconhecido'))
+    }
     setConfirmandoLimpeza(false)
+    setOcupadoBackup('')
   }
 
   /* ---- Backup / Restaurar / Apagar tudo (10/09/2026, pedido do Rafael) ----
@@ -204,15 +218,15 @@ export default function Manutencao({
   const [erroBackup, setErroBackup] = useState<string | null>(null)
   const [backupNaTela, setBackupNaTela] = useState<string | null>(null)
   const [pendenteRestauro, setPendenteRestauro] = useState<{ nome: string; resumo: ResumoBackup; arquivo: Parameters<typeof restaurarBackup>[0] } | null>(null)
-  const [confirmandoApagarTudo, setConfirmandoApagarTudo] = useState(0)
+  const [confirmandoFabrica, setConfirmandoFabrica] = useState(false)
   const foraDoBackup = tabelasForaDoBackup()
 
   async function gerarBackup() {
     setErroBackup(null); setAvisoBackup(null); setBackupNaTela(null); setOcupadoBackup('gerando')
     try {
       const arquivo = await montarBackup(BUILD_NUMBER)
-      /* Build 089: o nome passou a levar o usuário — `Bkp MorfoFinp <Usuário>
-         DDMMAAAA HHMM.json`. Resolvido aqui, no momento de gerar, e não
+      /* Build 089: o nome passou a levar o usuário — `Bkp MFinp <Usuário>
+         DDMMAA_HHMM.json` (formato da build 099). Resolvido aqui, no momento de gerar, e não
          guardado em lugar nenhum: se a pessoa trocar de acesso, o próximo
          backup já sai com o nome novo sem nada pra sincronizar. */
       const nome = nomeArquivoBackup(await usuarioDoBackup())
@@ -259,15 +273,22 @@ export default function Manutencao({
     setOcupadoBackup('')
   }
 
-  async function executarApagarTudo() {
+  /* Build 099 — "Restaurar padrão de fábrica" no lugar de "Apagar tudo".
+     Ver o cabeçalho de `src/padraoDeFabrica.ts`. Termina com o cache limpo e
+     o LOGOUT: `AppRoot.tsx` troca pra tela de entrada sozinho quando a sessão
+     cai, e o próximo login cai nas boas-vindas e no passo a passo. */
+  async function executarPadraoDeFabrica() {
     setOcupadoBackup('apagando'); setErroBackup(null); setAvisoBackup(null)
     try {
-      const apagados = await apagarTudo()
-      setAvisoBackup(`App limpo: ${totalDeRegistros(apagados)} registro(s) apagados de todas as tabelas. Feche e abra o app pra ele começar do zero.`)
+      await restaurarPadraoDeFabrica()
+      await limparCacheDoNavegador()
+      setConfirmandoFabrica(false)
+      await sair()
+      return
     } catch (e) {
-      setErroBackup('Não consegui apagar: ' + ((e as Error)?.message || 'erro desconhecido'))
+      setErroBackup('Não consegui restaurar o padrão de fábrica: ' + ((e as Error)?.message || 'erro desconhecido'))
     }
-    setConfirmandoApagarTudo(0)
+    setConfirmandoFabrica(false)
     setOcupadoBackup('')
   }
 
@@ -310,50 +331,15 @@ export default function Manutencao({
   async function limparCacheSemPerderDados() {
     setRodando(true)
     setResultado(null)
-
-    // Cada mecanismo é tentado de forma independente — a falha de um (ex.:
-    // Service Worker não suportado sob `file://`, que é o caso normal e
-    // esperado, não um erro de verdade) nunca deve impedir o outro de rodar.
-    let swRemovidos = 0
-    let swIndisponivel = false
-    try {
-      if ('serviceWorker' in navigator) {
-        const registros = await navigator.serviceWorker.getRegistrations()
-        for (const r of registros) {
-          await r.unregister()
-          swRemovidos++
-        }
-      }
-    } catch {
-      // Esperado sob file:// — Service Worker não é suportado nessa origem.
-      swIndisponivel = true
-    }
-
-    let cachesRemovidos = 0
-    let cachesErro = false
-    try {
-      if ('caches' in window) {
-        const chaves = await caches.keys()
-        for (const k of chaves) {
-          await caches.delete(k)
-          cachesRemovidos++
-        }
-      }
-    } catch {
-      cachesErro = true
-    }
-
-    // IndexedDB (seus lançamentos, categorias, contas, grupos) NUNCA é
-    // tocado aqui — de propósito.
-    const partes: string[] = []
-    if (swRemovidos > 0) partes.push(`${swRemovidos} Service Worker(s)`)
-    if (cachesRemovidos > 0) partes.push(`${cachesRemovidos} cache(s) de versão antiga`)
-
-    if (partes.length > 0) {
+    /* A rotina é compartilhada com "Limpar dados" e "Restaurar padrão de
+       fábrica" (build 099) — ver `src/cacheApp.ts`. O IndexedDB (seus
+       lançamentos, categorias, contas, grupos) NUNCA é tocado aqui. */
+    const r = await limparCacheDoNavegador()
+    if (r.swRemovidos > 0 || r.cachesRemovidos > 0) {
       setResultado(
-        `Removido: ${partes.join(' e ')}. Seus lançamentos, categorias, contas e grupos continuam exatamente como estavam — nada nisso foi tocado.`
+        `${resumoCache(r)} Seus lançamentos, categorias, contas e grupos continuam exatamente como estavam — nada nisso foi tocado.`
       )
-    } else if (swIndisponivel && !cachesErro) {
+    } else if (r.swIndisponivel && !r.cachesErro) {
       setResultado(
         'Nada pra limpar: abrindo o app como arquivo (não hospedado), o navegador não guarda esse tipo de cache — não é esse o mecanismo do problema que você viu. Seus lançamentos continuam intactos. Veja as duas seções abaixo pra resolver de verdade.'
       )
@@ -718,45 +704,13 @@ export default function Manutencao({
         )}
       </div>
 
-      <h2>Apagar tudo (limpar o app)</h2>
-      <div className="cartao">
-        <p className="texto-fraco" style={{ marginTop: 0 }}>
-          Apaga <strong>tudo</strong>, não só os lançamentos: categorias, grupos, contas, metas,
-          planos, usuários, notificações e todas as configurações. Como a sua senha de entrada também
-          mora aí, o app <strong>sai da conta na hora e volta pra tela de entrada</strong>, no estado
-          de recém instalado — pra restaurar um backup depois, entre de novo e volte aqui.
-          Diferente de “Limpar dados” logo abaixo, que apaga só os lançamentos e preserva os
-          cadastros. <strong>Faça um backup antes: não tem como desfazer.</strong>
-        </p>
-        <button type="button" className="perigo" onClick={() => setConfirmandoApagarTudo(1)} data-testid="apagar-tudo">
-          Apagar tudo
-        </button>
-        {confirmandoApagarTudo > 0 && (
-          /* Build 093 (item 5): as três etapas viraram a confirmação única do
-             app — um modal, um aviso, Cancelar · Confirmar. */
-          <ConfirmacaoAcao
-            titulo="Apagar tudo e limpar o app?"
-            testid="confirmacao-apagar-tudo"
-            aviso={
-              <>
-                <p>Apaga agora os seus lançamentos reais e TODOS os cadastros: categorias, grupos, contas, metas, planos, usuários, notificações e configurações.</p>
-                <p>O app sai da conta na hora e volta pra tela de entrada, como recém instalado. Não tem como desfazer — faça um backup antes.</p>
-              </>
-            }
-            ocupado={ocupadoBackup !== ''}
-            rotuloOcupado="Apagando…"
-            onCancelar={() => setConfirmandoApagarTudo(0)}
-            onConfirmar={() => void executarApagarTudo()}
-          />
-        )}
-      </div>
-
       <h2 ref={refLimpar}>Limpar Dados</h2>
       <div className="cartao">
         <p className="texto-fraco" style={{ marginTop: 0 }}>
           Apaga TODOS os lançamentos ({totalLancamentos ?? 0} hoje) — inclusive os gerados por série
-          fixa e por parcelamento. Categorias, contas, grupos e configurações (ícones, visão do app)
-          não são afetados. <strong>Não tem como desfazer.</strong>
+          fixa e por parcelamento — e as notificações do banco ligadas a eles. Contas, categorias,
+          grupos, metas e configurações (ícones, tema, layout) continuam como estão. O cache do app
+          é limpo junto. <strong>Não tem como desfazer.</strong>
         </p>
         <button type="button" className="perigo" onClick={() => setConfirmandoLimpeza(true)} data-testid="limpar-dados">
           Limpar dados
@@ -769,8 +723,9 @@ export default function Manutencao({
           <ConfirmacaoAcao
             titulo="Apagar todos os lançamentos?"
             testid="confirmacao-limpar-dados"
-            aviso={`Apaga os ${totalLancamentos ?? 0} lançamentos de hoje, inclusive os de séries fixas e parcelas. Categorias, contas, grupos e configurações continuam. Não tem como desfazer.`}
+            aviso={`Apaga os ${totalLancamentos ?? 0} lançamentos de hoje, inclusive os de séries fixas e parcelas, e as notificações do banco. Contas, categorias, grupos, metas e configurações continuam. Não tem como desfazer.`}
             ocupado={ocupadoBackup !== ''}
+            rotuloOcupado="Limpando…"
             onCancelar={() => setConfirmandoLimpeza(false)}
             onConfirmar={() => void limparTodosLancamentos()}
           >
@@ -786,9 +741,54 @@ export default function Manutencao({
           </ConfirmacaoAcao>
         )}
         {resultadoLimpeza && (
-          <p style={{ marginTop: 12 }} className="texto-fraco">
+          <p style={{ marginTop: 12 }} className="texto-fraco" data-testid="resultado-limpeza">
             {resultadoLimpeza}
           </p>
+        )}
+      </div>
+
+      {/* Build 099: "Apagar tudo" SAIU — deixava o app sem grupo nenhum e o
+          passo a passo do primeiro acesso travava no passo 1 (a receita fixa
+          precisa de um grupo de entrada pra ser gravada). No lugar, o par do
+          "Limpar dados": ver o cabeçalho de `src/padraoDeFabrica.ts`. */}
+      <h2>Restaurar Padrão de Fábrica</h2>
+      <div className="cartao">
+        <p className="texto-fraco" style={{ marginTop: 0 }}>
+          Faz o que “Limpar dados” faz e, além disso, <strong>refaz os cadastros no modelo da
+          Morfo</strong>: grupos e categorias padrão (com ícones e cores), nenhuma meta preenchida,
+          e a carteira só com o Cofrinho padrão e um “Banco Modelo”, os dois zerados. O app
+          <strong> sai da conta ao terminar</strong> e, ao entrar de novo, começa pelas boas-vindas
+          e pelo passo a passo do primeiro acesso. A senha de entrada e as preferências de
+          aparência (tema, zoom, layout) ficam. <strong>Faça um backup antes: não tem como desfazer.</strong>
+        </p>
+        <button type="button" className="perigo" onClick={() => setConfirmandoFabrica(true)} data-testid="restaurar-fabrica">
+          Restaurar padrão de fábrica
+        </button>
+        {confirmandoFabrica && (
+          <ConfirmacaoAcao
+            titulo="Restaurar o padrão de fábrica?"
+            testid="confirmacao-restaurar-fabrica"
+            aviso={
+              <>
+                <p>Apaga os seus lançamentos, notificações, contas, grupos, categorias e metas, e recria só o modelo da Morfo: grupos e categorias padrão, Cofrinho padrão e Banco Modelo zerados.</p>
+                <p>Ao terminar o app sai da conta; na próxima entrada você refaz o primeiro acesso do zero. Não tem como desfazer — faça um backup antes.</p>
+              </>
+            }
+            ocupado={ocupadoBackup !== ''}
+            rotuloOcupado="Restaurando…"
+            onCancelar={() => setConfirmandoFabrica(false)}
+            onConfirmar={() => void executarPadraoDeFabrica()}
+          >
+            <button
+              type="button"
+              className="primario"
+              style={{ marginTop: 12 }}
+              disabled={ocupadoBackup !== ''}
+              onClick={() => void gerarBackup()}
+            >
+              {ocupadoBackup === 'gerando' ? 'Gerando…' : 'Fazer backup antes de restaurar'}
+            </button>
+          </ConfirmacaoAcao>
         )}
       </div>
 

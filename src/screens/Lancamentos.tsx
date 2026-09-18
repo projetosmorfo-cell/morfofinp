@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, type Categoria, type Lancamento } from '../db'
 import type { TelaProps } from '../mes'
@@ -6,6 +6,7 @@ import SeletorMes from '../components/SeletorMes'
 import EdicaoEmMassa from '../components/EdicaoEmMassa'
 import GrupoReordenavel from '../components/GrupoReordenavel'
 import { compararDentroDoDia } from '../lancamentosUtil'
+import { hojeEfetivoISO } from '../hojeSimulado'
 import { usePeriodoLista } from '../components/periodoLista'
 import { CampoBusca, FolhaFiltros, FILTROS_VAZIOS, aplicarFiltros, contarFiltrosAtivos, type FiltrosAvancados } from '../components/BuscaEFiltros'
 import { formatarCabecalhoData } from '../formatoData'
@@ -79,6 +80,46 @@ export default function Lancamentos({ mes, aoMudarMes, aoAbrirLancamento }: Tela
      motivo do `exportOpen` logo acima (React #310). */
   const selecao = useSelecao((lancamentosDoMes ?? []).map((l) => l.id!).filter(Boolean))
 
+  /* BUILD 099 (18/09/2026) — ABRIR NO DIA DE HOJE. Pedido do Rafael: "sempre
+     que abrir a tela de lançamentos, deve setar na rolagem o foco no dia
+     atual com o primeiro lançamento desse dia no topo visível se ordem for
+     crescente, se for decrescente o primeiro lançamento no topo deve ser o
+     último do dia". A rolagem acontece UMA vez, na primeira pintura com dados
+     (o ref garante), e só quando o mês da tela é o de hoje; a sessão alvo é
+     a de hoje ou, sem lançamento hoje, a mais próxima no sentido da ordem
+     (crescente: o próximo dia; decrescente: o dia anterior — o topo do bloco
+     "Até hoje"). A ordem DENTRO do dia inverte com a ordenação (ver o sort
+     abaixo), então "o último do dia no topo" sai do próprio sort. */
+  const rolouParaHoje = useRef(false)
+  const pronto = !!lancamentosDoMes && !!categorias && !!contas && !!grupos
+  useEffect(() => {
+    if (!pronto || rolouParaHoje.current) return
+    rolouParaHoje.current = true
+    const hoje = hojeEfetivoISO()
+    if (modoPeriodo || !hoje.startsWith(mes)) return
+    const id = window.requestAnimationFrame(() => {
+      const sessoes = Array.from(document.querySelectorAll<HTMLElement>('[data-sessao-data]'))
+      if (sessoes.length === 0) return
+      const datas = sessoes.map((el) => el.dataset.sessaoData ?? '')
+      let alvo = datas.indexOf(hoje)
+      if (alvo === -1) {
+        alvo = ordemDesc
+          ? datas.findIndex((d) => d <= hoje)
+          : datas.findIndex((d) => d >= hoje)
+      }
+      if (alvo === -1) return
+      const el = sessoes[alvo]
+      const main = el.closest('main')
+      if (!main) return
+      const cabecalho = main.querySelector<HTMLElement>('.cabecalho-fixo')
+      const alturaFixa = cabecalho?.offsetHeight ?? 0
+      const topo = el.getBoundingClientRect().top - main.getBoundingClientRect().top + main.scrollTop - alturaFixa
+      main.scrollTo({ top: Math.max(0, topo) })
+    })
+    return () => window.cancelAnimationFrame(id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pronto])
+
   if (!lancamentosDoMes || !categorias || !contas || !grupos) return null
 
   const categoriaPorId = new Map(categorias.map((c) => [c.id!, c]))
@@ -99,11 +140,16 @@ export default function Lancamentos({ mes, aoMudarMes, aoAbrirLancamento }: Tela
   // a ordem DENTRO de um dia — essa é sempre `ordemManual` (arrasto) quando
   // existe, senão a ordem de criação (`compararDentroDoDia`). Ver
   // `GrupoReordenavel.tsx`.
+  /* Build 099: a ordem DENTRO do dia passou a acompanhar a ordenação —
+     decrescente mostra o último lançamento do dia no topo (pedido do Rafael,
+     acima). O arrasto continua gravando `ordemManual` na ordem crescente
+     (`GrupoReordenavel` recebe `invertido` e grava de trás pra frente). */
   const ordenados = [...filtrados].sort((a, b) => {
     const porData = ordemDesc
       ? b.dataCompetencia.localeCompare(a.dataCompetencia)
       : a.dataCompetencia.localeCompare(b.dataCompetencia)
-    return porData !== 0 ? porData : compararDentroDoDia(a, b)
+    if (porData !== 0) return porData
+    return ordemDesc ? compararDentroDoDia(b, a) : compararDentroDoDia(a, b)
   })
 
   // Agrupa em sessões por data, mantendo a ordem já escolhida.
@@ -224,6 +270,7 @@ export default function Lancamentos({ mes, aoMudarMes, aoAbrirLancamento }: Tela
                 contaPorId={contaPorId}
                 aoAbrirLancamento={aoAbrirLancamento}
                 selecao={selecao}
+                invertido={ordemDesc}
               />
             ))
           : blocos.map((b) => (
@@ -235,6 +282,7 @@ export default function Lancamentos({ mes, aoMudarMes, aoAbrirLancamento }: Tela
                   contaPorId={contaPorId}
                   aoAbrirLancamento={aoAbrirLancamento}
                   selecao={selecao}
+                  invertido={ordemDesc}
                 />
                 {/* Só quando a lista está PARTIDA em dois blocos: aí cada um
                     precisa do seu total. Com um bloco só, o total é o do
@@ -281,17 +329,19 @@ export default function Lancamentos({ mes, aoMudarMes, aoAbrirLancamento }: Tela
 /* As sessões por data de UM bloco. Extraído porque a lista agora é
    renderizada em até dois blocos (até hoje × dias futuros) e repetir o mapa
    inteiro nos dois lugares seria cópia de código. */
-function SessoesDeData({ sessoes, categoriaPorId, contaPorId, aoAbrirLancamento, selecao }: {
+function SessoesDeData({ sessoes, categoriaPorId, contaPorId, aoAbrirLancamento, selecao, invertido }: {
   sessoes: { data: string; itens: Lancamento[] }[]
   categoriaPorId: Map<number, Categoria>
   contaPorId: Map<number, { nome: string }>
   aoAbrirLancamento: (o?: { id?: number }) => void
   selecao: ReturnType<typeof useSelecao>
+  /** Ordem decrescente: o dia está sendo mostrado de trás pra frente. */
+  invertido?: boolean
 }) {
   return (
     <>
       {sessoes.map((sessao) => (
-        <div key={sessao.data}>
+        <div key={sessao.data} data-sessao-data={sessao.data}>
           <div className={`sessao-data ${fundoDaLinhaDeData(sessao.itens)}`}>{formatarCabecalhoData(sessao.data)}</div>
           {/* Item 12 (15/09/2026): um `GrupoReordenavel` por DIA — o arrasto de
               reordenar nunca cruza pra outro dia, porque cada dia é a própria
@@ -302,6 +352,7 @@ function SessoesDeData({ sessoes, categoriaPorId, contaPorId, aoAbrirLancamento,
             contaPorId={contaPorId}
             aoAbrirLancamento={aoAbrirLancamento}
             selecao={selecao}
+            invertido={invertido}
           />
         </div>
       ))}

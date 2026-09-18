@@ -8,6 +8,7 @@
 // duas fórmulas parecidas.
 import type { Categoria, Conta, Lancamento } from './db'
 import { somarMes } from './mes'
+import { hojeEfetivoISO } from './hojeSimulado'
 
 export function ultimoDiaDoMes(ano: number, mesIndice0: number): number {
   return new Date(ano, mesIndice0 + 1, 0).getDate()
@@ -116,14 +117,49 @@ export function rotuloFatura(conta: Pick<Conta, 'diaFechamento' | 'diaVencimento
  *  inteira como paga. Agora: total = compras − estornos do ciclo; pago = soma
  *  dos lançamentos de "Pagamento de fatura" ligados a este cartão+mês
  *  (`faturaCartaoId` + `faturaMes`); restante = total − pago; quitada quando
- *  não resta nada e houve pelo menos um pagamento. */
+ *  não resta nada e houve pelo menos um pagamento.
+ *
+ *  BUILD 099 (18/09/2026) — RESÍDUO ENTRE FATURAS, pedido do Rafael: "fatura
+ *  paga a menor ou a maior deve gerar resíduo pra próxima". O que sobrou de
+ *  uma fatura (pagou menos → falta; pagou mais → crédito) entra na fatura
+ *  seguinte como `residuoAnterior`, e o que FALTA desta passa a ser
+ *  total + resíduo − pago. É uma corrente: cada fatura pergunta à anterior o
+ *  que ficou em aberto, até o primeiro ciclo com movimento (`mesInicial`),
+ *  onde o resíduo é zero por definição. Nada é gravado: é conta, sempre a
+ *  partir dos mesmos lançamentos — a regra "um número, uma função" da 093
+ *  continua valendo, só que a função ficou mais completa.
+ *
+ *  REAL × COMPROMETIDO (mesma build, item da Carteira): `realizado` é o que já
+ *  aconteceu no ciclo (compra com data até hoje — a regra `jaAconteceu` do
+ *  app inteiro); `total` continua sendo o ciclo inteiro, inclusive parcela
+ *  com data futura dentro dele. O card da Carteira mostra os dois. */
 export type SituacaoFatura = {
   itens: Lancamento[]        // compras/estornos do ciclo (sem os pagamentos)
   pagamentos: Lancamento[]   // os lançamentos de pagamento desta fatura
-  total: number
+  total: number              // o ciclo inteiro (realizado + comprometido)
+  realizado: number          // só o que já aconteceu (data até hoje)
   pago: number
+  /** O que ficou da fatura anterior: > 0 faltou pagar; < 0 pagou a mais (crédito). */
+  residuoAnterior: number
+  /** total + residuoAnterior − pago — o que falta pagar DESTA fatura. */
   restante: number
   quitada: boolean
+  /** A janela de datas do ciclo, pra tela dizer "de x até y". */
+  janela: { inicio: string; fim: string }
+}
+
+/** Primeiro mês de fatura (o mês em que ela FECHA) com qualquer movimento
+ *  deste cartão — compra ou pagamento. Antes dele não existe resíduo. */
+function primeiroMesDeFatura(doCartao: Lancamento[], pagamentos: Lancamento[], diaFechamento: number): string | undefined {
+  let min: string | undefined
+  for (const l of doCartao) {
+    const m = mesFaturaDoLancamento(diaFechamento, l)
+    if (!min || m < min) min = m
+  }
+  for (const p of pagamentos) {
+    if (p.faturaMes && (!min || p.faturaMes < min)) min = p.faturaMes
+  }
+  return min
 }
 
 export function situacaoDaFatura(
@@ -134,19 +170,60 @@ export function situacaoDaFatura(
 ): SituacaoFatura {
   const natureza = (l: Lancamento) =>
     (typeof categoriaPorId === 'function' ? categoriaPorId(l.categoriaId) : categoriaPorId.get(l.categoriaId))?.natureza
-  const doCartao = todosLancamentos.filter((l) => l.contaId === cartao.id)
-  const itens = lancamentosDoCiclo(doCartao, cartao.diaFechamento ?? DIA_FECHAMENTO_PADRAO, mesISO).filter(
-    (l) => natureza(l) !== 'Pagamento de fatura',
+  const diaFechamento = cartao.diaFechamento ?? DIA_FECHAMENTO_PADRAO
+  const doCartao = todosLancamentos.filter((l) => l.contaId === cartao.id && natureza(l) !== 'Pagamento de fatura')
+  const todosPagamentos = todosLancamentos.filter(
+    (l) => natureza(l) === 'Pagamento de fatura' && l.faturaCartaoId === cartao.id && !!l.faturaMes,
   )
-  const pagamentos = todosLancamentos
-    .filter((l) => natureza(l) === 'Pagamento de fatura' && l.faturaCartaoId === cartao.id && l.faturaMes === mesISO)
-    .sort((a, b) => a.dataCompetencia.localeCompare(b.dataCompetencia))
-  const saidas = itens.filter((l) => l.valor < 0).reduce((s, l) => s - l.valor, 0)
-  const entradas = itens.filter((l) => l.valor > 0).reduce((s, l) => s + l.valor, 0)
-  const total = arred(saidas - entradas)
-  const pago = arred(pagamentos.reduce((s, l) => s + Math.abs(l.valor), 0))
-  const restante = arred(total - pago)
-  return { itens, pagamentos, total, pago, restante, quitada: pagamentos.length > 0 && restante <= 0.005 }
+  const hoje = hojeEfetivoISO()
+
+  /* A conta de UM ciclo, sem resíduo — usada tanto pro mês pedido quanto, em
+     cadeia, pros anteriores. */
+  const cicloDe = (mes: string) => {
+    const itens = lancamentosDoCiclo(doCartao, diaFechamento, mes)
+    const pagamentos = todosPagamentos
+      .filter((l) => l.faturaMes === mes)
+      .sort((a, b) => a.dataCompetencia.localeCompare(b.dataCompetencia))
+    const soma = (lista: Lancamento[]) => arred(lista.reduce((s, l) => s - l.valor, 0))
+    return {
+      itens,
+      pagamentos,
+      total: soma(itens),
+      realizado: soma(itens.filter((l) => l.dataCompetencia <= hoje)),
+      pago: arred(pagamentos.reduce((s, l) => s + Math.abs(l.valor), 0)),
+    }
+  }
+
+  /* O resíduo que chega a `mesISO`: anda da primeira fatura com movimento até
+     o mês anterior ao pedido, carregando o que sobrou de cada uma. Limitado a
+     60 meses por segurança (5 anos de fatura) — nunca um laço sem fim. */
+  const primeiro = primeiroMesDeFatura(doCartao, todosPagamentos, diaFechamento)
+  let residuo = 0
+  if (primeiro && primeiro < mesISO) {
+    let m = primeiro
+    let guarda = 0
+    while (m < mesISO && guarda < 60) {
+      const c = cicloDe(m)
+      residuo = arred(c.total + residuo - c.pago)
+      m = somarMes(m, 1)
+      guarda++
+    }
+  }
+
+  const atual = cicloDe(mesISO)
+  const restante = arred(atual.total + residuo - atual.pago)
+  const houveMovimento = atual.itens.length > 0 || atual.pagamentos.length > 0 || Math.abs(residuo) >= 0.005
+  return {
+    ...atual,
+    residuoAnterior: residuo,
+    restante,
+    /* Quitada: nada mais a pagar E algum dinheiro entrou nesta fatura — um
+       pagamento dela, ou um crédito vindo da anterior que cobriu tudo. Uma
+       fatura vazia (sem compra, sem pagamento, sem resíduo) não é "paga",
+       é inexistente — a tela nem a mostra. */
+    quitada: houveMovimento && restante <= 0.005 && (atual.pagamentos.length > 0 || residuo < 0),
+    janela: janelaFatura(diaFechamento, mesISO),
+  }
 }
 
 function arred(v: number): number {

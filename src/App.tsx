@@ -49,7 +49,7 @@ import { MeusDadosN1, MeuAmbienteN1, AparenciaN1, AjudaN1 } from './kit/ConfigN1
 import ConfiguracoesN1, { type ChaveConfigN1 } from './kit/ConfiguracoesN1'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, type Conta, type NotificacaoPendente } from './db'
-import { sincronizarPendentesNativas, ouvirNotificacoesAoVivo, marcarConfirmada, separarPendentes } from './notificacaoBancaria'
+import { sincronizarPendentesNativas, ouvirNotificacoesAoVivo, marcarConfirmada, separarPendentes, limparHistoricoPorIdade } from './notificacaoBancaria'
 import { aplicarParametrosN0, paramsNotificacaoAtuais } from './notificacaoParametros'
 import { aplicarZoomN0, useAplicarZoomListas } from './zoomListas'
 import { acharDePara, ensinarDePara } from './vinculoNotificacao'
@@ -128,7 +128,7 @@ type Config = 'calibragem' | 'configuracoes' | 'categorias' | 'contas' | 'notifi
 // `src/screens/NotificacoesBancarias.tsx` e `src/notificacaoBancaria.ts`.
 const ROTULO_CONFIG: Record<'meusDados' | 'categorias' | 'contas' | 'notificacoes' | 'notificacoesRegras' | 'meuAmbiente' | 'assinatura' | 'aparencia' | 'ajuda' | 'manutencao' | 'suporte', string> = {
   meusDados: 'Meus Dados',
-  categorias: 'Categorias, Grupos e Metas',
+  categorias: 'Grupos, Categorias e Metas',
   contas: 'Contas e carteiras',
   notificacoes: 'Notificações bancárias',
   /* Build 080: as REGRAS da leitura de notificação, de nível usuário —
@@ -803,6 +803,10 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: ModoConsultaN
   // navegador tudo isso é no-op (ver `ehNativo()`).
   useEffect(() => {
     sincronizarPendentesNativas()
+    /* Build 099: a limpeza automática do histórico pela idade também roda
+       na abertura do app — o histórico não pode depender de alguém abrir a
+       tela de notificações pra parar de crescer. */
+    void limparHistoricoPorIdade()
     let parar = () => {}
     ouvirNotificacoesAoVivo().then((fn) => { parar = fn })
     const aoVoltar = () => { if (document.visibilityState === 'visible') sincronizarPendentesNativas() }

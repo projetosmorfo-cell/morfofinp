@@ -7,14 +7,14 @@ import ItemLancamentoAcoes from '../components/ItemLancamentoAcoes'
 import { usePeriodoLista } from '../components/periodoLista'
 import SeloInstituicao from '../components/SeloInstituicao'
 import {
-  useSelecao, BarraSelecao, TotaisEntradaSaida, MarcadorLinha, blocosPorCorte, RodapeTotais, somarTotais,
+  useSelecao, BarraSelecao, TotaisEntradaSaida, MarcadorLinha, blocosPorCorte, RodapeTotais,
 } from '../components/SelecaoETotais'
 import { CampoBusca, FolhaFiltros, FILTROS_VAZIOS, aplicarFiltros, contarFiltrosAtivos, type FiltrosAvancados } from '../components/BuscaEFiltros'
-import { janelaFatura, lancamentosDoCiclo, situacaoDaFatura, DIA_FECHAMENTO_PADRAO } from '../faturaCiclo'
-import { totalDoLugar, lancamentosDoCofrinhoVirtual } from '../totaisCarteira'
+import { janelaFatura, lancamentosDoCiclo, situacaoDaFatura, DIA_FECHAMENTO_PADRAO, type SituacaoFatura } from '../faturaCiclo'
+import { totalDoLugar, lancamentosDoCofrinhoVirtual, type TotalDoLugar } from '../totaisCarteira'
 import { formatarCabecalhoData } from '../formatoData'
 import { fundoDaLinhaDeData } from '../statusPagamento'
-import SaldoDoCofrinho, { LinhaInformeSaldo, LinhaVariacaoCofrinho } from '../components/SaldoDoCofrinho'
+import SaldoDoCofrinho, { LinhaInformeSaldo } from '../components/SaldoDoCofrinho'
 import { fmtBRL } from '../formatoMoeda'
 import { useHojeSimuladoISO } from '../hojeSimulado'
 import TituloTelaN1 from '../kit/CabecalhoN1'
@@ -105,13 +105,11 @@ export default function Carteira({ mes, aoMudarMes, aoAbrirLancamento }: TelaPro
      os dois leem `lancamentosDoCofrinhoVirtual` (a cópia com o sinal do
      cofrinho) e `totalDoLugar` com o MESMO mês. */
   const lancamentosCofrinho = lancamentosDoCofrinhoVirtual(todosLancamentos, categoriaPorId)
-  const saldoCofrinho = totalDoLugar(
-    undefined,
-    lancamentosCofrinho,
-    mes,
-    todosLancamentos,
-    categoriaPorId,
-  ).valor
+  /* Build 099: o cofrinho virtual tem os DOIS números (real × com comprometido),
+     como todo card — ver `totaisCarteira.ts`. `saldoCofrinho` (o real) é o que
+     o informe de saldo compara. */
+  const totalCofrinho = totalDoLugar(undefined, lancamentosCofrinho, mes, todosLancamentos, categoriaPorId)
+  const saldoCofrinho = totalCofrinho.real
 
   if (selecionado !== null) {
     const conta = typeof selecionado === 'number' ? contas.find((c) => c.id === selecionado) : undefined
@@ -136,6 +134,7 @@ export default function Carteira({ mes, aoMudarMes, aoAbrirLancamento }: TelaPro
         titulo={conta ? conta.nome : nomeCofrinho}
         conta={conta}
         saldoCofrinho={conta ? undefined : saldoCofrinho}
+        comprometidoCofrinho={conta ? undefined : totalCofrinho.valor}
         mes={mes}
         aoMudarMes={aoMudarMes}
         aoAbrirLancamento={aoAbrirLancamento}
@@ -158,20 +157,19 @@ export default function Carteira({ mes, aoMudarMes, aoAbrirLancamento }: TelaPro
      na tela (o Kit exporta "o que está sendo exibido agora").
      Build 094: e agora é também a MESMA conta que o fechamento do drill-in
      faz, porque as duas chamam `totalDoLugar` — ver `totaisCarteira.ts`. */
-  function valorDoCard(conta: Conta): { rotulo: string; valor: number } {
+  function valorDoCard(conta: Conta) {
     /* `todosLancamentos!`/`categorias!`: o guard de carregamento já garantiu,
        mas o TS não propaga o narrowing pra dentro de função aninhada. */
     const doLugar = todosLancamentos!.filter((l) => l.contaId === conta.id)
-    const t = totalDoLugar(conta, doLugar, mes, todosLancamentos!, categoriaPorId)
-    return { rotulo: t.rotulo, valor: t.valor }
+    return totalDoLugar(conta, doLugar, mes, todosLancamentos!, categoriaPorId)
   }
 
   const linhasCarteira: ExportRow[] = [
     ...contas.map((c) => {
       const v = valorDoCard(c)
-      return { nome: c.nome, tipo: c.tipo, rotulo: v.rotulo, valor: fmtBRL(v.valor), lancamentos: todosLancamentos.filter((l) => l.contaId === c.id).length }
+      return { nome: c.nome, tipo: c.tipo, rotulo: `${v.rotulo} (real)`, valor: fmtBRL(v.real), comprometido: fmtBRL(v.valor), lancamentos: todosLancamentos.filter((l) => l.contaId === c.id).length }
     }),
-    { nome: nomeCofrinho, tipo: 'cofrinho (padrão)', rotulo: 'Saldo acumulado', valor: fmtBRL(saldoCofrinho), lancamentos: '' },
+    { nome: nomeCofrinho, tipo: 'cofrinho (padrão)', rotulo: 'Saldo acumulado (real)', valor: fmtBRL(saldoCofrinho), comprometido: fmtBRL(totalCofrinho.valor), lancamentos: '' },
   ]
 
   return (
@@ -195,14 +193,16 @@ export default function Carteira({ mes, aoMudarMes, aoAbrirLancamento }: TelaPro
         screenColumns={[
           { key: 'nome', label: 'Lugar' },
           { key: 'rotulo', label: 'O que é o valor' },
-          { key: 'valor', label: 'Valor' },
+          { key: 'valor', label: 'Valor real' },
+          { key: 'comprometido', label: 'Com comprometido' },
         ]}
         screenRows={linhasCarteira}
         detailColumns={[
           { key: 'nome', label: 'Lugar' },
           { key: 'tipo', label: 'Tipo' },
           { key: 'rotulo', label: 'O que é o valor' },
-          { key: 'valor', label: 'Valor' },
+          { key: 'valor', label: 'Valor real' },
+          { key: 'comprometido', label: 'Com comprometido' },
           { key: 'lancamentos', label: 'Lançamentos' },
         ]}
         detailRows={linhasCarteira}
@@ -214,7 +214,10 @@ export default function Carteira({ mes, aoMudarMes, aoAbrirLancamento }: TelaPro
            drill-in — a mesma `totalDoLugar`, o mesmo mês. Antes cada um
            tinha o seu recorte (card até HOJE, drill-in até o fim do mês) e
            dois nomes parecidos discordavam na mesma tela. */
-        const { rotulo: rotuloValor, valor: valorNumero } = valorDoCard(conta)
+        const t = valorDoCard(conta)
+        /* Build 099: no cartão o status de pagamento (com o resíduo da fatura
+           anterior) vem da MESMA função da quitação — `situacaoDaFatura`. */
+        const situacao = conta.tipo === 'cartao' ? situacaoDaFatura(todosLancamentos, categoriaPorId, conta, mes) : null
         // Build 093 (item 4): a prévia dos 3 últimos lançamentos (F-05 da
         // revisão de UI de 04/09/2026) SAIU dos cards — pedido do Rafael: "os
         // cards não devem mais mostrar os últimos lançamentos". O card volta a
@@ -226,13 +229,8 @@ export default function Carteira({ mes, aoMudarMes, aoAbrirLancamento }: TelaPro
             type="button"
             className="card-conta"
             onClick={() => setSelecionado(conta.id!)}
+            data-testid={`card-conta-${conta.id}`}
           >
-            {/* Build 096 (pedido do Rafael): TODO card de cofrinho mostra,
-                ACIMA do total, quanto variou desde a última atualização do
-                saldo real — valor, percentual e seta. Só cofrinho: numa conta
-                corrente ou num cartão não existe "atualização de saldo" a
-                comparar. Ver `LinhaVariacaoCofrinho`. */}
-            {conta.tipo === 'cofre' && <LinhaVariacaoCofrinho contaId={conta.id!} />}
             <div className="linha-destaque" style={{ marginTop: 0 }}>
               {/* Ícone da carteira (10/09/2026) — o mesmo selo redondo
                   cadastrado em "Contas e carteiras". */}
@@ -246,24 +244,26 @@ export default function Carteira({ mes, aoMudarMes, aoAbrirLancamento }: TelaPro
                 />
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{conta.nome}</span>
               </strong>
-              {/* Build 094 (item 3): o SINAL é escrito. `fmtBRL` nunca escreve
-                  sinal (é regra antiga, e certa, para valor dentro de frase),
-                  então um saldo de −R$ 52,00 aparecia aqui como "R$ 52,00" —
-                  só a cor dizia o lado, e o mesmo número aparecia com o sinal
-                  no fechamento do drill-in. Dois jeitos de escrever o MESMO
-                  número é exatamente o que este item veio desfazer. */}
-              <strong className={conta.tipo === 'cartao' ? 'valor-neg' : valorNumero < 0 ? 'valor-neg' : 'valor-pos'}>
-                {fmtBRLComSinal(valorNumero)}
+              {/* Build 094 (item 3): o SINAL é escrito. Build 099: o número em
+                  destaque é o REAL (só o que já aconteceu). */}
+              <strong className={conta.tipo === 'cartao' ? 'valor-neg' : t.real < 0 ? 'valor-neg' : 'valor-pos'} data-testid="card-total-real">
+                {fmtBRLComSinal(t.real)}
               </strong>
             </div>
-            <span className="texto-fraco">{rotuloValor}</span>
-            {/* TODA conta de tipo cofrinho ganha o "informar o saldo real"
-                (build 086, pedido do Rafael) — antes ele existia só no card
-                VIRTUAL. O número grande do card continua sendo o acumulado
-                pelos lançamentos; o informe aparece como a linha de contexto
-                logo abaixo, exatamente como no card virtual. */}
+            <DoisTotais
+              tipo={conta.tipo}
+              real={t.real}
+              comprometido={t.valor}
+              janela={t.janela}
+              diaVencimento={conta.diaVencimento}
+              situacao={situacao}
+            />
+            {/* Build 096/099 (pedido do Rafael): TODO card de cofrinho mostra o
+                saldo real informado e quanto ele variou desde a última
+                atualização. Só cofrinho: numa conta corrente ou num cartão não
+                existe "atualização de saldo" a comparar. */}
             {conta.tipo === 'cofre' && (
-              <LinhaInformeSaldo contaId={conta.id!} calculado={valorNumero} />
+              <LinhaInformeSaldo contaId={conta.id!} calculado={t.real} />
             )}
           </button>
         )
@@ -272,6 +272,7 @@ export default function Carteira({ mes, aoMudarMes, aoAbrirLancamento }: TelaPro
       <button type="button" className="card-conta" data-testid="card-cofrinho-padrao" onClick={() => setSelecionado('cofrinho')}>
         <SaldoDoCofrinho
           calculado={saldoCofrinho}
+          comprometido={totalCofrinho.valor}
           nome={nomeCofrinho}
           selo={
             cofrinhoPadrao ? (
@@ -317,35 +318,94 @@ export default function Carteira({ mes, aoMudarMes, aoAbrirLancamento }: TelaPro
 function FechamentoDaLista({
   itensPeriodo,
   rotuloTotal,
-  saldoAnterior,
+  total,
   totalForcado,
 }: {
   itensPeriodo: { valor: number }[]
   rotuloTotal: string
-  /** `undefined` = cartão (não mostra as duas linhas acumuladas). */
-  saldoAnterior?: number
+  /** `undefined` = cartão ou período (não mostra as linhas acumuladas). */
+  total?: TotalDoLugar
   /* Build 094 (item 3): o total da FATURA vem de `totalDoLugar`, o mesmo
      número (e o mesmo sinal) do card de fora e do card de quitação. */
   totalForcado?: number
 }) {
-  const totalPeriodo = somarTotais(itensPeriodo).total
   return (
     <div className="total-geral" data-testid="fechamento-lista">
       <TotaisEntradaSaida itens={itensPeriodo} total={totalForcado} rotulos={{ entrada: 'Entrada', saida: 'Saída', total: rotuloTotal }} />
-      {saldoAnterior !== undefined && (
+      {total && total.saldoAnterior !== undefined && (
         <>
+          {/* Build 099: as MESMAS duas linhas do card de fora — o real (só o
+              que já aconteceu) em destaque e o "com comprometido" abaixo, com
+              menos. É isso que faz o de dentro bater com o de fora: os dois
+              leem `totalDoLugar`. */}
           <div className="linha" style={{ border: 'none', padding: '8px 0 0', borderTop: '1px solid var(--borda)', marginTop: 8 }}>
-            <span className="texto-fraco">Saldo do mês anterior</span>
-            <strong data-testid="saldo-mes-anterior">{fmtBRLComSinal(saldoAnterior)}</strong>
+            <span className="texto-fraco">Saldo do mês anterior (real)</span>
+            <strong data-testid="saldo-mes-anterior">{fmtBRLComSinal(total.saldoAnteriorReal ?? total.saldoAnterior)}</strong>
           </div>
           <div className="linha" style={{ border: 'none', padding: '4px 0 0' }}>
-            <span>Total acumulado</span>
-            <strong className={saldoAnterior + totalPeriodo >= 0 ? 'valor-pos' : 'valor-neg'} style={{ fontSize: 16 }} data-testid="total-acumulado">
-              {fmtBRLComSinal(saldoAnterior + totalPeriodo)}
+            <span>Total real (já executado)</span>
+            <strong className={total.real >= 0 ? 'valor-pos' : 'valor-neg'} style={{ fontSize: 16 }} data-testid="total-acumulado">
+              {fmtBRLComSinal(total.real)}
             </strong>
+          </div>
+          <div className="linha" style={{ border: 'none', padding: '2px 0 0' }}>
+            <span className="texto-fraco">Com comprometido (a pagar/a receber)</span>
+            <span className="texto-fraco" data-testid="total-comprometido">{fmtBRLComSinal(total.valor)}</span>
           </div>
         </>
       )}
+    </div>
+  )
+}
+
+/* Build 099 (18/09/2026) — OS DOIS TOTAIS DE UM CARD, pedido do Rafael: o
+   real (só o que já aconteceu) em destaque no cabeçalho do card, e aqui
+   embaixo, com menos destaque, o executado + comprometido. No cartão o
+   recorte é a FATURA que fecha no mês selecionado: a linha diz o período
+   ("de x até y") e o vencimento, e a última linha diz o que falta pagar —
+   já com o resíduo da fatura anterior (ver `situacaoDaFatura`). */
+function DoisTotais({
+  tipo,
+  real,
+  comprometido,
+  janela,
+  diaVencimento,
+  situacao,
+}: {
+  tipo: Conta['tipo']
+  real: number
+  comprometido: number
+  janela?: { inicio: string; fim: string }
+  diaVencimento?: number
+  situacao: SituacaoFatura | null
+}) {
+  if (tipo === 'cartao') {
+    return (
+      <div className="card-dois-totais">
+        <span className="texto-fraco" data-testid="card-periodo-fatura">
+          Já na fatura{janela ? ` · de ${formatarDataCurta(janela.inicio)} a ${formatarDataCurta(janela.fim)}` : ''}
+          {diaVencimento ? ` · vence dia ${diaVencimento}` : ''}
+        </span>
+        <span className="texto-fraco card-total-comprometido" data-testid="card-total-comprometido">
+          Fatura inteira {fmtBRL(comprometido)}
+          {situacao && Math.abs(comprometido - real) < 0.005 ? '' : ' (com o que ainda vai cair)'}
+        </span>
+        {situacao && (situacao.itens.length > 0 || situacao.pagamentos.length > 0 || Math.abs(situacao.residuoAnterior) >= 0.005) && (
+          <span className={situacao.quitada ? 'valor-pos card-status-fatura' : 'valor-neg card-status-fatura'} data-testid="card-status-fatura">
+            {situacao.quitada
+              ? 'Fatura paga'
+              : `Falta pagar ${fmtBRL(situacao.restante)}${Math.abs(situacao.residuoAnterior) >= 0.005 ? ' (com o resíduo anterior)' : ''}`}
+          </span>
+        )}
+      </div>
+    )
+  }
+  return (
+    <div className="card-dois-totais">
+      <span className="texto-fraco">Total real (já executado)</span>
+      <span className="texto-fraco card-total-comprometido" data-testid="card-total-comprometido">
+        Com comprometido {fmtBRLComSinal(comprometido)}
+      </span>
     </div>
   )
 }
@@ -377,11 +437,14 @@ function DetalheConta({
   contasDisponiveis,
   todosLancamentos,
   saldoCofrinho,
+  comprometidoCofrinho,
 }: {
   titulo: string
   conta?: Conta
   /** Só no cofrinho virtual: o saldo pelos lançamentos, pra informar o real aqui dentro. */
   saldoCofrinho?: number
+  /** Idem, executado + comprometido (build 099). */
+  comprometidoCofrinho?: number
   mes: string
   aoMudarMes: (mes: string) => void
   aoAbrirLancamento: TelaProps['aoAbrirLancamento']
@@ -468,12 +531,13 @@ function DetalheConta({
      construção, e não por duas contas parecidas escritas em dois lugares.
      No modo PERÍODO a janela é outra (de tal data a tal data, escolha da
      pessoa), então a conta continua local: `totalDoLugar` só conhece mês. */
-  const saldoAnterior = isCartao
+  /* Build 099: no modo MÊS o fechamento mostra os DOIS números do card
+     (real × com comprometido) — o objeto inteiro de `totalDoLugar`. No modo
+     PERÍODO (janela escolhida à mão) as linhas acumuladas não aparecem. */
+  const totalDoMes = isCartao || modoPeriodo
     ? undefined
-    : modoPeriodo
-      ? (conta?.saldoInicial ?? 0) +
-        lancamentosDoLugar.filter((l) => l.dataCompetencia < janela.inicio).reduce((s, l) => s + l.valor, 0)
-      : totalDoLugar(conta, lancamentosDoLugar, mes, todosLancamentos, categoriaPorId).saldoAnterior
+    : totalDoLugar(conta, lancamentosDoLugar, mes, todosLancamentos, categoriaPorId)
+  const saldoAnterior = totalDoMes?.saldoAnterior
 
   const doPeriodoFiltrado = aplicarFiltros(doPeriodoBruto, busca, filtros, categoriaPorId, contaPorId)
   const doPeriodo = [...doPeriodoFiltrado].sort((a, b) =>
@@ -567,7 +631,29 @@ function DetalheConta({
             filtrosAtivos: contarFiltrosAtivos(filtros),
           }}
         />
-        <SeletorMes mes={mes} onMudar={aoMudarMes} periodo={propsSeletor} />
+        {/* Build 099 (pedido do Rafael): no CARTÃO o topo mostra o PERÍODO DA
+            FATURA no lugar do nome do mês — "de x até y", do 1º dia do ciclo
+            (no mês anterior) ao dia de fechamento do mês selecionado — e, logo
+            abaixo, o total REAL (o que já caiu na fatura) ao lado do período.
+            As setas continuam andando mês a mês, ou seja, fatura a fatura. */}
+        <SeletorMes
+          mes={mes}
+          onMudar={aoMudarMes}
+          periodo={propsSeletor}
+          rotuloCentro={isCartao && !modoPeriodo ? `${formatarDataCurta(janela.inicio)} – ${formatarDataCurta(janela.fim)}` : undefined}
+        />
+        {isCartao && !modoPeriodo && fatura && (
+          <div className="linha topo-fatura" data-testid="topo-fatura">
+            <span style={{ minWidth: 0 }}>
+              <span className="texto-fraco" style={{ display: 'block', fontSize: 11.5 }}>
+                Fatura de {formatarDataCurta(janela.inicio)} a {formatarDataCurta(janela.fim)}
+                {conta?.diaVencimento ? ` · vence dia ${conta.diaVencimento}` : ''}
+              </span>
+              <span className="texto-fraco" style={{ fontSize: 12 }}>Já na fatura (real)</span>
+            </span>
+            <strong className="valor-neg" style={{ fontSize: 18 }} data-testid="topo-fatura-real">{fmtBRL(fatura.realizado)}</strong>
+          </div>
+        )}
         {(buscaAberta || busca !== '') && (
           <CampoBusca busca={busca} onBuscaChange={setBusca} onFechar={() => setBuscaAberta(false)} />
         )}
@@ -602,23 +688,11 @@ function DetalheConta({
           aparece — o recorte deixou de ser um ciclo de fatura e virou o
           intervalo de datas escolhido; anunciar "Fatura de … a …" ali diria uma
           coisa que a lista não está mostrando. */}
-      {isCartao && !modoPeriodo && (
-        // Item 15 (16/09/2026): esse parágrafo tinha `marginTop: -10`, que o
-        // puxava por baixo do `.cabecalho-fixo` (sticky, fundo sólido) —
-        // ficava com o topo cortado/escondido atrás do cabeçalho. Removida a
-        // margem negativa; o respiro entre o cabeçalho e o texto já vem do
-        // próprio `.cabecalho-fixo`.
-        <p className="texto-fraco" style={{ marginTop: 10, marginBottom: 14 }}>
-          Fatura de {formatarDataCurta(janela.inicio)} a {formatarDataCurta(janela.fim)}
-          {conta?.diaVencimento ? ` · vence dia ${conta.diaVencimento}` : ''}
-        </p>
-      )}
-
       {/* Informar o saldo real também AQUI DENTRO (build 059): quem tocou no card
           veio ver o cofrinho, e era só do lado de fora que dava pra informar. */}
       {saldoCofrinho != null && (
         <div className="cartao" style={{ marginBottom: 12 }}>
-          <SaldoDoCofrinho calculado={saldoCofrinho} />
+          <SaldoDoCofrinho calculado={saldoCofrinho} comprometido={comprometidoCofrinho} />
         </div>
       )}
 
@@ -660,27 +734,40 @@ function DetalheConta({
       {/* Build 092: o totalizador do TOPO do cartão saiu — no topo fica só a
           quitação (abaixo). */}
 
-      {fatura && (fatura.itens.length > 0 || fatura.pagamentos.length > 0) && (
+      {fatura && (fatura.itens.length > 0 || fatura.pagamentos.length > 0 || Math.abs(fatura.residuoAnterior) >= 0.005) && (
         <div className="cartao" style={{ marginTop: 10, marginBottom: 10 }} data-testid="card-quitacao">
           <strong style={{ fontSize: 13 }}>
             {fatura.quitada ? 'Fatura paga' : fatura.pagamentos.length > 0 ? 'Fatura paga em parte' : 'Fatura ainda não paga'}
           </strong>
+          {/* Build 099 (pedido do Rafael): as linhas do subtotal são SEMPRE
+              estas, nesta ordem — Fatura do mês atual · Resíduo do mês
+              anterior · Pago · Faltante — e o Faltante tem o MESMO destaque do
+              total. O resíduo vem de `situacaoDaFatura` (paga a menor =
+              falta, paga a maior = crédito) e a linha está SEMPRE lá — com
+              R$ 0,00 quando não há resíduo —, pra ninguém ter que adivinhar
+              se a linha "sumiu" ou se não existe resíduo. */}
           <div className="linha" style={{ border: 'none', padding: '6px 0 0' }}>
-            <span className="texto-fraco">Total da fatura</span>
-            <strong data-testid="fatura-total">{fmtBRL(fatura.total)}</strong>
+            <span>Fatura do mês atual</span>
+            <strong style={{ fontSize: 16 }} data-testid="fatura-total">{fmtBRL(fatura.total)}</strong>
           </div>
-          {fatura.pagamentos.length > 0 && (
-            <div className="linha" style={{ border: 'none', padding: '2px 0 0' }}>
-              <span className="texto-fraco">Já pago</span>
-              <strong className="valor-pos" data-testid="fatura-pago">{fmtBRL(fatura.pago)}</strong>
-            </div>
-          )}
-          {!fatura.quitada && (
-            <div className="linha" style={{ border: 'none', padding: '2px 0 0' }}>
-              <span>{fatura.pagamentos.length > 0 ? 'Falta pagar' : 'A pagar'}</span>
-              <strong className="valor-neg" data-testid="fatura-restante">{fmtBRL(fatura.restante)}</strong>
-            </div>
-          )}
+          <div className="linha" style={{ border: 'none', padding: '2px 0 0' }}>
+            <span className="texto-fraco">
+              {fatura.residuoAnterior > 0.005 ? 'Resíduo do mês anterior (faltou pagar)' : fatura.residuoAnterior < -0.005 ? 'Resíduo do mês anterior (pago a mais)' : 'Resíduo do mês anterior'}
+            </span>
+            <strong className={fatura.residuoAnterior > 0.005 ? 'valor-neg' : fatura.residuoAnterior < -0.005 ? 'valor-pos' : 'texto-fraco'} data-testid="fatura-residuo">
+              {fatura.residuoAnterior > 0.005 ? '+' : fatura.residuoAnterior < -0.005 ? '−' : ''}{fmtBRL(Math.abs(fatura.residuoAnterior))}
+            </strong>
+          </div>
+          <div className="linha" style={{ border: 'none', padding: '2px 0 0' }}>
+            <span className="texto-fraco">Pago</span>
+            <strong className={fatura.pago > 0 ? 'valor-pos' : 'texto-fraco'} data-testid="fatura-pago">{fmtBRL(fatura.pago)}</strong>
+          </div>
+          <div className="linha" style={{ border: 'none', padding: '2px 0 0' }}>
+            <span>Faltante</span>
+            <strong className={fatura.restante > 0.005 ? 'valor-neg' : 'valor-pos'} style={{ fontSize: 16 }} data-testid="fatura-restante">
+              {fatura.restante < -0.005 ? `−${fmtBRL(Math.abs(fatura.restante))} (crédito)` : fmtBRL(Math.max(fatura.restante, 0))}
+            </strong>
+          </div>
           {fatura.pagamentos.length > 0 && (
             <div style={{ marginTop: 6 }} data-testid="fatura-pagamentos">
               {/* Build 092: cada pagamento leva a DATA em que foi feito — a
@@ -694,7 +781,7 @@ function DetalheConta({
               ))}
             </div>
           )}
-          {!fatura.quitada && (
+          {!fatura.quitada && fatura.restante > 0.005 && (
             <button type="button" className="primario" style={{ marginTop: 10 }} onClick={abrirPagamento} data-testid="pagar-fatura">
               {fatura.pagamentos.length > 0 ? 'Pagar o restante' : 'Pagar esta fatura'}
             </button>
@@ -753,7 +840,7 @@ function DetalheConta({
             <FechamentoDaLista
               itensPeriodo={doPeriodoBruto}
               rotuloTotal={rotuloTotal}
-              saldoAnterior={saldoAnterior}
+              total={totalDoMes}
               totalForcado={fatura ? fatura.total : undefined}
             />
           </div>

@@ -70,12 +70,16 @@ import {
 // Build 092 (17/09/2026): 4ª aba "Padrão do app" — é onde moram os DOIS
 // botões de restaurar (categorias e grupos; ícones). O de ícones estava em
 // "Aparência", e o Rafael foi direto: "na aba Aparência não tem sentido".
+// Build 099 (18/09/2026), pedido do Rafael: a ordem é a da HIERARQUIA —
+// "primeiro cadastra grupos e depois categorias" — e a tela passa a se
+// chamar "Grupos, Categorias e Metas". No primeiro acesso só existem as duas
+// abas de cadastro (Aparência e Padrão do app não são passo de ninguém).
 type AbaCategorias = 'categorias' | 'gruposMetas' | 'aparencia' | 'padrao'
-const ABAS_CATEGORIAS: { valor: AbaCategorias; rotulo: string }[] = [
-  { valor: 'categorias', rotulo: 'Categorias e Metas' },
-  { valor: 'gruposMetas', rotulo: 'Grupos e Metas' },
-  { valor: 'aparencia', rotulo: 'Aparência' },
-  { valor: 'padrao', rotulo: 'Padrão do app' },
+const ABAS_CATEGORIAS: { valor: AbaCategorias; rotulo: string; primeiroAcesso: boolean }[] = [
+  { valor: 'gruposMetas', rotulo: 'Grupos e Metas', primeiroAcesso: true },
+  { valor: 'categorias', rotulo: 'Categorias e Metas', primeiroAcesso: true },
+  { valor: 'aparencia', rotulo: 'Aparência', primeiroAcesso: false },
+  { valor: 'padrao', rotulo: 'Padrão do app', primeiroAcesso: false },
 ]
 
 function mesVigenciaAtual() {
@@ -120,7 +124,10 @@ export default function Categorias(
 
   const [percentuais, setPercentuais] = useState<Record<string, number>>({})
   const percentuaisInicializados = useRef(false)
-  const [abaAtiva, setAbaAtiva] = useState<AbaCategorias>('categorias')
+  /* No primeiro acesso a tela abre em GRUPOS (o passo começa por eles); no
+     uso comum continua abrindo em Categorias — a aba mexida toda vez que
+     algo muda (F-06). */
+  const [abaAtiva, setAbaAtiva] = useState<AbaCategorias>(primeiroAcesso ? 'gruposMetas' : 'categorias')
   // F-08: "Restaurar ícone padrão" saiu de botão sempre visível e virou item
   // dentro de um menu "⋮" por linha (grupo ou categoria) — só um popover
   // aberto por vez, guardado pelo id de quem está aberto.
@@ -518,15 +525,15 @@ export default function Categorias(
         )}
         {primeiroAcesso && (
           <p className="ideal-t4" style={{ margin: '0 0 4px', color: 'var(--azul)', fontWeight: 600 }} data-testid="primeiro-acesso-passo">
-            Passo 3 de 3 — grupos, categorias e metas
+            Passo 3 de 3 — grupos, depois categorias e metas
           </p>
         )}
-        <h1>Categorias, Grupos e Metas</h1>
+        <h1>Grupos, Categorias e Metas</h1>
       </div>
       {primeiroAcesso ? (
         <p className="texto-fraco texto-quebra" data-testid="primeiro-acesso-orientacao-2">
-          Confira como o dinheiro se divide entre os grupos (os percentuais precisam somar 100%) e,
-          se quiser, ajuste categorias e metas. Ao concluir, o Planejamento abre.
+          Primeiro os grupos: confira como o dinheiro se divide entre eles (os percentuais precisam
+          somar 100%). Depois, se quiser, ajuste as categorias e as metas. Ao concluir, o Planejamento abre.
         </p>
       ) : (
         <p className="texto-fraco">
@@ -561,7 +568,7 @@ export default function Categorias(
           "Categorias" (mexida toda vez que algo muda) primeiro e
           "Aparência" (configurada uma vez e esquecida) por último. */}
       <div className="abas-tela" role="tablist">
-        {ABAS_CATEGORIAS.map((aba) => (
+        {ABAS_CATEGORIAS.filter((aba) => !primeiroAcesso || aba.primeiroAcesso).map((aba) => (
           <button
             key={aba.valor}
             type="button"
@@ -569,6 +576,7 @@ export default function Categorias(
             aria-selected={abaAtiva === aba.valor}
             className={`aba-tela-item ${abaAtiva === aba.valor ? 'ativa' : ''}`}
             onClick={() => setAbaAtiva(aba.valor)}
+            data-testid={`aba-categorias-${aba.valor}`}
           >
             {aba.rotulo}
           </button>

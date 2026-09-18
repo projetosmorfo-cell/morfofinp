@@ -540,7 +540,7 @@ function MenusDoNivel({ nivel, draft, setDraft, sujo, onSalvar }: {
    é só daqui — saiu do N1 no mesmo pedido. */
 const ITENS_CONFIG_N1: { key: string; label: string }[] = [
   { key: 'meusDados', label: 'Meus Dados' },
-  { key: 'categorias', label: 'Categorias, Grupos e Metas' },
+  { key: 'categorias', label: 'Grupos, Categorias e Metas' },
   { key: 'contas', label: 'Contas e carteiras' },
   { key: 'notificacoes', label: 'Notificações bancárias' },
   { key: 'ajuda', label: 'Ajuda' },

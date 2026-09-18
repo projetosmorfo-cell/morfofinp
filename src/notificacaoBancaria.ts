@@ -249,8 +249,27 @@ export async function marcarConfirmada(id: number, lancamentoId?: number): Promi
   await db.notificacoesPendentes.update(id, { status: 'confirmada', lancamentoId })
 }
 
-export async function limparHistorico(): Promise<number> {
-  return db.notificacoesPendentes.where('status').anyOf(['confirmada', 'descartada']).delete()
+/**
+ * LIMPAR O HISTÓRICO (build 099 ganhou botão e limpeza automática).
+ * Apaga só o que já foi TRATADO — confirmada ou descartada/ignorada —, nunca
+ * uma pendente. Com `maisVelhasQueDias` apaga só as mais velhas que isso
+ * (a limpeza automática); sem, apaga o histórico inteiro (o botão).
+ * O aprendizado do motor NÃO mora aqui (ver `retencaoHistoricoDias` em
+ * `notificacaoParametros.ts`) — apagar histórico não desensina nada.
+ */
+export async function limparHistorico(maisVelhasQueDias?: number): Promise<number> {
+  const tratadas = db.notificacoesPendentes.where('status').anyOf(['confirmada', 'descartada'])
+  if (maisVelhasQueDias == null) return tratadas.delete()
+  /* `recebidoEm` é ISO completo no banco — a comparação vai por epoch. */
+  const limite = Date.now() - maisVelhasQueDias * 86_400_000
+  return tratadas.filter((n) => (Date.parse(n.recebidoEm) || 0) < limite).delete()
+}
+
+/** A limpeza automática pela idade: roda ao abrir a tela e a cada sincronização. */
+export async function limparHistoricoPorIdade(): Promise<number> {
+  const dias = paramsNotificacaoAtuais().retencaoHistoricoDias
+  if (!dias || dias <= 0) return 0
+  return limparHistorico(dias)
 }
 
 /**

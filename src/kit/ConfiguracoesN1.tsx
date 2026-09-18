@@ -81,7 +81,7 @@ interface DefItem {
 
 const SESSAO_1: DefItem[] = [
   { key: 'meusDados', icon: User, titulo: 'Meus Dados', resumo: 'Seu nome, login, contato e troca de senha' },
-  { key: 'categorias', icon: Tag, titulo: 'Categorias, Grupos e Metas', resumo: 'Como seus lançamentos são classificados' },
+  { key: 'categorias', icon: Tag, titulo: 'Grupos, Categorias e Metas', resumo: 'Como seus lançamentos são classificados' },
   { key: 'contas', icon: Wallet, titulo: 'Contas e carteiras', resumo: 'Onde o dinheiro entra e sai — bancos, cartões e dinheiro' },
   { key: 'notificacoes', icon: Bell, titulo: 'Notificações bancárias', resumo: 'Avisos do banco lidos e transformados em lançamento' },
   /* Build 080: as REGRAS da leitura ficam ao lado da tela que elas governam,
@@ -136,7 +136,7 @@ export default function ConfiguracoesN1({
       destrutivo: d.destrutivo,
       badge: d.key === 'ajuda' ? chatNaoLida : undefined,
       /* Item 6 (12/09/2026): o tour guiado termina apontando pra "Contas e
-         Carteiras" e "Categorias, Grupos e Metas" — por isso os dois ganharam
+         Carteiras" e "Grupos, Categorias e Metas" — por isso os dois ganharam
          marca própria, além da que a Ajuda já tinha. */
       dataTour: d.key === 'ajuda' ? 'n1-ajuda-card' : d.key === 'contas' ? 'cfg-contas' : d.key === 'categorias' ? 'cfg-categorias' : undefined,
       onClick: () => onAbrir(d.key),

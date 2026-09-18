@@ -748,7 +748,7 @@ export const FUNCOES_PERFIL_N1: FuncaoPerfil[] = [
      aparencia/ajuda) entraram na Decisão 55 (Parte B), junto das telas. ---- */
   { k: 'config', l: 'Configurações', sub: [
     { k: 'config.meusDados', l: 'Meus Dados' },
-    { k: 'config.categorias', l: 'Categorias, Grupos e Metas' },
+    { k: 'config.categorias', l: 'Grupos, Categorias e Metas' },
     { k: 'config.contas', l: 'Contas e carteiras' },
     { k: 'config.notificacoes', l: 'Notificações bancárias' },
     { k: 'config.meuAmbiente', l: 'Meu Ambiente' },

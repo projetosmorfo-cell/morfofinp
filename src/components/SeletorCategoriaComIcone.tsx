@@ -19,7 +19,7 @@ import { Icone } from '../icones'
 const TAM_ICONE = 22
 
 export default function SeletorCategoriaComIcone({
-  categorias, valor, onEscolher, onLimpar, id, comErro, rotuloVazio = 'Escolha…',
+  categorias, valor, onEscolher, onLimpar, id, comErro, rotuloVazio = 'Escolha…', abrirPedido,
 }: {
   categorias: Categoria[]
   valor: number | ''
@@ -30,9 +30,21 @@ export default function SeletorCategoriaComIcone({
   id?: string
   comErro?: boolean
   rotuloVazio?: string
+  /* Build 099 (item E-03 da tela de lançamento): abrir a folha SEM toque —
+     um contador que o formulário incrementa quando "O que foi" é concluído,
+     encadeando os três campos sempre preenchidos (valor → o que → categoria). */
+  abrirPedido?: number
 }) {
   const [aberto, setAberto] = useState(false)
   const [busca, setBusca] = useState('')
+  /* Ajuste de estado derivado de prop DURANTE o render (padrão do projeto,
+     nunca em efeito): cada pedido novo abre a folha limpa uma vez. */
+  const [pedidoVisto, setPedidoVisto] = useState(abrirPedido ?? 0)
+  if ((abrirPedido ?? 0) > pedidoVisto) {
+    setPedidoVisto(abrirPedido ?? 0)
+    setBusca('')
+    setAberto(true)
+  }
   const atual = categorias.find((c) => c.id === valor)
 
   const filtradas = useMemo(() => {

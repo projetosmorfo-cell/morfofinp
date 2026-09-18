@@ -103,7 +103,7 @@ export function GraficoMetasGrupos({ fatias }: { fatias: FatiaGrupo[] }) {
     return (
       <Moldura titulo="META POR GRUPO">
         <p className="texto-fraco" style={{ margin: 0, fontSize: 12.5 }}>
-          Nenhum grupo com meta cadastrada ainda — defina os percentuais em Configurações → Categorias, Grupos e Metas →
+          Nenhum grupo com meta cadastrada ainda — defina os percentuais em Configurações → Grupos, Categorias e Metas →
           Metas, ou pelo lápis ao lado de cada grupo aqui embaixo.
         </p>
       </Moldura>

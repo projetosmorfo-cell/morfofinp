@@ -117,6 +117,24 @@ export interface ParametrosNotificacao {
   aprenderDePara: boolean
   /** O de/para aprendido é aplicado sozinho na próxima notificação igual. */
   aplicarDeParaAutomaticamente: boolean
+  /* --- RETENÇÃO DO HISTÓRICO (build 099, 18/09/2026) -----------------------
+   * Pergunta do Rafael: "o histórico das notificações vão ficar pra sempre no
+   * app? como será feita a limpeza? automática ou manual, o que sugere? Tem
+   * problema limpar as ignoradas, isso vai prejudicar aprendizados do motor?"
+   *
+   * Até a 098 ficava pra sempre: `limparHistorico()` existia sem botão. A
+   * resposta é AS DUAS COISAS: limpeza automática por idade (este parâmetro)
+   * e um botão "Limpar histórico" na tela, pra quem quiser agora.
+   *
+   * O que a limpeza toca: só CONFIRMADAS e DESCARTADAS/IGNORADAS mais velhas
+   * que N dias. PENDENTE nunca é apagada por idade — pendente é trabalho a
+   * fazer, não histórico. E NÃO prejudica o motor: o que ele aprende mora em
+   * OUTRA tabela (`aprendizadosNotificacao`, o de/para "texto do banco →
+   * categoria/nome/conta"), gravada na hora da confirmação; a notificação em
+   * si é só o registro do que o banco disse. O pacote ignorado (Ignoradas por
+   * app) é uma lista na configuração, também fora daqui. */
+  /** Dias que uma notificação já tratada fica guardada. 0 = nunca apagar. */
+  retencaoHistoricoDias: number
 
   // --- Nível INTERNO (só o N0 edita) ---
   /** Exigir que os DOIS apps casem com conta da Carteira pra propor transferência. */
@@ -146,6 +164,7 @@ export const PARAMETROS_NIVEL_USUARIO = [
   'janelaTransferenciaMin',
   'aprenderDePara',
   'aplicarDeParaAutomaticamente',
+  'retencaoHistoricoDias',
 ] as const satisfies readonly (keyof ParametrosNotificacao)[]
 
 export type ChaveParametroUsuario = (typeof PARAMETROS_NIVEL_USUARIO)[number]
@@ -200,6 +219,10 @@ export const PARAMETROS_NOTIFICACAO_PADRAO: ParametrosNotificacao = {
   janelaTransferenciaMin: 10,
   aprenderDePara: true,
   aplicarDeParaAutomaticamente: true,
+  /* 90 dias: cobre o "confere com a fatura de dois meses atrás" e não deixa a
+     tabela crescer pra sempre num celular que recebe dezenas de avisos por
+     dia. Quem quiser guardar tudo põe 0. */
+  retencaoHistoricoDias: 90,
   transferenciaExigeDuasContas: true,
   removerSufixoRazaoSocial: true,
   tamanhoMaximoNome: 60,
@@ -381,6 +404,7 @@ export const ROTULO_PARAMETRO: Record<keyof ParametrosNotificacao, { titulo: str
   janelaTransferenciaMin: { titulo: 'Janela da transferência (minutos)', ajuda: 'Duas notificações de mesmo valor e sentidos opostos, dentro desta janela, viram uma proposta de transferência entre suas contas.' },
   aprenderDePara: { titulo: 'Aprender de/para a cada confirmação', ajuda: 'Guarda o texto do banco junto com a categoria, o nome e a conta que você escolheu.' },
   aplicarDeParaAutomaticamente: { titulo: 'Usar o de/para aprendido', ajuda: 'A próxima notificação do mesmo estabelecimento já abre preenchida com o que você ensinou.' },
+  retencaoHistoricoDias: { titulo: 'Guardar histórico por (dias)', ajuda: 'Confirmadas e ignoradas mais velhas que isso são apagadas sozinhas ao abrir a tela. Pendentes nunca. O que o app aprendeu fica — mora em outra lista. 0 = guardar pra sempre.' },
   transferenciaExigeDuasContas: { titulo: 'Transferência exige as duas contas na Carteira', ajuda: 'Interno: é o sinal que separa transferência entre contas próprias de pagamento a terceiro.' },
   removerSufixoRazaoSocial: { titulo: 'Remover LTDA/SA do nome', ajuda: 'Interno: tira o sufixo de razão social do nome da contraparte.' },
   tamanhoMaximoNome: { titulo: 'Tamanho máximo do nome', ajuda: 'Interno: acima disso o corte falhou e o nome é descartado.' },
@@ -439,6 +463,9 @@ const EXEMPLO_PARAMETRO: Partial<Record<keyof ParametrosNotificacao, (valor: unk
   aplicarDeParaAutomaticamente: (v) => (v
     ? 'A próxima "PAG*PJBANK" já abre como "PJ Bank", em Serviços.'
     : 'O aprendido fica guardado, mas cada notificação abre em branco.'),
+  retencaoHistoricoDias: (v) => (num(v) <= 0
+    ? 'Com 0, nada é apagado sozinho — só pelo botão "Limpar histórico".'
+    : `Com ${num(v)} dias, a notificação confirmada em 10/03 some sozinha depois de ${new Date(2026, 2, 10 + num(v)).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}; a que ainda está pendente fica.`),
   transferenciaExigeDuasContas: (v) => (v
     ? 'Bradesco → C6 vira proposta; Bradesco → app que não é conta sua, não.'
     : 'Bradesco → qualquer app de mesmo valor e sentido oposto vira proposta.'),

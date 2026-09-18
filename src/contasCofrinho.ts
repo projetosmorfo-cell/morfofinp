@@ -149,6 +149,41 @@ export const AVISO_ULTIMO_COFRINHO =
  *
  * Devolve o id da conta criada, ou `null` quando não havia nada a fazer.
  */
+/* O MODELO INICIAL DA CARTEIRA (build 099, 18/09/2026) — as duas contas com
+   que toda instalação nasce e a que "Restaurar padrão de fábrica" volta:
+   "Banco Modelo" (corrente, zerada, pra pessoa renomear no passo 2 do
+   primeiro acesso) e o Cofrinho padrão (zerado). Pedido do Rafael: "redefine
+   o cadastro de contas e carteira no modelo inicial com apenas conta cofrinho
+   padrão e zerada e banco modelo tbm zerado". Uma função só, pra semente e
+   fábrica nunca divergirem. */
+export const NOME_BANCO_MODELO = 'Banco Modelo'
+
+export function contasDoModeloInicial(carimbo: { ambienteId?: string }, hoje: string): Omit<Conta, 'id'>[] {
+  return [
+    {
+      ...carimbo,
+      nome: NOME_BANCO_MODELO,
+      tipo: 'corrente',
+      instituicao: NOME_BANCO_MODELO,
+      saldoInicial: 0,
+      dataSaldoInicial: hoje,
+      importavel: true,
+      ativa: true,
+    },
+    {
+      ...carimbo,
+      nome: COFRINHO_PADRAO_NOME,
+      tipo: 'cofre',
+      instituicao: COFRINHO_PADRAO_NOME,
+      saldoInicial: 0,
+      dataSaldoInicial: hoje,
+      importavel: false,
+      ativa: true,
+      cofrinhoPadrao: true,
+    },
+  ]
+}
+
 export async function garantirContaCofrinho(): Promise<number | null> {
   const config = await db.configuracoes.get(1)
   if (config?.contaCofrinhoPadraoRevisado) return null

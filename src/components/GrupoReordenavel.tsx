@@ -77,15 +77,21 @@ export default function GrupoReordenavel({
   contaPorId,
   aoAbrirLancamento,
   selecao,
+  invertido = false,
 }: {
   itens: Lancamento[] // já vem ordenado (data → `compararDentroDoDia`)
   categoriaPorId: Map<number, Categoria>
   contaPorId: Map<number, { nome: string }>
   aoAbrirLancamento: (o?: { id?: number; abrirClonando?: boolean }) => void
   selecao: Selecao
+  /** Build 099: a lista está sendo mostrada de trás pra frente (ordenação
+      decrescente) — a ordem gravada continua sendo a crescente. */
+  invertido?: boolean
 }) {
   const idsAtuais = itens.map((l) => l.id!)
   const chaveAtual = idsAtuais.join(',')
+  const invertidoRef = useRef(invertido)
+  invertidoRef.current = invertido
 
   // Ordem exibida DURANTE um arrasto em andamento — sincronizada com `itens`
   // sempre que a fonte mudar por um motivo que não seja o próprio arrasto
@@ -170,8 +176,13 @@ export default function GrupoReordenavel({
   function commitarOrdem() {
     if (arrastandoIdRef.current == null) return
     const ordemFinal = ordemRef.current ?? idsAtuaisRef.current
+    const n = ordemFinal.length
+    /* Por ref: os handlers de toque são registrados uma vez (efeito com
+       `[]`) e leem tudo por ref — `invertido` não pode ficar preso ao
+       primeiro render. */
+    const inv = invertidoRef.current
     ordemFinal.forEach((id, i) => {
-      db.lancamentos.update(id, { ordemManual: i })
+      db.lancamentos.update(id, { ordemManual: inv ? n - 1 - i : i })
     })
   }
 

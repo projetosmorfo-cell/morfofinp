@@ -36,11 +36,17 @@ export default function MenuLinha({
   onAbrirFechar,
   onFechar,
   children,
+  zIndex = 60,
+  rotulo = 'Mais ações',
 }: {
   aberto: boolean
   onAbrirFechar: () => void
   onFechar: () => void
   children: ReactNode
+  /* Build 099: dentro de um modal (`.modal-fundo`, z-index 100) o popover
+     precisa ficar ACIMA dele — o padrão 60 ficava escondido atrás do véu. */
+  zIndex?: number
+  rotulo?: string
 }) {
   const botaoRef = useRef<HTMLButtonElement>(null)
   const popoverRef = useRef<HTMLDivElement>(null)
@@ -76,14 +82,14 @@ export default function MenuLinha({
 
   return (
     <div className="menu-linha-wrap">
-      <button type="button" ref={botaoRef} className="botao-menu-linha" aria-label="Mais ações" onClick={onAbrirFechar}>
+      <button type="button" ref={botaoRef} className="botao-menu-linha" aria-label={rotulo} onClick={onAbrirFechar}>
         ⋮
       </button>
       {aberto && createPortal(
         <>
           {/* Camada invisível pra fechar o popover ao clicar fora dele. */}
-          <div style={{ position: 'fixed', inset: 0, zIndex: 60 }} onClick={onFechar} />
-          <div className="menu-linha-popover" ref={popoverRef} style={{ zIndex: 61, ...estiloCorrecao }}>
+          <div style={{ position: 'fixed', inset: 0, zIndex }} onClick={onFechar} />
+          <div className="menu-linha-popover" ref={popoverRef} style={{ zIndex: zIndex + 1, ...estiloCorrecao }}>
             {children}
           </div>
         </>,
