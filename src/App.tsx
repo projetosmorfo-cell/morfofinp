@@ -4,6 +4,7 @@ import Lancamentos from './screens/Lancamentos'
 import Carteira from './screens/Carteira'
 import Planejamento from './screens/Planejamento'
 import Categorias from './screens/Categorias'
+import Aparencia from './screens/Aparencia'
 import Contas from './screens/Contas'
 import Calibragem from './screens/Calibragem'
 import Manutencao from './screens/Manutencao'
@@ -45,7 +46,7 @@ import type { ItemMenuTopo } from './kit/TopoIcones'
 import type { ComponentType, SVGProps } from 'react'
 import { sair } from './kit/auth'
 // 4 telas de Configurações do Kit portadas na Decisão 55 (Parte B)
-import { MeusDadosN1, MeuAmbienteN1, AparenciaN1, AjudaN1 } from './kit/ConfigN1'
+import { MeusDadosN1, MeuAmbienteN1, AjudaN1 } from './kit/ConfigN1'
 import ConfiguracoesN1, { type ChaveConfigN1 } from './kit/ConfiguracoesN1'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, type Conta, type NotificacaoPendente } from './db'
@@ -167,7 +168,12 @@ const ROTULO_CONFIG: Record<'meusDados' | 'categorias' | 'contas' | 'notificacoe
 // duas ações continuam existindo DENTRO de "Manutenção e Saída", e "Sair"
 // segue fixo no "⋮" (e agora protegido contra "Ocultar", ver
 // ITEM_PROTEGIDO_N1 em kitPlatform.ts).
-const ITENS_MENU_ENGRENAGEM_PADRAO = ['meusDados', 'categorias', 'contas', 'notificacoes', 'notificacoesRegras', 'ajuda', 'meuAmbiente', 'assinatura', 'layout', 'manutencao'] as const
+// Build 100 (18/09/2026), escolha A1: 'aparencia' VOLTA pra esta lista — foi
+// removida em 10/09/2026 (o tema virou ícone fixo no topo), mas volta agora
+// por outro motivo: o pedido do Rafael de tirar a aba "Aparência" de dentro
+// de "Grupos, Categorias e Metas" (ver `screens/Aparencia.tsx` e o
+// comentário em `kit/ConfiguracoesN1.tsx`).
+const ITENS_MENU_ENGRENAGEM_PADRAO = ['meusDados', 'categorias', 'contas', 'notificacoes', 'notificacoesRegras', 'ajuda', 'meuAmbiente', 'assinatura', 'aparencia', 'layout', 'manutencao'] as const
 type ItemMenuEngrenagem = (typeof ITENS_MENU_ENGRENAGEM_PADRAO)[number]
 export const ROTULO_MENU_ENGRENAGEM: Record<ItemMenuEngrenagem, string> = {
   meusDados: ROTULO_CONFIG.meusDados,
@@ -178,6 +184,7 @@ export const ROTULO_MENU_ENGRENAGEM: Record<ItemMenuEngrenagem, string> = {
   ajuda: ROTULO_CONFIG.ajuda,
   meuAmbiente: ROTULO_CONFIG.meuAmbiente,
   assinatura: ROTULO_CONFIG.assinatura,
+  aparencia: ROTULO_CONFIG.aparencia,
   layout: 'Layout e Menus',
   manutencao: 'Manutenção e Saída',
 }
@@ -1283,6 +1290,17 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: ModoConsultaN
               aoAbrirCalibragem={() => setConfigAberta('calibragem')}
               aoVoltar={fecharConfig}
             />
+          ) : configAberta === 'aparencia' ? (
+            /* Build 100 (18/09/2026), escolha A1: existia um branch morto
+               aqui embaixo pra 'aparencia' → `AparenciaN1` (o "Tema das
+               telas" do Kit, inalcançável desde 10/09/2026 — o tema virou
+               ícone fixo no topo, Padrão UI seção 16). Removido: essa
+               decisão (tema só no ícone do topo) continua valendo, não foi
+               reaberta agora. O que volta ao menu é conteúdo DIFERENTE —
+               pacote de ícones, tamanho de cada um e zoom das listas — que
+               morava dentro de "Grupos, Categorias e Metas" e não tinha
+               nada a ver com tema. */
+            <Aparencia aoVoltar={fecharConfig} />
           ) : configAberta === 'calibragem' ? (
             /* Calibragem (build 059) — chamada pelo aviso da tela Hoje, pela
                faixa do Planejamento e pelo ⚖ do cabeçalho dele. Não entra no
@@ -1327,8 +1345,6 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: ModoConsultaN
             <MeusDadosN1 aoVoltar={fecharConfig} />
           ) : configAberta === 'meuAmbiente' ? (
             <MeuAmbienteN1 aoVoltar={fecharConfig} />
-          ) : configAberta === 'aparencia' ? (
-            <AparenciaN1 aoVoltar={fecharConfig} />
           ) : configAberta === 'ajuda' ? (
             <AjudaN1
               aoVoltar={fecharConfig}

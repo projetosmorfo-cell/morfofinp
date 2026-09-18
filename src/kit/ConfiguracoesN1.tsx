@@ -42,10 +42,16 @@
    - MorfoFinP "Suporte" (chat) ...... REDUNDANTE com "Ajuda" (o Kit já põe
                                        o chat dentro de Ajuda) E agora é
                                        item fixo do "⋮" → NÃO se repete aqui.
-   - MorfoFinP "Aparência" ........... REMOVIDO da lista, exatamente como no
-                                       Kit: o tema virou ícone fixo no topo
-                                       (Padrão UI, seção 16). A tela em si
-                                       continua existindo no código.
+   - MorfoFinP "Aparência" ........... build 100 (18/09/2026), escolha A1:
+                                       VOLTOU pra lista — pedido do Rafael
+                                       pra tirar essa aba de dentro de
+                                       "Grupos, Categorias e Metas" (eram 4
+                                       abas, viraram 3). O tema continua
+                                       sendo o ícone fixo no topo (Padrão UI,
+                                       seção 16) — o que voltou é o PACOTE de
+                                       ícones, o tamanho deles e o zoom das
+                                       listas, que moram agora em
+                                       `screens/Aparencia.tsx`               → 2
    - MorfoFinP "Manutenção" (resto) .. tour, ferramentas de teste, limpar
                                        dados, exportar ícones, diagnóstico
                                        de cache → `secao="dados"`           → 3
@@ -58,7 +64,7 @@ import { GroupLabelCompact, MenuGroup } from './PadraoUI'
 import type { ItemMenuCompacto } from './PadraoUI'
 import {
   User, LifeBuoy, Bell, Building2, CreditCard, List, Tag, Wallet,
-  Wrench, SlidersHorizontal,
+  Wrench, SlidersHorizontal, Palette,
 } from 'lucide-react'
 import { useTemaEfetivo } from '../configuracaoIcones'
 import { emTituloCaso } from '../tituloCaso'
@@ -67,7 +73,7 @@ import { emTituloCaso } from '../tituloCaso'
    não inventa destino nenhum, só reorganiza os que já existiam. */
 export type ChaveConfigN1 =
   | 'meusDados' | 'categorias' | 'contas' | 'notificacoes' | 'notificacoesRegras'
-  | 'meuAmbiente' | 'assinatura' | 'ajuda' | 'layout'
+  | 'meuAmbiente' | 'assinatura' | 'ajuda' | 'layout' | 'aparencia'
   | 'manutencao'
 
 interface DefItem {
@@ -94,6 +100,10 @@ const SESSAO_1: DefItem[] = [
 const SESSAO_2: DefItem[] = [
   { key: 'meuAmbiente', icon: Building2, titulo: 'Meu Ambiente', resumo: 'Logotipos, recursos e preferências do ambiente' },
   { key: 'assinatura', icon: CreditCard, titulo: 'Minha Assinatura', resumo: 'Plano, pagamentos e histórico de cobrança' },
+  /* Build 100 (18/09/2026), escolha A1: item próprio, configurado uma vez e
+     esquecido — por isso mora aqui, em "Ajustes do sistema", ao lado de
+     "Layout e Menus". */
+  { key: 'aparencia', icon: Palette, titulo: 'Aparência', resumo: 'Pacote de ícones, tamanho de cada um e zoom das listas' },
   { key: 'layout', icon: List, titulo: 'Layout e Menus', resumo: 'Ordem das abas do rodapé e destes itens' },
 ]
 

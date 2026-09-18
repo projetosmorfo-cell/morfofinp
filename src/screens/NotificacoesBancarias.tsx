@@ -824,6 +824,27 @@ function PropostaTransferencia({
           {ROTULO_ACAO.naoTransferencia}
         </button>
       </div>
+      {/* Build 100 (18/09/2026), pedido do Rafael: faltava o botão de
+          ignorar — igual a todo outro card de notificação — pra este par
+          específico. Sem ele a única saída era confirmar como transferência
+          ou "Não, são separadas" (que só esconde o card nesta sessão; volta
+          a propor o MESMO par depois, porque nada muda no banco). Ignorar
+          descarta as DUAS notificações de uma vez — somem de Pendentes e vão
+          pra Ignoradas, com volta (`descartarNotificacao`, a mesma função de
+          qualquer notificação avulsa). */}
+      <button
+        type="button"
+        className="notif-link"
+        style={{ marginTop: 8 }}
+        data-testid="notif-ignorar-par-transferencia"
+        onClick={async () => {
+          if (par.saida.id != null) await descartarNotificacao(par.saida.id)
+          if (par.entrada.id != null) await descartarNotificacao(par.entrada.id)
+          setPronto(true)
+        }}
+      >
+        {ROTULO_ACAO.ignorar} (as duas)
+      </button>
     </div>
   )
 }

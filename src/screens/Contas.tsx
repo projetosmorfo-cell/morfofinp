@@ -89,7 +89,19 @@ export default function Contas({
   primeiroAcesso,
 }: {
   aoVoltar: () => void
-  primeiroAcesso?: { aoConcluir: () => void }
+  primeiroAcesso?: {
+    aoConcluir: () => void
+    /* Build 100 (18/09/2026), pedido do Rafael: "precisa ter opção de voltar
+       pro passo anterior tbm em todos ele" — até aqui, dentro do primeiro
+       acesso, o "Voltar" do cabeçalho ficava escondido (só existe fora do
+       modo primeiro acesso). Agora, quando o passo a passo passa este
+       campo, o botão volta a aparecer — chamando ESTE `aoVoltar`, não o de
+       cima (o de cima seguia existindo só pra satisfazer o tipo). */
+    aoVoltar?: () => void
+    passoAtual?: number
+    totalPassos?: number
+    rotuloConcluir?: string
+  }
 }) {
   const contas = useLiveQuery(() => lerDoAmbiente(db.contas.toArray()), [])
   const lancamentos = useLiveQuery(() => lerDoAmbiente(db.lancamentos.toArray()), [])
@@ -330,14 +342,18 @@ export default function Contas({
   return (
     <>
       <div className="cabecalho-fixo">
-        {!primeiroAcesso && (
-          <button type="button" className="botao-voltar-config" onClick={aoVoltar}>
+        {(!primeiroAcesso || primeiroAcesso.aoVoltar) && (
+          <button
+            type="button"
+            className="botao-voltar-config"
+            onClick={primeiroAcesso ? primeiroAcesso.aoVoltar! : aoVoltar}
+          >
             ‹ Voltar
           </button>
         )}
         {primeiroAcesso && (
           <p className="ideal-t4" style={{ margin: '0 0 4px', color: 'var(--azul)', fontWeight: 600 }} data-testid="primeiro-acesso-passo">
-            Passo 2 de 3 — onde seu dinheiro está
+            Passo {primeiroAcesso.passoAtual ?? 2} de {primeiroAcesso.totalPassos ?? 3} — onde seu dinheiro está
           </p>
         )}
         <h1>Contas e Carteiras</h1>
@@ -505,7 +521,7 @@ export default function Contas({
               data-testid="primeiro-acesso-concluir-contas"
               onClick={primeiroAcesso.aoConcluir}
             >
-              Continuar para o passo 3
+              {primeiroAcesso.rotuloConcluir ?? `Continuar para o passo ${(primeiroAcesso.passoAtual ?? 2) + 1}`}
             </button>
           </div>
         )

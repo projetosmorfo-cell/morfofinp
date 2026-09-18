@@ -1,7 +1,7 @@
 import { useRef, useState, type FormEvent } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { ArrowPathRoundedSquareIcon } from '@heroicons/react/24/outline'
-import { db, type Conta, type Periodicidade, type RegraRecorrencia, type Lancamento } from '../db'
+import { db, naturezaEhEntrada, type Conta, type Periodicidade, type RegraRecorrencia, type Lancamento } from '../db'
 import { gerarIdSerie, gerarParcelas, reprocessarSerieAPartirDe, ROTULOS_PERIODICIDADE, NOMES_DIA_SEMANA } from '../recorrencia'
 import { fmtBRL, fmtNum, formatarMoeda, aplicarMascaraValor, paraNumero } from '../formatoMoeda'
 import SeletorCategoriaComIcone from './SeletorCategoriaComIcone'
@@ -245,7 +245,6 @@ export default function DetalheLancamento({
   const [folhaPeriodicidade, setFolhaPeriodicidade] = useState(false)
   const [folhaRegra, setFolhaRegra] = useState(false)
   const [folhaDiaSemana, setFolhaDiaSemana] = useState(false)
-  const [categorizarLados, setCategorizarLados] = useState(false) // transferência (E-07)
   const [abrirCategoriaPedido, setAbrirCategoriaPedido] = useState(0) // encadeamento (E-03)
   const [salvando, setSalvando] = useState(false)              // Salvar com estado ocupado (V-05)
   const [origemSugestao, setOrigemSugestao] = useState<string | null>(null) // "vieram do último…" (E-08)
@@ -407,16 +406,19 @@ export default function DetalheLancamento({
       const compativel = c && (novaAba === 'entrada' ? c.natureza === 'Receita' : c.natureza !== 'Receita')
       if (!compativel) setCategoriaId('')
     }
-    /* E-07: as duas categorias da transferência nascem com a categoria
-       neutra de transferência (a do cadastro), recolhidas atrás de
-       "categorizar cada lado". Só preenche o que está vazio. */
-    if (novaAba === 'transferencia') {
-      const neutra = (categorias ?? []).find((x) => x.ativa && x.natureza === 'Neutro')
-      if (neutra?.id != null) {
-        if (categoriaOrigemId === '') setCategoriaOrigemId(neutra.id)
-        if (categoriaDestinoId === '') setCategoriaDestinoId(neutra.id)
-      }
-    }
+    /* Correção 18/09/2026 — a rodada de UI/UX da build 099 reintroduziu por
+       engano o que a Decisão de 31/08/2026 já tinha eliminado: as duas
+       categorias da transferência nascendo pré-preenchidas com uma categoria
+       "neutra"/de sistema e escondidas atrás de um botão "categorizar cada
+       lado". Rafael apontou de novo: a categoria de cada perna não tem
+       default nenhum (não é obrigatória nem comum usar "Transferência" —
+       o comum é uma categoria de saída de um lado e uma de entrada do
+       outro) e os dois campos ficam sempre visíveis, nunca escondidos. O
+       que marca o lançamento como transferência é o tipo escolhido no topo
+       (a aba) + o `transferenciaId` compartilhado pelas duas pernas — a
+       categoria nunca é a referência disso. Por isso aqui não preenche mais
+       nada: os dois campos começam vazios e a pessoa escolhe, cada um
+       filtrado pela lista de categorias do lado certo (saída/entrada). */
     setTipo(novaAba)
   }
 
@@ -1181,8 +1183,16 @@ export default function DetalheLancamento({
 
           {tipo === 'transferencia' ? (
             <>
-              {/* E-07: a mesma folha com ícone nos quatro campos; as duas
-                  categorias recolhidas atrás de "categorizar cada lado". */}
+              {/* Correção 18/09/2026: as duas categorias da transferência
+                  SEMPRE visíveis (nunca escondidas atrás de um botão) e SEM
+                  default — a pessoa escolhe cada lado livremente, como faria
+                  num lançamento comum. Cada campo só lista as categorias do
+                  tipo certo: origem = categorias de saída (tudo que não é
+                  Receita), destino = categorias de entrada (natureza
+                  Receita) — é essa lista, não uma categoria fixa de sistema,
+                  que guia a escolha. O que marca o lançamento como
+                  transferência é a aba escolhida no topo + o
+                  `transferenciaId` das duas pernas, nunca a categoria. */}
               <label htmlFor="dl-conta-origem" className="dl-rotulo">De Onde Sai</label>
               <CampoConta id="dl-conta-origem" titulo="Conta de origem" contas={(contas ?? []).filter((c) => c.ativa || c.id === contaOrigemId)} valor={contaOrigemId} onEscolher={setContaOrigemId} comErro={campoComErro === 'contaOrigem'} testid="campo-conta-origem" />
               {erroDe('contaOrigem')}
@@ -1192,21 +1202,12 @@ export default function DetalheLancamento({
               {contaOrigemId !== '' && contaOrigemId === contaDestinoId && (
                 <p className="dl-erro valor-neg">Escolha duas contas diferentes.</p>
               )}
-              {!categorizarLados && categoriaOrigemId !== '' && categoriaDestinoId !== '' ? (
-                <button type="button" className="dl-link" onClick={() => setCategorizarLados(true)} data-testid="categorizar-lados">
-                  Categorizar cada lado ({(categorias ?? []).find((c) => c.id === categoriaOrigemId)?.nome ?? '…'}
-                  {categoriaOrigemId !== categoriaDestinoId ? ` → ${(categorias ?? []).find((c) => c.id === categoriaDestinoId)?.nome ?? '…'}` : ''})
-                </button>
-              ) : (
-                <>
-                  <label htmlFor="dl-categoria-origem" className="dl-rotulo">Categoria de Saída</label>
-                  <SeletorCategoriaComIcone id="dl-categoria-origem" categorias={(categorias ?? []).filter((c) => c.ativa || c.id === categoriaOrigemId)} valor={categoriaOrigemId} onEscolher={setCategoriaOrigemId} onLimpar={() => setCategoriaOrigemId('')} comErro={campoComErro === 'categoriaOrigem'} />
-                  {erroDe('categoriaOrigem')}
-                  <label htmlFor="dl-categoria-destino" className="dl-rotulo">Categoria de Entrada</label>
-                  <SeletorCategoriaComIcone id="dl-categoria-destino" categorias={(categorias ?? []).filter((c) => c.ativa || c.id === categoriaDestinoId)} valor={categoriaDestinoId} onEscolher={setCategoriaDestinoId} onLimpar={() => setCategoriaDestinoId('')} comErro={campoComErro === 'categoriaDestino'} />
-                  {erroDe('categoriaDestino')}
-                </>
-              )}
+              <label htmlFor="dl-categoria-origem" className="dl-rotulo">Categoria de Saída</label>
+              <SeletorCategoriaComIcone id="dl-categoria-origem" categorias={(categorias ?? []).filter((c) => (c.ativa || c.id === categoriaOrigemId) && !naturezaEhEntrada(c.natureza))} valor={categoriaOrigemId} onEscolher={setCategoriaOrigemId} onLimpar={() => setCategoriaOrigemId('')} comErro={campoComErro === 'categoriaOrigem'} />
+              {erroDe('categoriaOrigem')}
+              <label htmlFor="dl-categoria-destino" className="dl-rotulo">Categoria de Entrada</label>
+              <SeletorCategoriaComIcone id="dl-categoria-destino" categorias={(categorias ?? []).filter((c) => (c.ativa || c.id === categoriaDestinoId) && naturezaEhEntrada(c.natureza))} valor={categoriaDestinoId} onEscolher={setCategoriaDestinoId} onLimpar={() => setCategoriaDestinoId('')} comErro={campoComErro === 'categoriaDestino'} />
+              {erroDe('categoriaDestino')}
             </>
           ) : (
             <>

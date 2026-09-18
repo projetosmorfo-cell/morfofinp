@@ -11,10 +11,17 @@ import {
 } from '../components/SelecaoETotais'
 import { CampoBusca, FolhaFiltros, FILTROS_VAZIOS, aplicarFiltros, contarFiltrosAtivos, type FiltrosAvancados } from '../components/BuscaEFiltros'
 import { janelaFatura, lancamentosDoCiclo, situacaoDaFatura, DIA_FECHAMENTO_PADRAO, type SituacaoFatura } from '../faturaCiclo'
-import { totalDoLugar, lancamentosDoCofrinhoVirtual, type TotalDoLugar } from '../totaisCarteira'
+import { totalDoLugar, lancamentosDoCofrinhoVirtual, ancorarNoInformado, type TotalDoLugar } from '../totaisCarteira'
 import { formatarCabecalhoData } from '../formatoData'
-import { fundoDaLinhaDeData } from '../statusPagamento'
-import SaldoDoCofrinho, { LinhaInformeSaldo } from '../components/SaldoDoCofrinho'
+import { fundoDaLinhaDeData, jaAconteceu } from '../statusPagamento'
+import SaldoDoCofrinho, { LinhaInformeSaldo, useUltimosInformesPorConta, COFRINHO_VIRTUAL_ID, type InformeSaldo } from '../components/SaldoDoCofrinho'
+import BotaoAjuda from '../components/BotaoAjuda'
+
+/* Build 100 (18/09/2026) — o mesmo texto do "ⓘ" nos dois lugares que mostram
+   "Total aplicando o comprometido" (card de fora e fechamento de dentro),
+   pedido do Rafael. Uma constante só, pra nunca dessincronizar. */
+const AJUDA_COMPROMETIDO =
+  'O que ainda não aconteceu: lançamentos já cadastrados que faltam pagar ou receber. Somado ao total real, dá este número — ex.: uma conta que vence dia 20, se hoje é dia 10, já entra aqui mesmo sem ter saído do banco ainda.'
 import { fmtBRL } from '../formatoMoeda'
 import { useHojeSimuladoISO } from '../hojeSimulado'
 import TituloTelaN1 from '../kit/CabecalhoN1'
@@ -69,6 +76,9 @@ export default function Carteira({ mes, aoMudarMes, aoAbrirLancamento }: TelaPro
   // 7 — Ferramentas de teste), mesmo motivo de `Lancamentos.tsx`: o
   // drill-in desta tela usa `LinhaLancamentoCompleta`/`statusDoLancamento`.
   useHojeSimuladoISO()
+  /* Build 100: o informe de saldo de CADA conta tipo cofre (+ do cofrinho
+     virtual), numa `useLiveQuery` só — ver `ancorarNoInformado`. */
+  const informes = useUltimosInformesPorConta()
 
   const [selecionado, setSelecionado] = useState<number | 'cofrinho' | null>(null)
   /* G44 regra 11b — declarado aqui, ANTES do guard de carregamento abaixo:
@@ -107,8 +117,15 @@ export default function Carteira({ mes, aoMudarMes, aoAbrirLancamento }: TelaPro
   const lancamentosCofrinho = lancamentosDoCofrinhoVirtual(todosLancamentos, categoriaPorId)
   /* Build 099: o cofrinho virtual tem os DOIS números (real × com comprometido),
      como todo card — ver `totaisCarteira.ts`. `saldoCofrinho` (o real) é o que
-     o informe de saldo compara. */
-  const totalCofrinho = totalDoLugar(undefined, lancamentosCofrinho, mes, todosLancamentos, categoriaPorId)
+     o informe de saldo compara.
+     Build 100: ANCORADO no último saldo informado, quando existe — ver
+     `ancorarNoInformado`. */
+  const totalCofrinho = ancorarNoInformado(
+    totalDoLugar(undefined, lancamentosCofrinho, mes, todosLancamentos, categoriaPorId),
+    lancamentosCofrinho,
+    informes.get(COFRINHO_VIRTUAL_ID),
+    mes,
+  )
   const saldoCofrinho = totalCofrinho.real
 
   if (selecionado !== null) {
@@ -148,6 +165,7 @@ export default function Carteira({ mes, aoMudarMes, aoAbrirLancamento }: TelaPro
         contasDisponiveis={todasContas}
         grupos={grupos}
         todosLancamentos={todosLancamentos}
+        informes={informes}
       />
     )
   }
@@ -161,7 +179,9 @@ export default function Carteira({ mes, aoMudarMes, aoAbrirLancamento }: TelaPro
     /* `todosLancamentos!`/`categorias!`: o guard de carregamento já garantiu,
        mas o TS não propaga o narrowing pra dentro de função aninhada. */
     const doLugar = todosLancamentos!.filter((l) => l.contaId === conta.id)
-    return totalDoLugar(conta, doLugar, mes, todosLancamentos!, categoriaPorId)
+    const t = totalDoLugar(conta, doLugar, mes, todosLancamentos!, categoriaPorId)
+    // Build 100: conta tipo cofre também ancora no último saldo informado.
+    return conta.tipo === 'cofre' ? ancorarNoInformado(t, doLugar, informes.get(conta.id!), mes) : t
   }
 
   const linhasCarteira: ExportRow[] = [
@@ -323,34 +343,48 @@ function FechamentoDaLista({
 }: {
   itensPeriodo: { valor: number }[]
   rotuloTotal: string
-  /** `undefined` = cartão ou período (não mostra as linhas acumuladas). */
+  /** `undefined` = período (não mostra as linhas de baixo).
+      Build 100: em MODO SELEÇÃO chega um `total` sintético (só dos itens
+      marcados), sem `saldoAnterior` — por isso essa linha ficou separada das
+      outras duas logo abaixo: elas aparecem sempre que existe QUALQUER
+      `total`, a de saldo anterior só quando ele existe de verdade. */
   total?: TotalDoLugar
   /* Build 094 (item 3): o total da FATURA vem de `totalDoLugar`, o mesmo
      número (e o mesmo sinal) do card de fora e do card de quitação. */
   totalForcado?: number
 }) {
+  const modoSelecao = total?.saldoAnterior === undefined
   return (
     <div className="total-geral" data-testid="fechamento-lista">
       <TotaisEntradaSaida itens={itensPeriodo} total={totalForcado} rotulos={{ entrada: 'Entrada', saida: 'Saída', total: rotuloTotal }} />
-      {total && total.saldoAnterior !== undefined && (
+      {total && (
         <>
           {/* Build 099: as MESMAS duas linhas do card de fora — o real (só o
               que já aconteceu) em destaque e o "com comprometido" abaixo, com
               menos. É isso que faz o de dentro bater com o de fora: os dois
-              leem `totalDoLugar`. */}
-          <div className="linha" style={{ border: 'none', padding: '8px 0 0', borderTop: '1px solid var(--borda)', marginTop: 8 }}>
-            <span className="texto-fraco">Saldo do mês anterior (real)</span>
-            <strong data-testid="saldo-mes-anterior">{fmtBRLComSinal(total.saldoAnteriorReal ?? total.saldoAnterior)}</strong>
-          </div>
-          <div className="linha" style={{ border: 'none', padding: '4px 0 0' }}>
-            <span>Total real (já executado)</span>
+              leem `totalDoLugar`.
+              Build 100: em modo seleção não existe "saldo do mês anterior"
+              (não faz sentido pra um recorte arbitrário de itens marcados) —
+              só ela sai; real/comprometido continuam, agora "dos
+              selecionados". */}
+          {!modoSelecao && (
+            <div className="linha" style={{ border: 'none', padding: '8px 0 0', borderTop: '1px solid var(--borda)', marginTop: 8 }}>
+              <span className="texto-fraco">Saldo do mês anterior (real)</span>
+              <strong data-testid="saldo-mes-anterior">{fmtBRLComSinal(total.saldoAnteriorReal ?? total.saldoAnterior!)}</strong>
+            </div>
+          )}
+          <div className="linha" style={{ border: 'none', padding: modoSelecao ? '8px 0 0' : '4px 0 0', borderTop: modoSelecao ? '1px solid var(--borda)' : undefined, marginTop: modoSelecao ? 8 : undefined }}>
+            <span>Total real{modoSelecao ? ' (selecionados)' : ' (já executado)'}</span>
             <strong className={total.real >= 0 ? 'valor-pos' : 'valor-neg'} style={{ fontSize: 16 }} data-testid="total-acumulado">
               {fmtBRLComSinal(total.real)}
             </strong>
           </div>
-          <div className="linha" style={{ border: 'none', padding: '2px 0 0' }}>
-            <span className="texto-fraco">Com comprometido (a pagar/a receber)</span>
-            <span className="texto-fraco" data-testid="total-comprometido">{fmtBRLComSinal(total.valor)}</span>
+          <div className="linha linha-total-card" style={{ border: 'none', padding: '2px 0 0' }}>
+            <span className="linha-total-rotulo texto-fraco">
+              Total aplicando o comprometido{modoSelecao ? ' (selecionados)' : ''}
+              <BotaoAjuda texto={AJUDA_COMPROMETIDO} />
+            </span>
+            <span className="linha-total-valor texto-fraco" data-testid="total-comprometido">{fmtBRLComSinal(total.valor)}</span>
           </div>
         </>
       )}
@@ -380,21 +414,42 @@ function DoisTotais({
   situacao: SituacaoFatura | null
 }) {
   if (tipo === 'cartao') {
+    /* Build 100 (18/09/2026), pedido do Rafael: tarja "Pago" AZUL quando
+       100% ou mais da fatura está pago, tarja vermelha quando 0% — e, sempre
+       que existe ALGUM pagamento mas ainda não fechou 100%, uma linha extra
+       com o que já foi pago (azul) e o que falta (vermelho). `quitada` já
+       soma o resíduo da fatura anterior (é a mesma régua do card de
+       quitação, "Falta pagar" que virou "Faltante" na Decisão 120). */
+    const mostraStatus =
+      situacao && (situacao.itens.length > 0 || situacao.pagamentos.length > 0 || Math.abs(situacao.residuoAnterior) >= 0.005)
+    const totalmentePago = !!situacao?.quitada
+    const nadaPago = !!situacao && situacao.pago <= 0.005
+    const parcialmentePago = !!situacao && !totalmentePago && !nadaPago
     return (
       <div className="card-dois-totais">
         <span className="texto-fraco" data-testid="card-periodo-fatura">
           Já na fatura{janela ? ` · de ${formatarDataCurta(janela.inicio)} a ${formatarDataCurta(janela.fim)}` : ''}
           {diaVencimento ? ` · vence dia ${diaVencimento}` : ''}
         </span>
-        <span className="texto-fraco card-total-comprometido" data-testid="card-total-comprometido">
-          Fatura inteira {fmtBRL(comprometido)}
-          {situacao && Math.abs(comprometido - real) < 0.005 ? '' : ' (com o que ainda vai cair)'}
+        <span className="linha-total-card">
+          <span className="linha-total-rotulo texto-fraco">
+            Fatura inteira{situacao && Math.abs(comprometido - real) >= 0.005 ? ' (com o que ainda vai cair)' : ''}
+          </span>
+          <span className="linha-total-valor texto-fraco" data-testid="card-total-comprometido">{fmtBRL(comprometido)}</span>
         </span>
-        {situacao && (situacao.itens.length > 0 || situacao.pagamentos.length > 0 || Math.abs(situacao.residuoAnterior) >= 0.005) && (
-          <span className={situacao.quitada ? 'valor-pos card-status-fatura' : 'valor-neg card-status-fatura'} data-testid="card-status-fatura">
-            {situacao.quitada
-              ? 'Fatura paga'
-              : `Falta pagar ${fmtBRL(situacao.restante)}${Math.abs(situacao.residuoAnterior) >= 0.005 ? ' (com o resíduo anterior)' : ''}`}
+        {mostraStatus && (totalmentePago || nadaPago) && (
+          <span className={`tarja-fatura-status ${totalmentePago ? 'tarja-fatura-azul' : 'tarja-fatura-vermelha'}`} data-testid="card-status-fatura">
+            {totalmentePago ? 'Pago' : 'Não pago'}
+          </span>
+        )}
+        {mostraStatus && parcialmentePago && (
+          <span className="linha-total-card" data-testid="card-pago-a-pagar">
+            <span className="linha-total-rotulo">
+              Pago <strong className="linha-total-valor valor-azul" data-testid="card-fatura-pago">{fmtBRL(situacao!.pago)}</strong>
+            </span>
+            <span className="linha-total-rotulo">
+              A pagar <strong className="linha-total-valor valor-neg" data-testid="card-fatura-a-pagar">{fmtBRL(Math.max(situacao!.restante, 0))}</strong>
+            </span>
           </span>
         )}
       </div>
@@ -403,8 +458,12 @@ function DoisTotais({
   return (
     <div className="card-dois-totais">
       <span className="texto-fraco">Total real (já executado)</span>
-      <span className="texto-fraco card-total-comprometido" data-testid="card-total-comprometido">
-        Com comprometido {fmtBRLComSinal(comprometido)}
+      <span className="linha-total-card">
+        <span className="linha-total-rotulo texto-fraco">
+          Total aplicando o comprometido
+          <BotaoAjuda texto={AJUDA_COMPROMETIDO} />
+        </span>
+        <span className="linha-total-valor texto-fraco" data-testid="card-total-comprometido">{fmtBRLComSinal(comprometido)}</span>
       </span>
     </div>
   )
@@ -438,6 +497,7 @@ function DetalheConta({
   todosLancamentos,
   saldoCofrinho,
   comprometidoCofrinho,
+  informes,
 }: {
   titulo: string
   conta?: Conta
@@ -458,6 +518,8 @@ function DetalheConta({
   contaPorId: Map<number, Conta>
   contasDisponiveis: Conta[]
   todosLancamentos: Lancamento[]
+  /** Build 100: informe de saldo de cada conta, pra ancorar o total de conta tipo cofre. */
+  informes: Map<number, InformeSaldo>
 }) {
   const isCartao = conta?.tipo === 'cartao'
 
@@ -533,10 +595,16 @@ function DetalheConta({
      pessoa), então a conta continua local: `totalDoLugar` só conhece mês. */
   /* Build 099: no modo MÊS o fechamento mostra os DOIS números do card
      (real × com comprometido) — o objeto inteiro de `totalDoLugar`. No modo
-     PERÍODO (janela escolhida à mão) as linhas acumuladas não aparecem. */
-  const totalDoMes = isCartao || modoPeriodo
+     PERÍODO (janela escolhida à mão) as linhas acumuladas não aparecem.
+     Build 100: conta tipo cofre (+ cofrinho virtual) ancora no informado —
+     a MESMA regra do card de fora, pra os dois nunca discordarem. */
+  const isCofre = !conta || conta.tipo === 'cofre'
+  const totalDoMesBruto = isCartao || modoPeriodo
     ? undefined
     : totalDoLugar(conta, lancamentosDoLugar, mes, todosLancamentos, categoriaPorId)
+  const totalDoMes = totalDoMesBruto && isCofre
+    ? ancorarNoInformado(totalDoMesBruto, lancamentosDoLugar, informes.get(conta?.id ?? COFRINHO_VIRTUAL_ID), mes)
+    : totalDoMesBruto
   const saldoAnterior = totalDoMes?.saldoAnterior
 
   const doPeriodoFiltrado = aplicarFiltros(doPeriodoBruto, busca, filtros, categoriaPorId, contaPorId)
@@ -561,6 +629,21 @@ function DetalheConta({
   const selecao = useSelecao(doPeriodo.map((l) => l.id!).filter(Boolean))
   const blocos = blocosPorCorte(doPeriodo, ordemDesc).map((b) => ({ ...b, sessoes: agrupar(b.itens) }))
   const sessoes = blocos.flatMap((b) => b.sessoes)
+
+  /* Build 100 (18/09/2026) — o total sintético de MODO SELEÇÃO: só dos itens
+     marcados, sem saldo anterior (não existe pra um recorte arbitrário). O
+     `rotulo`/`doMes` não são lidos por `FechamentoDaLista` neste modo —
+     ficam só pra fechar o tipo `TotalDoLugar`. */
+  const itensSelecionados = selecao.ativa ? doPeriodo.filter((l) => selecao.marcados.has(l.id!)) : []
+  const totalSelecao: TotalDoLugar | undefined =
+    selecao.ativa && itensSelecionados.length > 0
+      ? {
+          rotulo: 'Selecionados',
+          valor: itensSelecionados.reduce((s, l) => s + l.valor, 0),
+          real: itensSelecionados.filter(jaAconteceu).reduce((s, l) => s + l.valor, 0),
+          doMes: 0,
+        }
+      : undefined
 
   function linhaDe(l: Lancamento) {
     // Item 11 (15/09/2026): o drill-in de conta ganhou o mesmo gesto de
@@ -834,15 +917,34 @@ function DetalheConta({
             era só "tem lançamento": uma conta parada mostrava o total no card
             de fora (ex.: −R$ 52,00) e NADA aqui dentro — o caso mais extremo
             de "o de fora não bate com o de dentro". No cartão nada muda: sem
-            compras no ciclo não há fatura nem saldo acumulado a mostrar. */}
-        {(doPeriodoBruto.length > 0 || saldoAnterior !== undefined) && !selecao.ativa && (
+            compras no ciclo não há fatura nem saldo acumulado a mostrar.
+            Build 100 (18/09/2026), pedido do Rafael: o MESMO conjunto (3
+            colunas + real + comprometido) também aparece em MODO SELEÇÃO,
+            totalizando só os marcados — em toda conta, inclusive cofrinho e
+            fatura. `totalSelecao` é sintético (sem saldo anterior, que não
+            existe pra um recorte arbitrário — ver `FechamentoDaLista`). */}
+        {(doPeriodoBruto.length > 0 || saldoAnterior !== undefined || (selecao.ativa && itensSelecionados.length > 0)) && (
           <div style={{ padding: '8px 0 10px' }}>
             <FechamentoDaLista
-              itensPeriodo={doPeriodoBruto}
-              rotuloTotal={rotuloTotal}
-              total={totalDoMes}
-              totalForcado={fatura ? fatura.total : undefined}
+              itensPeriodo={selecao.ativa ? itensSelecionados : doPeriodoBruto}
+              rotuloTotal={selecao.ativa ? `Selecionados (${itensSelecionados.length})` : rotuloTotal}
+              total={selecao.ativa ? totalSelecao : totalDoMes}
+              totalForcado={!selecao.ativa && fatura ? fatura.total : undefined}
             />
+            {/* Build 100, pedido do Rafael: uma linha "A Pagar" também no
+                fechamento de baixo da fatura (o topo já tem "Faltante", no
+                card de quitação) — mesmo número, `fatura.restante`, nunca uma
+                segunda conta. Só fora do modo seleção (dentro dele o "a
+                pagar" de um recorte arbitrário de compras não tem uma conta
+                única, já que quem paga é a fatura inteira, não a compra). */}
+            {isCartao && !selecao.ativa && fatura && (
+              <div className="linha" style={{ border: 'none', padding: '2px 0 0' }}>
+                <span>A pagar</span>
+                <strong className={fatura.restante > 0.005 ? 'valor-neg' : 'valor-pos'} style={{ fontSize: 16 }} data-testid="fechamento-a-pagar">
+                  {fatura.restante < -0.005 ? `−${fmtBRL(Math.abs(fatura.restante))} (crédito)` : fmtBRL(Math.max(fatura.restante, 0))}
+                </strong>
+              </div>
+            )}
           </div>
         )}
       </div>

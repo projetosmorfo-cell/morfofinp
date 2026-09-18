@@ -1,34 +1,52 @@
-/* PRIMEIRO ACESSO ISOLADO (build 092, 17/09/2026).
+/* PRIMEIRO ACESSO ISOLADO (build 092, 17/09/2026; reformulado na build 100,
+ * 18/09/2026).
  *
- * Pedido do Rafael, literal: "Quando é o primeiro acesso o passo a passo, no
- * primeiro passo leva pra tela de planejamento e lá não tem o que ser feito,
- * deveria abrir a tela de categoria 'Salário' já marcada como fixo e uma
- * mensagem somente nesse primeiro acesso deve orientar que tem que ter uma
- * receita fixa, informar que ainda que ela varie a cada mês, pra poder seguir
- * pro próximo passo, ao gravar aí deve ir pra tela de edição dos grupos e
- * categorias e metas, ao terminar aí deve ir pra tela de Planejamento, isso
- * deve abrir sempre isolado, sem opção de sair, enquanto não atender esses
- * passos mínimos isolados não libera o resto do app".
+ * Pedido original do Rafael, literal: "Quando é o primeiro acesso o passo a
+ * passo, no primeiro passo leva pra tela de planejamento e lá não tem o que
+ * ser feito, deveria abrir a tela de categoria 'Salário' já marcada como
+ * fixo e uma mensagem somente nesse primeiro acesso deve orientar que tem
+ * que ter uma receita fixa, informar que ainda que ela varie a cada mês, pra
+ * poder seguir pro próximo passo, ao gravar aí deve ir pra tela de edição
+ * dos grupos e categorias e metas, ao terminar aí deve ir pra tela de
+ * Planejamento, isso deve abrir sempre isolado, sem opção de sair, enquanto
+ * não atender esses passos mínimos isolados não libera o resto do app".
  *
  * O que era antes: as boas-vindas mandavam pra tela Hoje, onde um cartão de 3
  * passos tinha um botão "fazer" que abria o PLANEJAMENTO — tela que mostra
  * resultado, não cadastro. A pessoa chegava lá sem nada pra fazer.
  *
- * O que é agora — TRÊS passos (build 096), um de cada vez, ocupando o app
- * inteiro:
+ * Build 100 (18/09/2026), escolha P2 da proposta de 18/09/2026 ("Parte A =
+ * P2"): o passo 3 antigo (Grupos e Categorias numa tela só, de duas abas)
+ * virou DOIS passos — um assunto por tela, igual ao resto do fluxo. E "os
+ * passos precisam ter opção de voltar pro passo anterior tbm em TODOS ele" —
+ * antes só existia Voltar de fato no passo 1→2 (pela ação de quem chama);
+ * dentro das telas de Contas e Categorias/Grupos o botão ficava escondido em
+ * modo primeiro acesso. Agora todo passo (a partir do 2º) tem Voltar de
+ * verdade. Também: edição, inclusão e inativação de Grupos e Categorias
+ * durante o passo a passo — isso já funcionava (as telas reaproveitadas não
+ * bloqueiam CRUD em modo primeiro acesso), só não estava documentado aqui.
+ *
+ * QUATRO passos agora, um de cada vez, ocupando o app inteiro:
  *
  *     PASSO 1  o cadastro da categoria de receita fixa (a "Salário" já
  *              existente, ou uma nova com esse nome), com a flag de receita
  *              fixa marcada e a mensagem de por que ela precisa existir.
- *              Gravar só é possível com valor > 0 e a flag ligada.
- *     PASSO 2  a própria tela "Contas e Carteiras", em modo primeiro acesso —
+ *              Gravar só é possível com valor > 0 e a flag ligada. Sem
+ *              Voltar — é o primeiro passo, não existe passo anterior.
+ *     PASSO 2  a tela "Grupos e Metas" (aba `gruposMetas` de `Categorias`,
+ *              sozinha — `somenteAba`), com CRUD completo de grupo e a
+ *              calibragem dos percentuais (pré-preenchidos 50/30/20 pelo
+ *              padrão de fábrica desde a semente inicial — `seed.ts` — e
+ *              livres pra editar aqui e depois em Configurações). Libera
+ *              com os percentuais somando 100%.
+ *     PASSO 3  a própria tela "Contas e Carteiras", em modo primeiro acesso —
  *              onde o dinheiro está, com SALDO INICIAL e data de cada conta.
  *              (build 096, pedido do Rafael: "abrir tela pra informar saldo
  *              inicial e data após ou junto com cadastro de contas".)
- *     PASSO 3  a própria tela "Grupos, Categorias e Metas", em modo primeiro
- *              acesso (sem "Voltar", com o botão "Concluir e ir para o
- *              Planejamento" no rodapé, liberado só quando os percentuais
- *              dos grupos somam 100% e a receita fixa continua válida).
+ *     PASSO 4  a tela "Categorias e Metas" (aba `categorias`, sozinha), com
+ *              CRUD completo de categoria. Tem "Pular esta etapa" (ajustar
+ *              categoria por categoria pode ficar pra depois) e "Concluir e
+ *              ir para o Planejamento" — os dois levam ao mesmo lugar.
  *     FIM      grava `primeiroAcessoConcluido` e o app abre no Planejamento.
  *
  * REFAZER QUANDO QUISER (build 096, mesmo pedido: "esse passo a passo, entendo
@@ -47,10 +65,11 @@
  * `undefined` NÃO abre o passo a passo: é o que impede um piscar pra quem já
  * tem plano.
  *
- * SEM SAÍDA, de propósito: não há rodapé, não há barra de marca, não há
- * "Voltar" no passo 2. A única porta é concluir. Quem quiser sair do app de
- * verdade fecha o app — e volta exatamente onde parou, porque a decisão de
- * entrar aqui é re-derivada do banco a cada abertura.
+ * SEM SAÍDA, de propósito: não há rodapé, não há barra de marca. A única
+ * porta pra fora é concluir (ou pular, no último passo). Quem quiser sair do
+ * app de verdade fecha o app — e volta exatamente onde parou, porque a
+ * decisão de entrar aqui é re-derivada do banco a cada abertura. "Voltar"
+ * dentro do passo a passo NUNCA sai dele — só troca de passo.
  */
 import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
@@ -116,7 +135,7 @@ function pendenciaDoPasso1(r: RascunhoCategoria): string | null {
 }
 
 export default function PrimeiroAcesso({ aoConcluir, aoSair }: { aoConcluir: () => void; aoSair?: () => void }) {
-  const [passo, setPasso] = useState<1 | 2 | 3>(1)
+  const [passo, setPasso] = useState<1 | 2 | 3 | 4>(1)
   const mes = mesAtualISO()
 
   /* A saída só existe quando o passo a passo foi reaberto pela Ajuda — no
@@ -147,13 +166,45 @@ export default function PrimeiroAcesso({ aoConcluir, aoSair }: { aoConcluir: () 
     return (
       <main data-testid="primeiro-acesso" data-passo="2">
         {saida}
-        <Contas aoVoltar={() => setPasso(1)} primeiroAcesso={{ aoConcluir: () => setPasso(3) }} />
+        <Categorias
+          mes={mes}
+          aoMudarMes={() => {}}
+          aoAbrirLancamento={() => {}}
+          aoAbrirPlanejamento={() => {}}
+          aoVoltar={() => {}}
+          primeiroAcesso={{
+            aoConcluir: () => setPasso(3),
+            aoVoltar: () => setPasso(1),
+            somenteAba: 'gruposMetas',
+            passoAtual: 2,
+            totalPassos: 4,
+            rotuloConcluir: 'Continuar para o passo 3',
+          }}
+        />
+      </main>
+    )
+  }
+
+  if (passo === 3) {
+    return (
+      <main data-testid="primeiro-acesso" data-passo="3">
+        {saida}
+        <Contas
+          aoVoltar={() => setPasso(2)}
+          primeiroAcesso={{
+            aoConcluir: () => setPasso(4),
+            aoVoltar: () => setPasso(2),
+            passoAtual: 3,
+            totalPassos: 4,
+            rotuloConcluir: 'Continuar para o passo 4',
+          }}
+        />
       </main>
     )
   }
 
   return (
-    <main data-testid="primeiro-acesso" data-passo="3">
+    <main data-testid="primeiro-acesso" data-passo="4">
       {saida}
       <Categorias
         mes={mes}
@@ -161,7 +212,14 @@ export default function PrimeiroAcesso({ aoConcluir, aoSair }: { aoConcluir: () 
         aoAbrirLancamento={() => {}}
         aoAbrirPlanejamento={() => {}}
         aoVoltar={() => {}}
-        primeiroAcesso={{ aoConcluir }}
+        primeiroAcesso={{
+          aoConcluir,
+          aoVoltar: () => setPasso(3),
+          somenteAba: 'categorias',
+          passoAtual: 4,
+          totalPassos: 4,
+          aoPular: aoConcluir,
+        }}
       />
     </main>
   )
@@ -237,7 +295,7 @@ function FormularioReceitaFixa({
       <div className="cabecalho-fixo">
         <h1>Primeiro acesso</h1>
         <p className="ideal-t4" style={{ margin: '4px 0 0', color: 'var(--azul)', fontWeight: 600 }} data-testid="primeiro-acesso-passo">
-          Passo 1 de 3 — sua receita fixa
+          Passo 1 de 4 — sua receita fixa
         </p>
       </div>
 

@@ -41,9 +41,17 @@
  */
 import { liveQuery } from 'dexie'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { db } from './db'
+import { db, type Categoria, type Conta, type Lancamento } from './db'
+import { dataVencimentoFatura, mesFaturaDoLancamento, situacaoDaFatura, DIA_FECHAMENTO_PADRAO } from './faturaCiclo'
+import { hojeEfetivoISO } from './hojeSimulado'
 
 let cartoesCache: ReadonlySet<number> = new Set<number>()
+/* Build 100 (18/09/2026) — cache das CONTAS inteiras (não só o `Set` de ids),
+   pra `faturaVencidaENaoPaga` conseguir ler `diaFechamento`/`diaVencimento`
+   sem precisar de prop nenhuma — mesmo padrão síncrono do cache acima. */
+let contasCache: readonly Conta[] = []
+let categoriasCache: readonly Categoria[] = []
+let lancamentosCache: readonly Lancamento[] = []
 
 function montar(contas: { id?: number; tipo?: string }[]): ReadonlySet<number> {
   const s = new Set<number>()
@@ -54,6 +62,7 @@ function montar(contas: { id?: number; tipo?: string }[]): ReadonlySet<number> {
 liveQuery(() => db.contas.toArray()).subscribe({
   next: (contas) => {
     cartoesCache = montar(contas)
+    contasCache = contas
   },
   error: (erro) => {
     // Nunca deixa o app quebrar por causa disso — no pior caso o status volta
@@ -62,9 +71,46 @@ liveQuery(() => db.contas.toArray()).subscribe({
   },
 })
 
+liveQuery(() => db.categorias.toArray()).subscribe({
+  next: (categorias) => { categoriasCache = categorias },
+  error: (erro) => console.error('contasCartao: falha sincronizando categorias', erro),
+})
+
+liveQuery(() => db.lancamentos.toArray()).subscribe({
+  next: (lancamentos) => { lancamentosCache = lancamentos },
+  error: (erro) => console.error('contasCartao: falha sincronizando lançamentos', erro),
+})
+
 /** Esta conta é um cartão de crédito? `undefined` (sem conta) nunca é. */
 export function ehContaDeCartao(contaId: number | undefined | null): boolean {
   return contaId != null && cartoesCache.has(contaId)
+}
+
+/* Build 100 (18/09/2026) — a fatura de UM lançamento de cartão já VENCEU
+   (passou o dia de pagamento) e segue sem estar 100% paga? `statusDoLancamento`
+   usa isso pra escolher entre "No cartão" (dentro do prazo — o normal) e
+   "Vencido" (igual a qualquer outro pendente que passou da data), pedido do
+   Rafael: *"quando passado a data de pagamento da fatura mudar pra Vencido
+   igual aos demais"*. Mesmo cache síncrono de `ehContaDeCartao` — recalcula
+   com `situacaoDaFatura` (a MESMA função da Carteira), nunca uma segunda
+   regra de "pagou ou não" escrita aqui. */
+export function faturaVencidaENaoPaga(contaId: number, mesFatura: string): boolean {
+  const conta = contasCache.find((c) => c.id === contaId)
+  if (!conta || conta.tipo !== 'cartao' || !conta.diaVencimento) return false
+  const vencimento = dataVencimentoFatura(conta, mesFatura)
+  if (!vencimento || hojeEfetivoISO() <= vencimento) return false
+  const categoriaPorId = new Map(categoriasCache.map((c) => [c.id!, c]))
+  const situacao = situacaoDaFatura(lancamentosCache as Lancamento[], categoriaPorId, conta, mesFatura)
+  return !situacao.quitada
+}
+
+/** O mês de fatura efetivo de um lançamento de cartão, lendo `diaFechamento`
+    do cache — pra quem só tem o lançamento (ex.: `statusDoLancamento`) e não
+    quer carregar a conta inteira por prop. */
+export function mesFaturaDoLancamentoPeloCache(l: Pick<Lancamento, 'contaId' | 'dataCompetencia' | 'faturaOverride'>): string | null {
+  const conta = contasCache.find((c) => c.id === l.contaId)
+  if (!conta) return null
+  return mesFaturaDoLancamento(conta.diaFechamento ?? DIA_FECHAMENTO_PADRAO, l)
 }
 
 /**

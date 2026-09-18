@@ -25,6 +25,14 @@ import { db } from '../db'
 import { lerDoAmbiente, marcaDoAmbiente } from '../ambiente'
 import { hojeEfetivoISO } from '../hojeSimulado'
 import { fmtBRL, aplicarMascaraValor, paraNumero, formatarMoeda } from '../formatoMoeda'
+import BotaoAjuda from './BotaoAjuda'
+
+/* Build 100 (18/09/2026) — o mesmo texto do "ⓘ" que a Carteira usa pra
+   "Total aplicando o comprometido" (ver `Carteira.tsx`) — duplicado aqui de
+   propósito: importar de `screens/Carteira.tsx` puxaria a tela inteira pra
+   dentro de um componente que hoje não depende dela. */
+const AJUDA_COMPROMETIDO =
+  'O que ainda não aconteceu: lançamentos já cadastrados que faltam pagar ou receber. Somado ao total real, dá este número — ex.: uma conta que vence dia 20, se hoje é dia 10, já entra aqui mesmo sem ter saído do banco ainda.'
 
 /** Depois de quantos dias o informe é considerado velho (fica em âmbar). */
 const DIAS_PARA_ENVELHECER = 45
@@ -57,24 +65,44 @@ export interface InformeSaldo {
   velho: boolean
 }
 
-/** Último saldo informado de uma conta (ou do cofrinho virtual). */
-export function useUltimoInforme(contaId: number): InformeSaldo | null {
-  const registros = useLiveQuery(() => lerDoAmbiente(db.saldosInformados.toArray()), [])
+/** Monta o último informe de uma conta a partir da tabela inteira já lida
+    (nunca busca no banco de novo — ver `useUltimosInformesPorConta`). */
+function construirUltimoInforme(
+  registros: { contaId: number; dataReferencia: string; saldoInformado: number }[] | undefined,
+  contaId: number,
+): InformeSaldo | null {
   if (!registros) return null
   const daConta = registros
     .filter((r) => r.contaId === contaId)
     .sort((a, b) => b.dataReferencia.localeCompare(a.dataReferencia))
   const ultimo = daConta[0]
   if (!ultimo) return null
-  // dataReferencia é `AAAAMMDD` desde esta tela; registros antigos podem ser
-  // `AAAAMM` — normaliza para uma data completa antes de comparar.
-  const bruto = ultimo.dataReferencia
-  const data =
-    bruto.length >= 8
-      ? `${bruto.slice(0, 4)}-${bruto.slice(4, 6)}-${bruto.slice(6, 8)}`
-      : `${bruto.slice(0, 4)}-${bruto.slice(4, 6)}-01`
+  const data = dataDoInforme(ultimo.dataReferencia)
   const dias = diasEntre(data, hojeEfetivoISO())
   return { valor: ultimo.saldoInformado, data, dias, velho: dias >= DIAS_PARA_ENVELHECER }
+}
+
+/** Último saldo informado de uma conta (ou do cofrinho virtual). */
+export function useUltimoInforme(contaId: number): InformeSaldo | null {
+  const registros = useLiveQuery(() => lerDoAmbiente(db.saldosInformados.toArray()), [])
+  return construirUltimoInforme(registros, contaId)
+}
+
+/* Build 100 (18/09/2026) — a MESMA busca, mas para TODAS as contas de uma
+   vez (um `Map<contaId, InformeSaldo>`), numa `useLiveQuery` só. A Carteira
+   precisa do informe de cada conta tipo cofre (e do cofrinho virtual) pra
+   ancorar o total nele (`ancorarNoInformado`, `totaisCarteira.ts`) — chamar
+   `useUltimoInforme` dentro de um `.map()` de contas violaria a regra de
+   hooks (a lista de contas pode mudar de tamanho entre renders). */
+export function useUltimosInformesPorConta(): Map<number, InformeSaldo> {
+  const registros = useLiveQuery(() => lerDoAmbiente(db.saldosInformados.toArray()), [])
+  const idsComInforme = new Set((registros ?? []).map((r) => r.contaId))
+  const out = new Map<number, InformeSaldo>()
+  for (const id of idsComInforme) {
+    const v = construirUltimoInforme(registros, id)
+    if (v) out.set(id, v)
+  }
+  return out
 }
 
 /**
@@ -337,8 +365,14 @@ export default function SaldoDoCofrinho({
       <div className="card-dois-totais">
         <span className="texto-fraco">Total real (já executado)</span>
         {comprometido != null && (
-          <span className="texto-fraco card-total-comprometido" data-testid="card-total-comprometido">
-            Com comprometido {comprometido < 0 ? '−' : ''}{fmtBRL(Math.abs(comprometido))}
+          <span className="linha-total-card">
+            <span className="linha-total-rotulo texto-fraco">
+              Total aplicando o comprometido
+              <BotaoAjuda texto={AJUDA_COMPROMETIDO} />
+            </span>
+            <span className="linha-total-valor texto-fraco" data-testid="card-total-comprometido">
+              {comprometido < 0 ? '−' : ''}{fmtBRL(Math.abs(comprometido))}
+            </span>
           </span>
         )}
       </div>

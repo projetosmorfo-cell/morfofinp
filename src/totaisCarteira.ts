@@ -125,6 +125,51 @@ export function totalDoLugar(
 }
 
 /**
+ * Build 100 (18/09/2026) — ANCORAR o total no último saldo INFORMADO, quando
+ * existe. Pedido do Rafael, com print: o card do Cofrinho mostrava "Total
+ * real" pelos lançamentos (R$ 3.342,40) mesmo logo depois de ele informar
+ * R$ 6.110,44 — *"deveria mostrar o total = o lançamento que eu fiz"*. A
+ * diferença entre os dois normalmente NÃO é erro: é rendimento — o cofrinho
+ * nunca lança rendimento (ver cabeçalho de `SaldoDoCofrinho.tsx`), então ele
+ * só entra no app quando a pessoa confere o saldo real e informa.
+ *
+ * O modelo que o Rafael descreveu é o de uma conta corrente de verdade:
+ * saldo-base + os lançamentos de depois. Só que aqui a "data inicial" não é
+ * fixa (`conta.saldoInicial`, só na criação) — é o último informe, atualizado
+ * toda vez que ele confere. Por isso: `real` = informado + o que aconteceu
+ * DEPOIS da data do informe (só o já realizado); `valor` (com comprometido) =
+ * informado + tudo que está lançado depois dele, realizado ou não.
+ *
+ * `saldoAnterior`/`saldoAnteriorReal`/`doMes` NÃO mudam aqui — continuam a
+ * leitura pura do razão (quanto o mês moveu), que é outra pergunta.
+ *
+ * Só ancora quando o informe é de ANTES OU DENTRO do mês olhado — abrir um
+ * mês anterior ao informe não pode herdar um saldo que não existia ainda
+ * naquela época; nesse caso o total volta a ser o puro cálculo pelos
+ * lançamentos (o `total` recebido, sem alteração).
+ */
+export function ancorarNoInformado(
+  total: TotalDoLugar,
+  lancamentos: readonly Lancamento[],
+  checkpoint: { data: string; valor: number } | null | undefined,
+  mesISO: string,
+): TotalDoLugar {
+  if (!checkpoint) return total
+  const fim = fimDoMes(mesISO)
+  if (checkpoint.data > fim) return total
+  const soma = (lista: readonly Lancamento[]) => lista.reduce((s, l) => s + l.valor, 0)
+  // Lançamentos do MESMO DIA do informe contam como já refletidos nele (foi
+  // conferido "hoje" — o que já está lançado hoje já estava lá quando ele
+  // olhou o saldo no banco); só o que é de DEPOIS desse dia soma por cima.
+  const depois = lancamentos.filter((l) => l.dataCompetencia > checkpoint.data && l.dataCompetencia <= fim)
+  return {
+    ...total,
+    real: checkpoint.valor + soma(depois.filter(jaAconteceu)),
+    valor: checkpoint.valor + soma(depois),
+  }
+}
+
+/**
  * Os lançamentos do COFRINHO VIRTUAL, com o sinal na convenção do cofrinho:
  * aporte entra (+), gasto do cofrinho sai (−). Ver o cabeçalho do arquivo.
  */

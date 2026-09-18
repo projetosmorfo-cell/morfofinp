@@ -447,6 +447,15 @@ main .card-conta + .cartao.cartao-continuacao {
   white-space: nowrap;
 }
 
+/* Build 100 (18/09/2026) — valor em AZUL (o que já foi pago de uma fatura
+   parcial, ver `Carteira.tsx`/`DoisTotais`). Mesma família de `.valor-pos`/
+   `.valor-neg`, só a cor muda. */
+.valor-azul {
+  color: var(--azul);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 /* Build 091 (17/09/2026): nas LISTAS de lançamento o negativo é o caso
    normal (é uma lista de gastos) e fica NEUTRO — só a entrada é verde. O
    vermelho continua reservado ao "estourou"/"falta", que é alerta de verdade. */
@@ -1526,9 +1535,14 @@ nav.rodape {
   text-align: center;
 }
 
+/* Build 100 (18/09/2026), pedido do Rafael: "as tags 'Pago' e 'Recebido'
+   devem ter a cor clara neutra e fundo próximo tbm neutro" — deixaram de
+   ser verde (que agora é reservado pra "dinheiro entrando"/valores
+   positivos) e passaram a usar os MESMOS tokens neutros de texto/borda do
+   tema, então funcionam em claro e escuro sem número mágico novo. */
 .status-pill-pago {
-  background: rgba(34, 197, 94, 0.16);
-  color: var(--verde);
+  background: var(--borda);
+  color: var(--texto-fraco);
 }
 
 .status-pill-atrasado {
@@ -1618,8 +1632,89 @@ nav.rodape {
   margin-top: 4px;
   font-size: 12.5px;
 }
-.card-dois-totais > span { display: block; font-size: 12.5px; }
+/* Build 100 — exceto `.linha-total-card`: aquela precisa continuar `flex`
+   (rótulo + valor lado a lado, gap garantido) — ver comentário acima da
+   classe. Sem o `:not()`, esta regra (mais específica: classe + tag) vence
+   o `display: flex` de lá e apaga o espaço entre rótulo e valor por baixo
+   do ⓘ, mesmo com `gap` declarado — foi o que causou o bug do "ⓘR$…" colado. */
+.card-dois-totais > span:not(.linha-total-card) { display: block; font-size: 12.5px; }
 .card-dois-totais .card-status-fatura { font-weight: 600; margin-top: 2px; }
+
+/* Build 100 (18/09/2026) — tarja de status da FATURA no card da Carteira:
+   azul quando 100%+ pago, vermelha quando 0% pago (ver `DoisTotais`). Pílula
+   própria — não reaproveita `.status-pill` porque aquela é CLICÁVEL (alterna
+   pago/não-pago de um lançamento) e esta é só leitura. */
+.tarja-fatura-status {
+  display: inline-block;
+  align-self: flex-start;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 9px;
+  border-radius: 999px;
+  margin-top: 3px;
+}
+.tarja-fatura-azul {
+  background: rgba(59, 130, 246, 0.18);
+  color: var(--azul);
+}
+.tarja-fatura-vermelha {
+  background: rgba(239, 68, 68, 0.22);
+  color: var(--vermelho);
+}
+
+/* Build 100 (18/09/2026) — uma linha "rótulo + valor" que NUNCA quebra o
+   VALOR no meio (o Rafael reportou: "nunca deixar quebrar linha de valor,
+   hoje está quebrando" — no card de banco/cofrinho "Com comprometido R$…"
+   virava duas linhas partindo o número). O rótulo pode quebrar (é texto), o
+   valor não: `flex-wrap` deixa o valor cair pra uma linha nova INTEIRO
+   quando não cabe do lado do rótulo, em vez de partir os dígitos. */
+.linha-total-card {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 2px 8px;
+}
+.linha-total-rotulo {
+  flex: 1 1 140px;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.linha-total-valor {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* O ícone "ⓘ" (`BotaoAjuda.tsx`) — pequeno, discreto, não compete com o
+   texto do rótulo ao lado. A bolha é a mesma peça visual do popover de menu
+   (`.menu-linha-popover`), só mais estreita e sem lista de ações. */
+.botao-ajuda-wrap { display: inline-flex; }
+.botao-ajuda {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0 0 0 1px;
+  color: var(--texto-fraco);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.85;
+}
+.botao-ajuda:active { opacity: 1; }
+.botao-ajuda-bolha {
+  max-width: 260px;
+  background: var(--bg-elevado);
+  border: 1px solid var(--borda);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--texto);
+  box-shadow: var(--sombra-rio, 0 6px 16px rgba(0,0,0,0.25));
+}
 
 /* Totalizador geral — padrão visual único (30/08/2026) pra QUALQUER linha
    de fechamento/total em qualquer card do app (com ou sem barra de
@@ -2697,14 +2792,26 @@ html[data-mloc-tema="escuro"] body {
 
 /* Build 099 — a linha "presa" no dedo/ponteiro precisa GRITAR que está em
    arrasto (pedido do Rafael: "a cor da linha que está em arrasto deve ter
-   mais destaque"): fundo azul translúcido, borda azul, um leve levantar. */
+   mais destaque"): fundo azul translúcido, borda azul.
+   Build 100 (18/09/2026) — REGRESSÃO reportada por ele: "a cor ficou boa,
+   mas agora não está mais movendo (...) só demarca quando seguro, mas não
+   sai do lugar ao tentar mover". O `transform: scale(1.01)` que a 099
+   acrescentou pra dar "um leve levantar" saiu: este arquivo já documentou
+   TRÊS vezes (builds 090/092/093, ver cabeçalho do componente) o mesmo tipo
+   de sintoma — o gesto passa limpo no mouse e no toque SIMULADO (CDP), mas
+   quebra no Android real — sempre por algo que muda o toque/composição a
+   meio do gesto. `transform` promove o elemento a uma camada de composição
+   própria; mexer nisso NO MEIO do próprio drag (a classe liga e desliga a
+   cada frame que `moverPara()` roda) é exatamente esse tipo de mudança.
+   `position: relative` + `z-index` ficam (não mexem em composição/toque,
+   só decidem o que desenha por cima do quê — precisos pra a sombra não
+   ficar atrás da linha vizinha) e a cor continua igual de forte. */
 .linha-reordenavel.em-arrasto {
   opacity: 0.95;
   background: color-mix(in srgb, var(--azul) 22%, var(--bg-elevado));
   box-shadow: 0 0 0 2px var(--azul), 0 8px 20px rgba(0, 0, 0, 0.35);
   border-radius: 8px;
   cursor: grabbing;
-  transform: scale(1.01);
   position: relative;
   z-index: 2;
 }

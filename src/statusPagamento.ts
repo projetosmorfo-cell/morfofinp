@@ -1,6 +1,6 @@
 import type { Lancamento } from './db'
 import { hojeEfetivoISO } from './hojeSimulado'
-import { ehContaDeCartao } from './contasCartao'
+import { ehContaDeCartao, faturaVencidaENaoPaga, mesFaturaDoLancamentoPeloCache } from './contasCartao'
 
 // Situação de pagamento de um lançamento — derivada, nunca guardada como
 // rótulo (só o boolean `pago` é persistido; "atrasado" é calculado comparando
@@ -18,18 +18,42 @@ export type StatusPagamento =
      quem baixa é o botão "Pagar esta fatura", de uma vez. Ver o cabeçalho de
      `contasCartao.ts` para o porquê. */
   | 'no_cartao'
+  /* Build 100 (18/09/2026), pedido do Rafael: uma compra de cartão com data
+     FUTURA (ainda não aconteceu) nunca é "A pagar" — isso é o compromisso de
+     uma conta corrente, que a pessoa decide pagar ou não dia a dia. Um
+     cartão não: a compra já está decidida (foi feita), só ainda não entrou
+     na fatura. "A Faturar" — some sozinha assim que a data chega (vira "No
+     cartão") ou quando ele muda o status manualmente antes disso. */
+  | 'a_faturar'
+  /* Build 100: a fatura à qual esta compra pertence já passou do dia de
+     vencimento e segue sem estar 100% paga — vira pendência de verdade,
+     igual a qualquer outro atraso (ver `faturaVencidaENaoPaga`). */
+  | 'vencido_cartao'
 
 export function statusDoLancamento(
-  l: Pick<Lancamento, 'valor' | 'pago' | 'dataCompetencia' | 'contaId'>,
+  l: Pick<Lancamento, 'valor' | 'pago' | 'dataCompetencia' | 'contaId' | 'faturaOverride'>,
 ): StatusPagamento {
   const ehEntrada = l.valor >= 0
   const pago = l.pago !== false // undefined = pago (compat com lançamento antigo/importado)
-  if (pago) return ehEntrada ? 'recebido' : 'pago'
   const hoje = hojeEfetivoISO()
-  /* Cartão vem ANTES da checagem de atraso, de propósito: uma compra de ontem
-     não paga é exatamente o caso que aparecia em vermelho sem nada estar
-     atrasado. `<=` e não `<` — a compra de hoje também já aconteceu. */
-  if (ehContaDeCartao(l.contaId) && l.dataCompetencia <= hoje) return 'no_cartao'
+  const cartao = ehContaDeCartao(l.contaId)
+
+  if (cartao) {
+    /* Cartão nunca é "Pago"/"Recebido" no sentido de UM lançamento avulso —
+       quem se paga é a FATURA inteira, de uma vez (o botão "Pagar esta
+       fatura"). `pago === true` aqui não significa "dinheiro saiu": significa
+       "Rafael confirmou manualmente que isso já é real" — e pra cartão isso
+       é exatamente o que "No cartão" quer dizer, então uma marcação manual
+       (mesmo com data futura) entra direto em "No cartão", nunca em "Pago". */
+    if (pago || l.dataCompetencia <= hoje) {
+      const mesFatura = mesFaturaDoLancamentoPeloCache(l)
+      if (mesFatura && faturaVencidaENaoPaga(l.contaId, mesFatura)) return 'vencido_cartao'
+      return 'no_cartao'
+    }
+    return 'a_faturar'
+  }
+
+  if (pago) return ehEntrada ? 'recebido' : 'pago'
   if (l.dataCompetencia < hoje) return 'atrasado'
   return ehEntrada ? 'a_receber' : 'a_pagar'
 }
@@ -54,6 +78,8 @@ export const ROTULO_STATUS: Record<StatusPagamento, string> = {
   a_pagar: 'A pagar',
   a_receber: 'A receber',
   no_cartao: 'No cartão',
+  a_faturar: 'A faturar',
+  vencido_cartao: 'Vencido',
 }
 
 /* Fundo da linha — o que JÁ ACONTECEU × o que AINDA NÃO (13/09/2026).
@@ -76,6 +102,10 @@ export const FUNDO_STATUS: Record<StatusPagamento, string> = {
   a_receber: 'status-fundo-pendente',
   // já aconteceu — mesmo fundo de quem já saiu; o que muda é a tarja
   no_cartao: 'status-fundo-feito',
+  // Build 100: "A Faturar" usa o MESMO fundo amarelo de "A pagar" — é
+  // comprometido igual, só que a palavra é outra (ver comentário do tipo).
+  a_faturar: 'status-fundo-pendente',
+  vencido_cartao: 'status-fundo-atrasado',
 }
 
 export const CLASSE_STATUS: Record<StatusPagamento, string> = {
@@ -85,6 +115,10 @@ export const CLASSE_STATUS: Record<StatusPagamento, string> = {
   a_pagar: 'status-pill-pendente',
   a_receber: 'status-pill-pendente',
   no_cartao: 'status-pill-cartao',
+  // Build 100, pedido do Rafael: "com fundo (...) amarelo igual ao A Pagar"
+  // — MESMA classe/cor de "A pagar", só o texto muda ("A faturar").
+  a_faturar: 'status-pill-pendente',
+  vencido_cartao: 'status-pill-atrasado',
 }
 
 /* Build 090 (17/09/2026), pedido do Rafael: "a linha de data sempre deve ter

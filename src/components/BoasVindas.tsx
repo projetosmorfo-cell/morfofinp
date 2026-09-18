@@ -138,16 +138,21 @@ export default function BoasVindas({ aoComecar, planoPronto = false }: { aoComec
         />
         <Linha
           n={2}
+          titulo="Divida seu dinheiro em grupos"
+          texto="Como dividir a receita, por percentual — já vem sugerido 50% para o fixo, 30% para o variável e 20% para investir. Dá pra criar, editar ou ajustar os grupos aqui."
+        />
+        <Linha
+          n={3}
           titulo="Diga onde seu dinheiro está"
           texto="Conta do banco, cartão e cofrinho — com o saldo que já havia em cada um e desde quando. É isso que faz a Carteira bater com o banco."
         />
         <Linha
-          n={3}
-          titulo="Ajuste grupos, categorias e metas"
-          texto="Como dividir esse dinheiro, por percentual — já vem sugerido 50% para o fixo, 30% para o variável e 20% para investir."
+          n={4}
+          titulo="Ajuste categorias e metas"
+          texto="Cada categoria tem sua meta dentro do grupo — pode ajustar agora ou deixar pra depois, em Configurações."
         />
         <Linha
-          n={4}
+          n={5}
           titulo="O Planejamento abre e o app compara o real com o plano"
           texto="Todo dia, em dois números: o que está livre de verdade e o quanto ainda dá para economizar até o fim do mês."
         />
@@ -155,7 +160,7 @@ export default function BoasVindas({ aoComecar, planoPronto = false }: { aoComec
         <p className="ideal-t4 texto-quebra" style={{ margin: '18px 0 0' }} data-testid="boas-vindas-rodape">
           {planoPronto
             ? 'Seu plano já está montado — toque em Começar e o app abre direto.'
-            : 'Os passos 1, 2 e 3 são obrigatórios e vêm em seguida, um de cada vez. O resto do app só abre depois deles — e dá pra refazer quando quiser, em Configuração → Ajuda.'}
+            : 'Os passos 1, 2, 3 e 4 são obrigatórios e vêm em seguida, um de cada vez (o 4º dá pra pular). O resto do app só abre depois deles — e dá pra refazer quando quiser, em Configuração → Ajuda.'}
         </p>
       </div>
 

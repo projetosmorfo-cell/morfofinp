@@ -22,14 +22,11 @@ import {
 import MenuLinha from '../components/MenuLinha'
 import ConfirmacaoAcao from '../components/ConfirmacaoAcao'
 import { avaliarPassos } from '../components/PrimeirosPassos'
-import PacoteIconesN1 from '../components/PacoteIconesN1'
-import PreviaLista from '../components/PreviaLista'
-import ZoomFonteListas from '../components/ZoomFonteListas'
 import ModalCadastro from '../components/ModalCadastro'
 import { ROTULO_TIPO_GRUPO, comportamentoDoGrupo, gruposParaNatureza, tipoDoGrupo } from '../gruposUtil'
 import { fmtBRL, fmtNum, formatarMoeda, aplicarMascaraValor, paraNumero } from '../formatoMoeda'
 import { baseMetaDoMes, categoriasDaBaseMeta, EXPLICACAO_BASE_META } from '../baseMeta'
-import { useConfiguracaoIcones, tamanhoIconePx, salvarConfiguracaoIcones } from '../configuracaoIcones'
+import { useConfiguracaoIcones, tamanhoIconePx } from '../configuracaoIcones'
 import { lerDoAmbiente, marcaDoAmbiente } from '../ambiente'
 import {
   ICONES_PADRAO_CATEGORIA,
@@ -74,11 +71,15 @@ import {
 // "primeiro cadastra grupos e depois categorias" — e a tela passa a se
 // chamar "Grupos, Categorias e Metas". No primeiro acesso só existem as duas
 // abas de cadastro (Aparência e Padrão do app não são passo de ninguém).
-type AbaCategorias = 'categorias' | 'gruposMetas' | 'aparencia' | 'padrao'
+// Build 100 (18/09/2026), pedido do Rafael (escolha A1 da proposta de
+// 18/09/2026): a aba "Aparência" MUDOU DE CASA — virou entrada própria do
+// menu de Configuração (`src/screens/Aparencia.tsx`), porque não é cadastro
+// de lançamento, é preferência visual — não tem por que morar dentro da tela
+// de Grupos/Categorias. Fica só 3 abas aqui agora.
+type AbaCategorias = 'categorias' | 'gruposMetas' | 'padrao'
 const ABAS_CATEGORIAS: { valor: AbaCategorias; rotulo: string; primeiroAcesso: boolean }[] = [
   { valor: 'gruposMetas', rotulo: 'Grupos e Metas', primeiroAcesso: true },
   { valor: 'categorias', rotulo: 'Categorias e Metas', primeiroAcesso: true },
-  { valor: 'aparencia', rotulo: 'Aparência', primeiroAcesso: false },
   { valor: 'padrao', rotulo: 'Padrão do app', primeiroAcesso: false },
 ]
 
@@ -105,13 +106,34 @@ function mesAnteriorISO() {
 export default function Categorias(
   _props: TelaProps & {
     aoVoltar: () => void
-    /* Build 092 — PASSO 2 do primeiro acesso isolado (ver
-       `components/PrimeiroAcesso.tsx`): a MESMA tela, sem "Voltar" e sem o
-       atalho da Calibragem, com um rodapé fixo "Concluir e ir para o
-       Planejamento" que só libera quando o plano mínimo existe (receita fixa
-       válida + percentuais dos grupos somando 100%). Peça única, nunca uma
-       cópia reduzida da tela. */
-    primeiroAcesso?: { aoConcluir: () => void }
+    /* Build 092 — passo do primeiro acesso isolado (ver
+       `components/PrimeiroAcesso.tsx`): a MESMA tela, sem o atalho da
+       Calibragem, com um rodapé fixo "Concluir e ir para o Planejamento" (ou
+       "Continuar" pro próximo passo) que só libera quando o mínimo daquele
+       passo existe. Peça única, nunca uma cópia reduzida da tela.
+       Build 100 (18/09/2026), pedido do Rafael, escolha P2 da proposta de
+       18/09/2026: o passo a passo deixou de mostrar "Grupos e Metas" e
+       "Categorias e Metas" juntos numa tela de duas abas — agora são DOIS
+       passos separados, um assunto por tela. `somenteAba` restringe esta
+       tela a uma aba só (esconde o seletor); sem ele, mantém o
+       comportamento antigo (as duas abas, uma tela). E "precisa ter opção
+       de voltar pro passo anterior tbm em todos ele" — `aoVoltar` opcional
+       aqui dentro de `primeiroAcesso` é o que liga esse botão (antes o
+       cabeçalho inteiro do "Voltar" ficava escondido em modo primeiro
+       acesso, em qualquer passo que usasse esta tela). */
+    primeiroAcesso?: {
+      aoConcluir: () => void
+      aoVoltar?: () => void
+      somenteAba?: 'gruposMetas' | 'categorias'
+      passoAtual?: number
+      totalPassos?: number
+      rotuloConcluir?: string
+      /* Só no passo de Categorias (o último): permite pular direto pro
+         Planejamento sem mexer em categoria nenhuma — grupos e receita já
+         são obrigatórios antes de chegar aqui, e ajustar categoria a
+         categoria dá pra fazer depois, em Configurações. */
+      aoPular?: () => void
+    }
   },
 ) {
   const { aoVoltar, primeiroAcesso } = _props
@@ -124,10 +146,13 @@ export default function Categorias(
 
   const [percentuais, setPercentuais] = useState<Record<string, number>>({})
   const percentuaisInicializados = useRef(false)
-  /* No primeiro acesso a tela abre em GRUPOS (o passo começa por eles); no
-     uso comum continua abrindo em Categorias — a aba mexida toda vez que
-     algo muda (F-06). */
-  const [abaAtiva, setAbaAtiva] = useState<AbaCategorias>(primeiroAcesso ? 'gruposMetas' : 'categorias')
+  /* No primeiro acesso a tela abre na aba do PASSO (`somenteAba`, build 100)
+     ou, sem essa restrição, em GRUPOS (o passo começa por eles); no uso
+     comum continua abrindo em Categorias — a aba mexida toda vez que algo
+     muda (F-06). */
+  const [abaAtiva, setAbaAtiva] = useState<AbaCategorias>(
+    primeiroAcesso?.somenteAba ?? (primeiroAcesso ? 'gruposMetas' : 'categorias'),
+  )
   // F-08: "Restaurar ícone padrão" saiu de botão sempre visível e virou item
   // dentro de um menu "⋮" por linha (grupo ou categoria) — só um popover
   // aberto por vez, guardado pelo id de quem está aberto.
@@ -518,22 +543,40 @@ export default function Categorias(
   return (
     <>
       <div className="cabecalho-fixo">
-        {!primeiroAcesso && (
-          <button type="button" className="botao-voltar-config" onClick={aoVoltar}>
+        {(!primeiroAcesso || primeiroAcesso.aoVoltar) && (
+          <button
+            type="button"
+            className="botao-voltar-config"
+            onClick={primeiroAcesso ? primeiroAcesso.aoVoltar! : aoVoltar}
+          >
             ‹ Voltar
           </button>
         )}
         {primeiroAcesso && (
           <p className="ideal-t4" style={{ margin: '0 0 4px', color: 'var(--azul)', fontWeight: 600 }} data-testid="primeiro-acesso-passo">
-            Passo 3 de 3 — grupos, depois categorias e metas
+            Passo {primeiroAcesso.passoAtual ?? 3} de {primeiroAcesso.totalPassos ?? 3} —{' '}
+            {primeiroAcesso.somenteAba === 'gruposMetas'
+              ? 'seus grupos e as metas de cada um'
+              : primeiroAcesso.somenteAba === 'categorias'
+                ? 'categorias e metas'
+                : 'grupos, depois categorias e metas'}
           </p>
         )}
-        <h1>Grupos, Categorias e Metas</h1>
+        <h1>
+          {primeiroAcesso?.somenteAba === 'gruposMetas'
+            ? 'Grupos e Metas'
+            : primeiroAcesso?.somenteAba === 'categorias'
+              ? 'Categorias e Metas'
+              : 'Grupos, Categorias e Metas'}
+        </h1>
       </div>
       {primeiroAcesso ? (
         <p className="texto-fraco texto-quebra" data-testid="primeiro-acesso-orientacao-2">
-          Primeiro os grupos: confira como o dinheiro se divide entre eles (os percentuais precisam
-          somar 100%). Depois, se quiser, ajuste as categorias e as metas. Ao concluir, o Planejamento abre.
+          {primeiroAcesso.somenteAba === 'gruposMetas'
+            ? 'Confira como o dinheiro se divide entre os grupos — os percentuais precisam somar 100%. Pode criar, editar ou inativar grupos à vontade.'
+            : primeiroAcesso.somenteAba === 'categorias'
+              ? 'Se quiser, ajuste as categorias e a meta de cada uma agora — ou pule esta etapa e faça isso depois, em Configurações. Ao concluir, o Planejamento abre.'
+              : 'Primeiro os grupos: confira como o dinheiro se divide entre eles (os percentuais precisam somar 100%). Depois, se quiser, ajuste as categorias e as metas. Ao concluir, o Planejamento abre.'}
         </p>
       ) : (
         <p className="texto-fraco">
@@ -562,100 +605,29 @@ export default function Categorias(
         </button>
       )}
 
-      {/* F-06/F-07 da revisão de UI (04/09/2026): as 6 seções desta tela
-          viviam numa rolagem única de ~5.000px, na ordem em que foram
-          implementadas — não pela frequência de uso. Viram abas, com
-          "Categorias" (mexida toda vez que algo muda) primeiro e
-          "Aparência" (configurada uma vez e esquecida) por último. */}
-      <div className="abas-tela" role="tablist">
-        {ABAS_CATEGORIAS.filter((aba) => !primeiroAcesso || aba.primeiroAcesso).map((aba) => (
-          <button
-            key={aba.valor}
-            type="button"
-            role="tab"
-            aria-selected={abaAtiva === aba.valor}
-            className={`aba-tela-item ${abaAtiva === aba.valor ? 'ativa' : ''}`}
-            onClick={() => setAbaAtiva(aba.valor)}
-            data-testid={`aba-categorias-${aba.valor}`}
-          >
-            {aba.rotulo}
-          </button>
-        ))}
-      </div>
-
-      {abaAtiva === 'aparencia' && (
-        <>
-          {/* Build 089: o PACOTE de ícones vem primeiro — escolher o traço é
-              uma decisão maior que calibrar o tamanho dele, e é a primeira
-              coisa que alguém faz ao abrir "Aparência". */}
-          <PacoteIconesN1 />
-
-          {/* 01/09/2026, rodada seguinte: config universal de tamanho de
-              ícone — NÃO é por categoria/grupo (por isso fica aqui, fora do
-              cadastro de cada um), é um parâmetro só, aplicado em todo o app
-              de uma vez. 3 percentuais independentes, um por tipo de linha
-              onde ícone aparece: Simples (categoria expandida em
-              Resumo/Situação/Planejamento), Completa (Lançamentos/Carteira)
-              e Grupo (cabeçalho de grupo em toda tela que mostra grupo). Ver
-              `configuracaoIcones.ts` pros valores padrão (60/30/30) e a
-              altura de referência fixa de cada tipo — é em cima dela que o
-              percentual é calculado, não da altura real renderizada (evita
-              o ícone "inflar" a própria linha). */}
-          <h2>Tamanho dos Ícones</h2>
-          <div className="cartao">
-            <p className="texto-fraco" style={{ marginTop: 0 }}>
-              Quanto o ícone ocupa da altura da própria linha, em cada tipo de exibição — vale pro app inteiro,
-              não é configurável por categoria ou grupo individual.
-            </p>
-            <label>Categorias (linha de categoria cadastrada na aba "Categorias")</label>
-            <input
-              type="number"
-              min={0}
-              max={200}
-              step={5}
-              value={configIcones.pctCategoria}
-              onChange={(e) => salvarConfiguracaoIcones({ pctCategoria: Number(e.target.value) || 0 })}
-            />
-            <label>Lançamentos — listagem Completa (Lançamentos, Carteira)</label>
-            <input
-              type="number"
-              min={0}
-              max={200}
-              step={5}
-              value={configIcones.pctCompleta}
-              onChange={(e) => salvarConfiguracaoIcones({ pctCompleta: Number(e.target.value) || 0 })}
-            />
-            <label>Grupos (cabeçalho de grupo em qualquer tela)</label>
-            <input
-              type="number"
-              min={0}
-              max={200}
-              step={5}
-              value={configIcones.pctGrupo}
-              onChange={(e) => salvarConfiguracaoIcones({ pctGrupo: Number(e.target.value) || 0 })}
-            />
-
-            {/* Build 094 (item 2): *"Esse quadro de prévia quero que aplique
-                tbm na mesma tela em que permite mudar os tamanhos dos icones,
-                quero um exemplo do lado (…) devem ser de uns 3 casos"*. Os
-                três casos são exatamente os três percentuais acima — um
-                exemplo por linha que cada um governa —, e o de grupos traz
-                DOIS grupos com categorias dentro, como ele nomeou. Não há um
-                segundo quadro de "como vai ficar" aqui: os campos gravam na
-                hora e o quadro já mostra o resultado enquanto se mexe. */}
-            <PreviaLista
-              titulo="Exemplo com os tamanhos acima"
-              zoomPct={0}
-              casos={['lancamentos', 'categorias', 'grupos']}
-              testid="previa-icones"
-            />
-          </div>
-
-          {/* Build 094 (item 2): o zoom das fontes da lista de lançamentos.
-              Fica DEPOIS dos ícones de propósito — é o parâmetro mais novo e
-              o menos procurado dos dois. */}
-          <ZoomFonteListas />
-        </>
+      {/* F-06/F-07 da revisão de UI (04/09/2026): as seções desta tela
+          viviam numa rolagem única, na ordem em que foram implementadas —
+          não pela frequência de uso. Viram abas, "Categorias" primeiro
+          (mexida toda vez que algo muda). Build 100: quando o passo a passo
+          restringe a UMA aba (`somenteAba`), o seletor nem aparece — não
+          faz sentido trocar de assunto no meio de um passo de "um assunto
+          por tela". */}
+      {!primeiroAcesso?.somenteAba && (
+        <div className="abas-tela" role="tablist">
+          {ABAS_CATEGORIAS.filter((aba) => !primeiroAcesso || aba.primeiroAcesso).map((aba) => (
+            <button
+              key={aba.valor}
+              type="button"
+              role="tab"
+              aria-selected={abaAtiva === aba.valor}
+              className={`aba-tela-item ${abaAtiva === aba.valor ? 'ativa' : ''}`}
+              onClick={() => setAbaAtiva(aba.valor)}
+              data-testid={`aba-categorias-${aba.valor}`}
+            >
+              {aba.rotulo}
+            </button>
+          ))}
+        </div>
       )}
 
       {abaAtiva === 'padrao' && (
@@ -1434,18 +1406,25 @@ export default function Categorias(
       </>
       )}
 
-      {/* Build 092 — rodapé do PASSO 2 do primeiro acesso. Fixo embaixo
-          (mesma técnica de `.rodape-totais-fixo`), sempre visível em qualquer
-          aba desta tela; o botão só libera com o plano mínimo, e a linha acima
-          dele diz exatamente o que falta. */}
+      {/* Build 092 — rodapé do passo do primeiro acesso. Fixo embaixo (mesma
+          técnica de `.rodape-totais-fixo`), sempre visível em qualquer aba
+          desta tela; o botão só libera com o mínimo do passo, e a linha
+          acima dele diz exatamente o que falta.
+          Build 100: quando a tela é só o passo de Grupos (`somenteAba ===
+          'gruposMetas'`), o mínimo é só os percentuais somarem 100% — a
+          receita já foi exigida no passo anterior. No passo de Categorias
+          (último), some o botão "Pular" quando `aoPular` existe. */}
       {primeiroAcesso && (() => {
         const p = avaliarPassos(categorias ?? [], grupos ?? [], metas ?? [])
-        const pode = p.receitaOk && p.percentuaisOk
-        const falta = !p.receitaOk
-          ? 'Falta uma categoria de receita fixa com o valor esperado por mês.'
-          : !p.percentuaisOk
-            ? 'Os percentuais dos grupos de saída precisam somar 100% (aba Grupos e Metas).'
-            : null
+        const soPassoGrupos = primeiroAcesso.somenteAba === 'gruposMetas'
+        const pode = soPassoGrupos ? p.percentuaisOk : p.receitaOk && p.percentuaisOk
+        const falta = soPassoGrupos
+          ? (!p.percentuaisOk ? 'Os percentuais dos grupos precisam somar 100%.' : null)
+          : !p.receitaOk
+            ? 'Falta uma categoria de receita fixa com o valor esperado por mês.'
+            : !p.percentuaisOk
+              ? 'Os percentuais dos grupos de saída precisam somar 100% (aba Grupos e Metas).'
+              : null
         return (
           <div className="rodape-totais-fixo rodape-primeiro-acesso" data-testid="primeiro-acesso-rodape">
             {falta && (
@@ -1461,8 +1440,21 @@ export default function Categorias(
               data-testid="primeiro-acesso-concluir"
               onClick={primeiroAcesso.aoConcluir}
             >
-              Concluir e ir para o Planejamento
+              {primeiroAcesso.rotuloConcluir ?? 'Concluir e ir para o Planejamento'}
             </button>
+            {primeiroAcesso.aoPular && (
+              <button
+                type="button"
+                style={{
+                  width: '100%', marginTop: 8, background: 'none', border: 'none',
+                  color: 'var(--texto-fraco)', textDecoration: 'underline', cursor: 'pointer', padding: 0, fontSize: 13,
+                }}
+                data-testid="primeiro-acesso-pular"
+                onClick={primeiroAcesso.aoPular}
+              >
+                Pular esta etapa por agora
+              </button>
+            )}
           </div>
         )
       })()}
