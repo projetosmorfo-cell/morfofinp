@@ -40,12 +40,32 @@ liveQuery(() => db.configuracoes.get(1)).subscribe({
   },
 })
 
+/* BUG REAL reportado pelo Rafael (19/09/2026): informou o saldo do cofrinho
+   duas vezes na mesma noite, com minutos de diferença (6.110,44 e depois
+   7.000,00 — um AUMENTO) e o card mostrou como se tivesse CAÍDO -12,7%.
+   Causa raiz: todo lugar do app que precisava de "hoje" sem poder usar
+   `hojeEfetivoISO()` (ver `hojeRealISO()` logo abaixo) — e este próprio
+   fallback aqui — calculava com `new Date().toISOString().slice(0, 10)`,
+   que dá a data em Greenwich (UTC), não em Sorocaba. Sorocaba está 3 horas
+   atrás de Greenwich (sem horário de verão desde 2019): então, entre 21h e
+   meia-noite no relógio do Rafael, esse cálculo já achava que era o DIA
+   SEGUINTE. Os dois registros do cofrinho, feitos minutos um do outro
+   depois das 21h, caíram em datas diferentes — o mais NOVO (7.000,00)
+   ficou com uma data mais "antiga" que o mais VELHO (6.110,44), e o app
+   leu a ordem ao contrário. Corrigido usando os métodos de horário LOCAL
+   do JavaScript (`getFullYear`/`getMonth`/`getDate`) em vez de
+   `toISOString` (sempre UTC). */
+export function hojeRealISO(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 // Uso em qualquer função pura/síncrona (statusPagamento.ts, recorrencia.ts,
 // telas que calculam projeção). Fallback pra data real do sistema quando não
 // há simulação ativa OU antes da 1ª sincronização do liveQuery acima
 // resolver (janela de milissegundos no carregamento do app).
 export function hojeEfetivoISO(): string {
-  return hojeEfetivoCache ?? new Date().toISOString().slice(0, 10)
+  return hojeEfetivoCache ?? hojeRealISO()
 }
 
 // Uso em componente React que precisa RE-RENDERIZAR quando a data simulada

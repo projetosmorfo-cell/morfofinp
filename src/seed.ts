@@ -3,6 +3,7 @@ import { comIconePadraoCategoria, comIconePadraoGrupo } from './iconesPadrao'
 import { GRUPO_RECEITA } from './gruposUtil'
 import type { GrupoPadraoN0, CategoriaPadraoN0 } from './kit/kitPlatform'
 import { doAmbiente, AMBIENTE_DESTE_APARELHO } from './ambiente'
+import { hojeRealISO } from './hojeSimulado'
 import { contasDoModeloInicial } from './contasCofrinho'
 
 /* Primeiro mês que a base de demonstração entrega EM ABERTO (`pago: false`).
@@ -1008,7 +1009,7 @@ async function seedEstruturaLimpa() {
        de fábrica" usa; pedido do Rafael: "nunca deve trazer qualquer conta
        cadastrada (...) o que pode manter é já vir com a conta cofrinho padrão
        cadastrada"). Nenhum lançamento, nenhum valor. */
-    await db.contas.bulkAdd(contasDoModeloInicial({}, new Date().toISOString().slice(0, 10)))
+    await db.contas.bulkAdd(contasDoModeloInicial({}, hojeRealISO()))
     const mesVigencia = new Date().toISOString().slice(0, 7).replace('-', '')
     await db.metas.bulkAdd([
       { grupo: 'Fixo', percentual: 50, base: 'receita_real', mesVigencia },
@@ -1052,7 +1053,7 @@ async function seedDemonstracao() {
       tipo: 'corrente',
       instituicao: 'Bradesco',
       saldoInicial: 0,
-      dataSaldoInicial: new Date().toISOString().slice(0, 10),
+      dataSaldoInicial: hojeRealISO(),
       importavel: true,
       ativa: true,
     })) as number
@@ -1061,7 +1062,7 @@ async function seedDemonstracao() {
       tipo: 'cartao',
       instituicao: 'Porto Seguro',
       saldoInicial: 0,
-      dataSaldoInicial: new Date().toISOString().slice(0, 10),
+      dataSaldoInicial: hojeRealISO(),
       importavel: true,
       ativa: true,
       diaFechamento: 9,
@@ -1073,7 +1074,7 @@ async function seedDemonstracao() {
       tipo: 'corrente',
       instituicao: 'C6 Bank',
       saldoInicial: 0,
-      dataSaldoInicial: new Date().toISOString().slice(0, 10),
+      dataSaldoInicial: hojeRealISO(),
       importavel: true,
       ativa: true,
     })) as number

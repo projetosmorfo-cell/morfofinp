@@ -26,6 +26,7 @@ import { lerDoAmbiente, marcaDoAmbiente } from '../ambiente'
 import { hojeEfetivoISO } from '../hojeSimulado'
 import { fmtBRL, aplicarMascaraValor, paraNumero, formatarMoeda } from '../formatoMoeda'
 import BotaoAjuda from './BotaoAjuda'
+import ConfirmacaoAcao from './ConfirmacaoAcao'
 
 /* Build 100 (18/09/2026) — o mesmo texto do "ⓘ" que a Carteira usa pra
    "Total aplicando o comprometido" (ver `Carteira.tsx`) — duplicado aqui de
@@ -55,6 +56,10 @@ function emPortugues(dias: number): string {
 }
 
 export interface InformeSaldo {
+  /** Id do registro em `saldosInformados` — `undefined` só em teste; todo
+      registro real do banco tem id (autoincremento do Dexie). Existe aqui
+      pra permitir apagar este informe específico (build 106). */
+  id?: number
   /** O valor que a pessoa informou. */
   valor: number
   /** Data do informe, `AAAA-MM-DD`. */
@@ -100,7 +105,7 @@ function construirUltimoInforme(
   if (!ultimo) return null
   const data = dataDoInforme(ultimo.dataReferencia)
   const dias = diasEntre(data, hojeEfetivoISO())
-  return { valor: ultimo.saldoInformado, data, dias, velho: dias >= DIAS_PARA_ENVELHECER }
+  return { id: ultimo.id, valor: ultimo.saldoInformado, data, dias, velho: dias >= DIAS_PARA_ENVELHECER }
 }
 
 /** Último saldo informado de uma conta (ou do cofrinho virtual). */
@@ -221,6 +226,32 @@ export async function informarSaldo(contaId: number, valor: number) {
   })
 }
 
+/* Build 106 (19/09/2026) — pedido direto do Rafael depois do bug da virada
+   de dia (ver `hojeRealISO()` em `hojeSimulado.ts`): "quero apagar os
+   dados do cofrinho e colocar de novo... somente a inclusão de saldo que
+   eu fiz". Até aqui não havia jeito nenhum de corrigir um saldo informado
+   errado a não ser informar um novo por cima — o registro errado ficava
+   pra sempre na tabela, distorcendo a "variação desde a última
+   atualização" pra sempre. Histórico completo (mais recente primeiro,
+   mesmo critério de empate de `porInformeMaisRecentePrimeiro`) + apagar,
+   dentro do mesmo modal que já informa o saldo — não abre tela nova. */
+function useHistoricoInformes(contaId: number): InformeSaldo[] {
+  const registros = useLiveQuery(() => lerDoAmbiente(db.saldosInformados.toArray()), [])
+  if (!registros) return []
+  return registros
+    .filter((r) => r.contaId === contaId)
+    .sort(porInformeMaisRecentePrimeiro)
+    .map((r) => {
+      const data = dataDoInforme(r.dataReferencia)
+      const dias = diasEntre(data, hojeEfetivoISO())
+      return { id: r.id, valor: r.saldoInformado, data, dias, velho: dias >= DIAS_PARA_ENVELHECER }
+    })
+}
+
+async function apagarInforme(id: number) {
+  await db.saldosInformados.delete(id)
+}
+
 /**
  * A LINHA DE INFORME + o botão "informar o saldo real", sem cabeçalho nenhum.
  *
@@ -245,8 +276,14 @@ export function LinhaInformeSaldo({
   calculado: number
 }) {
   const informe = useUltimoInforme(contaId)
+  const historico = useHistoricoInformes(contaId)
   const [aberto, setAberto] = useState(false)
   const [texto, setTexto] = useState('')
+  /* Build 106: qual informe do histórico está com a confirmação de apagar
+     aberta (`null` = nenhum) — mesmo padrão de dupla-checagem do app inteiro
+     (`ConfirmacaoAcao`), nunca apaga no primeiro toque. */
+  const [apagarId, setApagarId] = useState<number | null>(null)
+  const apagando = apagarId != null ? historico.find((h) => h.id === apagarId) : null
 
   const abrir = (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -324,6 +361,55 @@ export function LinhaInformeSaldo({
               </button>
               <button type="button" onClick={() => setAberto(false)}>Cancelar</button>
             </div>
+
+            {/* Build 106 — pedido do Rafael: apagar um saldo informado por
+                engano (ex.: dois informes na mesma noite, um deles errado),
+                pra poder informar de novo, certo. Só aparece quando já existe
+                pelo menos 1 informe — "sem histórico" não mostra lista vazia. */}
+            {historico.length > 0 && (
+              <div style={{ marginTop: 16 }}>
+                <p className="ideal-t4 texto-fraco" style={{ marginBottom: 4 }}>Saldos já informados</p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }} data-testid="historico-informes">
+                  {historico.map((h) => {
+                    const [ano, mes, dia] = h.data.split('-')
+                    return (
+                      <div
+                        key={h.id}
+                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}
+                        data-testid="linha-historico-informe"
+                      >
+                        <span className="ideal-t4 texto-fraco">
+                          {dia}/{mes}/{ano.slice(2)} · {fmtBRL(h.valor)}
+                        </span>
+                        <button
+                          type="button"
+                          className="valor-neg"
+                          style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', font: 'inherit', fontSize: 13 }}
+                          onClick={() => setApagarId(h.id ?? null)}
+                          data-testid={`apagar-informe-${h.id}`}
+                        >
+                          Apagar
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+            {apagando && (
+              <ConfirmacaoAcao
+                titulo={`Apagar o saldo de ${fmtBRL(apagando.valor)}?`}
+                testid="confirmacao-apagar-informe"
+                aviso={`Informado em ${apagando.data.split('-').reverse().join('/')}. É apagado de vez — se for o mais recente, a Carteira volta a mostrar o informe anterior (ou o calculado pelos lançamentos, se não houver nenhum).`}
+                onCancelar={() => setApagarId(null)}
+                onConfirmar={() => {
+                  const id = apagarId
+                  setApagarId(null)
+                  if (id != null) void apagarInforme(id)
+                }}
+              />
+            )}
           </div>
         </div>
       )}

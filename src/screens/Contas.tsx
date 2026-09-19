@@ -8,6 +8,7 @@ import MenuLinha from '../components/MenuLinha'
 import SeletorComExplicacao, { type OpcaoExplicada } from '../components/SeletorComExplicacao'
 import { PencilSquareIcon } from '@heroicons/react/24/outline'
 import { lerDoAmbiente, marcaDoAmbiente } from '../ambiente'
+import { hojeRealISO } from '../hojeSimulado'
 import ConfirmacaoAcao from '../components/ConfirmacaoAcao'
 import { AVISO_ULTIMO_COFRINHO, AVISO_COFRINHO_PADRAO_FIXO, MOTIVO_COFRINHO_PADRAO_TRAVADO, ehCofrinhoPadrao, ehUltimoCofrinho } from '../contasCofrinho'
 import { aplicarMascaraValor, formatarMoeda, paraNumero } from '../formatoMoeda'
@@ -59,8 +60,14 @@ function diaValido(v: string, padrao: number): number {
   return Math.min(31, Math.max(1, Number(v) || padrao))
 }
 
+/* Build 106 (19/09/2026): usava `new Date().toISOString().slice(0, 10)`, que
+   calcula em UTC — à noite (21h–meia-noite) em Sorocaba isso já "virava" o
+   dia seguinte, e uma conta cadastrada nesse horário nascia com a data de
+   saldo inicial de AMANHÃ (mesmo bug de fundo do cofrinho, ver
+   `hojeRealISO()` em `hojeSimulado.ts`). Trocado pelo helper que usa
+   horário local. */
 function hoje() {
-  return new Date().toISOString().slice(0, 10)
+  return hojeRealISO()
 }
 
 // Tela "Contas e carteiras" (30/08/2026, rodada seguinte) — cadastro

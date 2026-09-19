@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { usePlanos, usePlanoPadrao, recursosAutomaticos, type Plano } from './planos'
 import { usePlanoAtual, salvarPlanoId } from './planoAtual'
 import { useTenantN1 } from './kitPlatform'
+import { hojeRealISO } from '../hojeSimulado'
 
 // Modelo de negócio Completo (05/09/2026, Roteiro de Parametrização Morfo,
 // Etapa 5) — adaptado de `MinhaAssinaturaView`/`TrocarPlanoSheet`/
@@ -266,7 +267,7 @@ export default function MinhaAssinatura({ aoVoltar, onAbrirSuporte, temNaoLida }
   const [encerrarAberto, setEncerrarAberto] = useState(false)
   /* Cobranças do próprio ambiente (item 11) — a mais recente em cima. */
   const tenant = useTenantN1()
-  const hojeISO = new Date().toISOString().slice(0, 10)
+  const hojeISO = hojeRealISO()
   const cobrancas = [...(tenant?.billing?.installments ?? [])].sort((a, b) => b.dueDate.localeCompare(a.dueDate))
 
   return (

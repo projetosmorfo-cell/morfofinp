@@ -246,13 +246,28 @@ const RE_CORTE = new RegExp(
 )
 
 /* Conectores, do mais específico pro mais genérico. `(?!«)` impede que o
-   conector capture o marcador do valor. */
+   conector capture o marcador do valor.
+
+   Build 104 (19/09/2026) — BUG real, achado analisando notificações reais que
+   o Rafael mandou: toda "Compra aprovada" do cartão Porto vem no formato
+   "...final 9210 de RAFAEL BARROS em 17/09 às 19:33 em Google Tinder Dating."
+   — ou seja, o texto tem DOIS "em": o da DATA ("em 17/09") e o do
+   ESTABELECIMENTO ("em Google Tinder Dating"), o segundo sempre depois do
+   horário. Sem o `(?!\d)` abaixo, o conector "em" batia no PRIMEIRO ("em
+   17/09"), o corte por "às \d" reduzia a captura a só "17/09" (puro número,
+   `limparNome` descarta por não ter letra) — e a busca then caía pro conector
+   seguinte, "de", que pegava "RAFAEL BARROS" (o TITULAR do cartão, sempre
+   presente nesse formato) como se fosse o nome do estabelecimento. Resultado
+   real, nas 6 compras do lote que o Rafael mandou pra análise: as SEIS
+   vieram sugeridas como "Rafael Barros" em vez do nome de cada loja. Com
+   `(?!\d)`, "em" nunca casa com uma data — o motor pula direto pro segundo
+   "em", que é o estabelecimento de verdade. */
 const PADROES_NOME: RegExp[] = [
   /\bno estabelecimento\s+(?!«)([^,;:.!?\n]+)/i,
   /\bestabelecimento\s+(?!«)([^,;:.!?\n]+)/i,
   /\breferente a[o]?\s+(?!«)([^,;:.!?\n]+)/i,
   /\bpara\s+(?!«)([^,;:.!?\n]+)/i,
-  /\bem\s+(?!«)([^,;:.!?\n]+)/i,
+  /\bem\s+(?!«)(?!\d)([^,;:.!?\n]+)/i,
   /\bde\s+(?!«)([^,;:.!?\n]+)/i,
 ]
 

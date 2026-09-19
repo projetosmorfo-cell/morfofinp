@@ -27,6 +27,7 @@ import { comportamentoDoGrupo, comportamentoPeloNome } from '../gruposUtil'
 import { comIconePadraoCategoria, comIconePadraoGrupo } from '../iconesPadrao'
 import { CONFIG_ICONES_PADRAO } from '../configuracaoIcones'
 import { lerPlatformN0Persistida, type CategoriaPadraoN0, type GrupoPadraoN0, type PadraoCategoriasN0 } from './kitPlatform'
+import { hojeRealISO } from '../hojeSimulado'
 import { lerDoAmbiente, doAmbiente, marcaDoAmbiente, ambienteDoBanco, AMBIENTE_DESTE_APARELHO } from '../ambiente'
 
 export type PadraoEditavel = Omit<PadraoCategoriasN0, 'versao' | 'atualizadoEm'>
@@ -201,7 +202,7 @@ async function garantirContaDoAmbiente(ambienteAlvo?: string) {
     tipo: 'corrente',
     instituicao: 'Conta corrente',
     saldoInicial: 0,
-    dataSaldoInicial: new Date().toISOString().slice(0, 10),
+    dataSaldoInicial: hojeRealISO(),
     importavel: false,
     ativa: true,
   })

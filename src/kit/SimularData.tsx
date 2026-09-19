@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { hojeEfetivoISO, useHojeSimuladoISO } from '../hojeSimulado'
+import { hojeEfetivoISO, hojeRealISO, useHojeSimuladoISO } from '../hojeSimulado'
 import { salvarConfiguracaoIcones } from '../configuracaoIcones'
 import { avancarSeriesFixasPendentes } from '../recorrencia'
 import { formatarCabecalhoData } from '../formatoData'
@@ -33,7 +33,7 @@ async function aplicarNovaDataSimulada(iso: string | undefined): Promise<number>
   // `await` já ter resolvido). Sem isso, o reprocessamento rodava contra a
   // data ANTIGA ainda em cache — bug real encontrado na verificação da
   // Etapa 7 (ver comentário em `avancarSeriesFixasPendentes`).
-  const hojeISOEfetivo = iso ?? new Date().toISOString().slice(0, 10)
+  const hojeISOEfetivo = iso ?? hojeRealISO()
   return avancarSeriesFixasPendentes(hojeISOEfetivo)
 }
 
@@ -130,7 +130,7 @@ export default function SimularData({ aoVoltar }: { aoVoltar: () => void }) {
 
   async function voltarAoNormal() {
     setProcessando(true)
-    const hojeReal = new Date().toISOString().slice(0, 10)
+    const hojeReal = hojeRealISO()
     setRascunho(hojeReal)
     const gerados = await aplicarNovaDataSimulada(undefined)
     setResultado(mensagemReprocessamento(gerados))

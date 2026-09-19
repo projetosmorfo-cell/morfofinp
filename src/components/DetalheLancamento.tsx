@@ -11,7 +11,7 @@ import MenuLinha from './MenuLinha'
 import FolhaOpcoes from './FolhaOpcoes'
 import { ChipConta, CampoConta } from './SeletorConta'
 import { lerDoAmbiente, marcaDoAmbiente } from '../ambiente'
-import { hojeEfetivoISO } from '../hojeSimulado'
+import { hojeEfetivoISO, hojeRealISO } from '../hojeSimulado'
 import { DIA_FECHAMENTO_PADRAO, mesFaturaDaData, rotuloFatura, situacaoDaFatura } from '../faturaCiclo'
 import { reavaliarQuitacao } from '../faturaPagamento'
 import { obterOuCriarCategoriaPagamentoFatura } from '../categoriasSistema'
@@ -24,8 +24,14 @@ import { desvincularLancamento } from '../vinculoNotificacao'
 // recorrência fixa (item 7, abaixo) usa `hojeEfetivoISO()` diretamente — é
 // mais consistente com a ferramenta de simulação usá-lo ali, sem alterar o
 // comportamento já documentado da data do próprio lançamento.
+//
+// Build 106 (19/09/2026): usava `new Date().toISOString().slice(0, 10)`, que
+// calcula em UTC — à noite (21h–meia-noite) em Sorocaba isso já "virava" o
+// dia seguinte (ver o mesmo bug, com muito mais impacto, explicado em
+// `hojeRealISO()` de `hojeSimulado.ts`). Um lançamento criado depois das 21h
+// nascia com a data de AMANHÃ. Trocado pelo helper que usa horário local.
 function hoje() {
-  return new Date().toISOString().slice(0, 10)
+  return hojeRealISO()
 }
 
 type TipoRegraUI = 'diaFixo' | 'diaUtil' | 'diaSemana'
@@ -1444,14 +1450,30 @@ export default function DetalheLancamento({
 
         {/* DADOS DE VÍNCULO (build 080/081) — agora abertos pelo "⋮" (E-09).
             READ-ONLY de propósito: o valor deles é serem o registro NÃO
-            editado do que o banco disse. */}
+            editado do que o banco disse.
+
+            Build 104 (19/09/2026) — BUG real reportado pelo Rafael: "Nome
+            original" aparecia SEMPRE, mesmo num lançamento sem vínculo
+            nenhum — porque `descricaoOriginal` também existe pra lançamento
+            manual (é uma cópia do que a pessoa digitou em "descrição", ver
+            comentário do campo em `db.ts`). Resultado: a mesma tela mostrava
+            um texto que PARECE dado de banco ("Nome original: Porto — Compra
+            de R$ 9,00 aprovada...") e, logo abaixo, dizia "não há texto de
+            banco pra guardar aqui" — contraditório aos olhos de quem lê,
+            mesmo os dois estando tecnicamente certos (um é o texto digitado
+            na criação, não importa qual; o outro é sobre o VÍNCULO). O
+            comentário do campo em `db.ts` já documentava a regra certa —
+            "o painel de vínculo checa origem antes de mostrar qualquer
+            coisa" — só que "Nome original" tinha ficado FORA do `if`, antes
+            dele. Corrigido: agora só aparece dentro do "tem vínculo", onde é
+            de fato o registro não editado do que o banco mandou. */}
         {editando && original && mostrarVinculo && (
           <div className="texto-fraco dl-vinculo" style={{ fontSize: 12 }} data-testid="painel-vinculo">
-            <p style={{ margin: '0 0 4px' }}>
-              <b>Nome original:</b> {original.descricaoOriginal ?? '(não registrado)'}
-            </p>
             {original.vinculoOrigem ? (
               <>
+                <p style={{ margin: '0 0 4px' }}>
+                  <b>Nome original:</b> {original.descricaoOriginal ?? '(não registrado)'}
+                </p>
                 <p style={{ margin: '0 0 4px' }}>
                   <b>Veio de:</b>{' '}
                   {original.vinculoOrigem.origem === 'notificacao' ? 'notificação do banco' : 'importação'}

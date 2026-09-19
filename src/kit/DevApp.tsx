@@ -20,6 +20,7 @@ import {
   EllipsisVerticalIcon,
 } from '@heroicons/react/24/outline'
 import { db } from '../db'
+import { hojeRealISO } from '../hojeSimulado'
 import { sairN0 } from './authN0'
 import { useTodosPlanos, criarPlano, atualizarPlano, inativarPlano, reativarPlano, recursosAutomaticos, PLANO_PADRAO_KIT, type Plano } from './planos'
 import SiteParametrosN0 from './SiteParametrosN0'
@@ -921,7 +922,7 @@ function NovoClienteSheet({ diasTestePadrao, modoInicial, urls, onClose, notify,
     } else if (loginJaEmUsoGlobalmente(platform, loginN)) {
       setErro('Esse login já está em uso (N0 ou N1).'); return
     }
-    const hoje = new Date().toISOString().slice(0, 10)
+    const hoje = hojeRealISO()
     const mensalidade = tipoPlano === 'pagante' ? (planoEscolhido?.valorMensal ?? 0) : 0
     /* Pré-cadastro nasce SEM acesso liberado, por definição — é isso que o
        estado 'pendente_liberacao' significa na aba Início. */
@@ -2177,10 +2178,10 @@ function AlterarStatusParcelaSheet({ tenant, inst, onClose, onSave }: {
   const atual = installmentDisplayStatus(inst, tenant.billing?.toleranceDays) as StatusParcela
   const [novo, setNovo] = useState<StatusParcela>(atual)
   const [method, setMethod] = useState(inst.method || 'pix')
-  const [paidDate, setPaidDate] = useState(inst.paidDate || new Date().toISOString().slice(0, 10))
+  const [paidDate, setPaidDate] = useState(inst.paidDate || hojeRealISO())
   const [dueDate, setDueDate] = useState(inst.dueDate)
   const [motivo, setMotivo] = useState('')
-  const hoje = new Date().toISOString().slice(0, 10)
+  const hoje = hojeRealISO()
   const precisaVencimentoFuturo = novo === 'pendente' && dueDate <= hoje
   const precisaVencimentoPassado = novo === 'vencido' && dueDate > hoje
   const podeSalvar = !precisaVencimentoFuturo && !precisaVencimentoPassado
@@ -2352,7 +2353,7 @@ function AbaFinanceiro({ filtroDados }: { filtroDados: FiltroDados }) {
     if (!tenant) return
     await atualizarTenantN0(tenant.id, (x) => ({
       ...x,
-      billing: x.billing ? { ...x.billing, installments: x.billing.installments.map((i) => (i.id === inst.id ? { ...i, paid: true, paidDate: new Date().toISOString().slice(0, 10), method, cancelada: false, perda: false } : i)) } : x.billing,
+      billing: x.billing ? { ...x.billing, installments: x.billing.installments.map((i) => (i.id === inst.id ? { ...i, paid: true, paidDate: hojeRealISO(), method, cancelada: false, perda: false } : i)) } : x.billing,
       onboarding: 'completo',
       accessLog: [...(x.accessLog ?? []), { id: uid(), ts: new Date().toISOString().slice(0, 19), action: 'Pagamento de parcela confirmado pela Morfo', ator: 'admin' }],
     }))
