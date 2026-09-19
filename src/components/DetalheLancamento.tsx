@@ -1132,8 +1132,17 @@ export default function DetalheLancamento({
               marcar cada input à mão (e nunca esquecer um novo campo que
               vier depois). `display: contents` tira o fieldset do layout
               (sem borda/padding de navegador, sem afetar o fluxo flex/grid
-              de dentro) — só o comportamento de bloquear continua. */}
-          <fieldset disabled={pagamentoBloqueado} style={{ border: 0, margin: 0, padding: 0, display: 'contents' }}>
+              de dentro) — só o comportamento de bloquear continua.
+              Build 104 — bug real do Rafael: "está bloqueada mas não
+              parece". A classe `campos-travaveis-contents` (index.css) é o
+              que faz os campos ficarem esmaecidos de verdade (a opacity não
+              pode ir no próprio fieldset porque `display: contents` não tem
+              caixa pra pintar). */}
+          <fieldset
+            className="campos-travaveis-contents"
+            disabled={pagamentoBloqueado}
+            style={{ border: 0, margin: 0, padding: 0, display: 'contents' }}
+          >
           {/* V-04: o Valor em destaque, com o "R$" desenhado dentro do campo. */}
           <label htmlFor="dl-valor" className="dl-rotulo">Quanto</label>
           <div className="dl-valor-wrap">

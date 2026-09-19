@@ -17,6 +17,7 @@ import PreviaLista from '../components/PreviaLista'
 import { PALETA_CORES } from '../icones'
 import {
   COR_DATA_LISTA_PADRAO,
+  COR_DATA_LISTA_TEMA,
   ambientesComCorDataListaPropria,
   padraoDoAppCorData,
 } from '../corDataLista'
@@ -125,14 +126,14 @@ export default function CorDataListaN0({ notify }: { notify: (m: string) => void
       <PreviaLista
         titulo="Tom original do produto (segue o tema)"
         zoomPct={0}
-        corData={COR_DATA_LISTA_PADRAO}
+        corData={COR_DATA_LISTA_TEMA}
         casos={['lancamentos', 'lancamentosSimples']}
         testid="n0-previa-cor-hoje"
       />
       <PreviaLista
         titulo="Como o cliente novo vai ver"
         zoomPct={0}
-        corData={cor ?? undefined}
+        corData={cor ?? COR_DATA_LISTA_TEMA}
         casos={['lancamentos', 'lancamentosSimples']}
         testid="n0-previa-cor-resultado"
       />

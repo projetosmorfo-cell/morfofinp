@@ -910,7 +910,10 @@ export function padraoDeFabrica(): { grupos: GrupoPadraoN0[]; categorias: Catego
     { nome: 'Fixo', percentual: 50, comportamento: 'fixo' as const },
     { nome: 'Variável', percentual: 30, comportamento: 'variavel' as const },
     { nome: 'Investimento', percentual: 20, comportamento: 'guardar' as const },
-    { nome: GRUPO_RECEITA, percentual: 0 },
+    // Build 104: Entrada é conjunto à parte que também fecha 100% (ver
+    // Calibragem.tsx) — com Receita sozinho do lado da entrada, ele é os
+    // 100% inteiros, não 0%.
+    { nome: GRUPO_RECEITA, percentual: 100 },
   ].map((g) => {
     const i = comIconePadraoGrupo({ nome: g.nome, ativo: true } as Omit<GrupoRegistro, 'id'>)
     return { nome: g.nome, percentual: g.percentual, comportamento: g.comportamento, icone: i.icone, iconeEstilo: i.iconeEstilo, iconeCor: i.iconeCor }
@@ -1011,6 +1014,9 @@ async function seedEstruturaLimpa() {
       { grupo: 'Fixo', percentual: 50, base: 'receita_real', mesVigencia },
       { grupo: 'Variável', percentual: 30, base: 'receita_real', mesVigencia },
       { grupo: 'Investimento', percentual: 20, base: 'receita_real', mesVigencia },
+      // Build 104 — mesmo motivo do padrão de fábrica: Entrada é conjunto à
+      // parte, também precisa fechar 100%.
+      { grupo: GRUPO_RECEITA, percentual: 100, base: 'receita_real', mesVigencia },
     ])
   })
 }
@@ -1079,6 +1085,10 @@ async function seedDemonstracao() {
       { grupo: 'Fixo', percentual: 50, base: 'receita_real', mesVigencia },
       { grupo: 'Variável', percentual: 30, base: 'receita_real', mesVigencia },
       { grupo: 'Investimento', percentual: 20, base: 'receita_real', mesVigencia },
+      // Build 104 — Entrada é um conjunto à parte que também precisa fechar
+      // 100% (ver Calibragem.tsx); com um grupo só do lado da receita, ele
+      // sozinho é os 100% inteiros.
+      { grupo: GRUPO_RECEITA, percentual: 100, base: 'receita_real', mesVigencia },
     ])
 
     const lancamentos: Omit<Lancamento, 'id'>[] = LANCAMENTOS_SEMENTE.map((l) => {

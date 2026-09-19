@@ -1,6 +1,6 @@
 import type { Lancamento } from './db'
 import { hojeEfetivoISO } from './hojeSimulado'
-import { ehContaDeCartao, faturaQuitada, faturaVencidaENaoPaga, mesFaturaDoLancamentoPeloCache } from './contasCartao'
+import { ehContaDeCartao, faturaTevePagamento, faturaVencidaENaoPaga, mesFaturaDoLancamentoPeloCache } from './contasCartao'
 
 // Situação de pagamento de um lançamento — derivada, nunca guardada como
 // rótulo (só o boolean `pago` é persistido; "atrasado" é calculado comparando
@@ -46,13 +46,13 @@ export function statusDoLancamento(
        exatamente o que "No cartão" quer dizer, então uma marcação manual
        (mesmo com data futura) entra direto em "No cartão", nunca em "Pago"
        por si só.
-       Build 101 (Decisão 121), pedido do Rafael: quando a fatura à qual esta
-       compra pertence JÁ ESTÁ QUITADA (100% paga), a leitura muda — o
-       dinheiro já saiu de verdade, então a compra mostra "Pago", igual a
-       qualquer outro lançamento liquidado. Ver `faturaQuitada`. */
+       Build 101/104 (Decisão 121), pedido do Rafael: quando a fatura à qual
+       esta compra pertence já recebeu QUALQUER pagamento (mesmo parcial, não
+       precisa ser 100%), a leitura muda — a compra mostra "Pago", igual a
+       qualquer outro lançamento liquidado. Ver `faturaTevePagamento`. */
     if (pago || l.dataCompetencia <= hoje) {
       const mesFatura = mesFaturaDoLancamentoPeloCache(l)
-      if (mesFatura && faturaQuitada(l.contaId, mesFatura)) return 'pago'
+      if (mesFatura && faturaTevePagamento(l.contaId, mesFatura)) return 'pago'
       if (mesFatura && faturaVencidaENaoPaga(l.contaId, mesFatura)) return 'vencido_cartao'
       return 'no_cartao'
     }
@@ -112,6 +112,20 @@ export const FUNDO_STATUS: Record<StatusPagamento, string> = {
   // comprometido igual, só que a palavra é outra (ver comentário do tipo).
   a_faturar: 'status-fundo-pendente',
   vencido_cartao: 'status-fundo-atrasado',
+}
+
+/* Build 104 (19/09/2026), pedido do Rafael: quando o vínculo com a
+   notificação foi feito SOZINHO pelo app (ver `avaliarAutoVinculo()` em
+   `vinculoNotificacao.ts`), o rótulo ganha "Auto" no final — "Pago Auto",
+   "Recebido Auto", "No Cartão Auto" — pra ficar óbvio, na própria lista, que
+   ninguém olhou aquele vínculo antes de ele acontecer. Só entra nos três
+   status que a automação de fato produz; os demais (a pagar, atrasado...)
+   nunca vêm de um vínculo, então nunca ganham o sufixo. Mesma tabela
+   `ROTULO_STATUS` por trás — nunca um segundo texto escrito à parte. */
+export function rotuloDoStatus(status: StatusPagamento, l?: Pick<Lancamento, 'vinculoOrigem'>): string {
+  const base = ROTULO_STATUS[status]
+  if (!l?.vinculoOrigem?.automatico) return base
+  return status === 'pago' || status === 'recebido' || status === 'no_cartao' ? `${base} Auto` : base
 }
 
 export const CLASSE_STATUS: Record<StatusPagamento, string> = {

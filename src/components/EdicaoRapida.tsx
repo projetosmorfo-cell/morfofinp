@@ -64,9 +64,10 @@ function SituacaoMetaDoGrupo({
   categoriaEmEdicao?: { id?: number; aceitavelMensal: number; consomeMeta: boolean }
 }) {
   const dados = useLiveQuery(async () => {
-    const [categorias, metas] = await Promise.all([
+    const [categorias, metas, grupos] = await Promise.all([
       lerDoAmbiente(db.categorias.toArray()),
       lerDoAmbiente(db.metas.toArray()),
+      lerDoAmbiente(db.grupos.toArray()),
     ])
     const outrasDoGrupo = categorias.filter(
       (c) => c.ativa && c.grupo === grupo && c.id !== categoriaEmEdicao?.id,
@@ -76,11 +77,28 @@ function SituacaoMetaDoGrupo({
       .reduce((t, c) => t + (c.aceitavelMensal || 0), 0)
     const soma = somaOutras + (categoriaEmEdicao?.consomeMeta ? categoriaEmEdicao.aceitavelMensal : 0)
     const pct = metas.find((m) => m.grupo === grupo)?.percentual ?? 0
-    return { soma, pct, qtd: outrasDoGrupo.length + (categoriaEmEdicao ? 1 : 0) }
+
+    /* Build 104 — segunda metade do pedido "vs grupo vs receita": faltava o
+       "vs receita". Este grupo é só uma fatia — junto com os outros do MESMO
+       tipo (entrada ou saída) ele precisa fechar 100% da receita fixa (ver
+       `Calibragem.tsx`). Mostrar isso aqui, no popup de quem está mexendo
+       numa categoria/grupo, avisa na hora, sem precisar abrir a Calibragem
+       pra descobrir depois que o conjunto ficou torto. */
+    const grupoRegistro = grupos.find((g) => g.nome === grupo)
+    const tipo = tipoDoGrupo(grupoRegistro)
+    const gruposDoTipo = grupos.filter((g) => g.ativo !== false && tipoDoGrupo(g) === tipo)
+    const totalPctTipo = gruposDoTipo.reduce(
+      (s, g) => s + (metas.find((m) => m.grupo === g.nome)?.percentual ?? 0),
+      0,
+    )
+
+    return { soma, pct, qtd: outrasDoGrupo.length + (categoriaEmEdicao ? 1 : 0), tipo, totalPctTipo }
   }, [grupo, categoriaEmEdicao?.id, categoriaEmEdicao?.aceitavelMensal, categoriaEmEdicao?.consomeMeta])
   if (!dados) return null
   const meta = (baseEmReais * dados.pct) / 100
   const dif = meta - dados.soma
+  const difPctTipo = Number((dados.totalPctTipo - 100).toFixed(2))
+  const rotuloTipo = ROTULO_TIPO_GRUPO[dados.tipo]
   return (
     <div style={{ borderTop: '1px solid var(--borda)', marginTop: 10, paddingTop: 10 }}>
       <p className="texto-fraco" style={{ margin: 0, fontSize: 12.5 }}>
@@ -100,6 +118,16 @@ function SituacaoMetaDoGrupo({
           </span>
         )}
       </p>
+      {/* Silêncio quando está certo (mesma regra da Calibragem): só aparece
+          quando os grupos de {rotuloTipo} não fecham 100% da receita. */}
+      {Math.abs(difPctTipo) >= 0.5 && (
+        <p style={{ margin: '2px 0 0', fontSize: 12.5 }} data-testid="alerta-vs-receita">
+          <span className="valor-neg texto-quebra">
+            Grupos de {rotuloTipo} somam {Number(dados.totalPctTipo.toFixed(2))}% —{' '}
+            {difPctTipo > 0 ? `excedem ${difPctTipo}%` : `faltam ${-difPctTipo}%`} para fechar 100%.
+          </span>
+        </p>
+      )}
     </div>
   )
 }

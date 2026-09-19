@@ -1,5 +1,5 @@
 import { type Categoria, type Lancamento } from '../db'
-import { statusDoLancamento, ROTULO_STATUS, CLASSE_STATUS, FUNDO_STATUS, fundoDaLinhaDeData } from '../statusPagamento'
+import { statusDoLancamento, rotuloDoStatus, CLASSE_STATUS, FUNDO_STATUS, fundoDaLinhaDeData } from '../statusPagamento'
 import { alternarPago } from '../lancamentosUtil'
 import { formatarCabecalhoData } from '../formatoData'
 import { fmtNum } from '../formatoMoeda'
@@ -111,7 +111,7 @@ export default function ListaLancamentosCategoria({
                           alternarPago(l)
                         }}
                       >
-                        {ROTULO_STATUS[status]}
+                        {rotuloDoStatus(status, l)}
                       </span>
                     </td>
                   </tr>

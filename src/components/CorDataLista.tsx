@@ -17,6 +17,7 @@ import {
   useCorDataLista,
   definirCorDataListaDoUsuario,
   restaurarCorDataListaPadraoDoApp,
+  COR_DATA_LISTA_TEMA,
 } from '../corDataLista'
 
 export default function CorDataLista() {
@@ -59,14 +60,14 @@ export default function CorDataLista() {
         <PreviaLista
           titulo="Como está hoje"
           zoomPct={0}
-          corData={padraoApp}
+          corData={padraoApp ?? COR_DATA_LISTA_TEMA}
           casos={['lancamentos', 'lancamentosSimples']}
           testid="previa-cor-hoje"
         />
         <PreviaLista
           titulo="Como vai ficar"
           zoomPct={0}
-          corData={efetivo}
+          corData={efetivo ?? COR_DATA_LISTA_TEMA}
           casos={['lancamentos', 'lancamentosSimples']}
           testid="previa-cor-resultado"
         />

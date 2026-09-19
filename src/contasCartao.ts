@@ -108,20 +108,26 @@ export function faturaVencidaENaoPaga(contaId: number, mesFatura: string): boole
    anteriores mesmo com fatura paga aparecem como 'No cartão' e deveriam
    aparecer como 'Pago', somente quando não pago que devem ser 'No Cartão'".
    Antes, `statusDoLancamento` nunca devolvia "Pago" pra cartão (ver o
-   comentário na própria função) — regra que continua valendo enquanto a
-   fatura NÃO está 100% quitada (quem paga é ela inteira, não a compra
-   avulsa). Mas quando `situacaoDaFatura(...).quitada` já é `true`, a compra
-   deixou de ser "ainda por resolver": o dinheiro já saiu, de verdade, então
-   "Pago" volta a ser a leitura certa. MESMA função `situacaoDaFatura`, nunca
-   uma segunda regra de "pagou ou não" escrita aqui — só sem o filtro de
-   vencimento já passado que `faturaVencidaENaoPaga` tem (aqui importa só se
-   quitou, não se já venceu). */
-export function faturaQuitada(contaId: number, mesFatura: string): boolean {
+   comentário na própria função).
+
+   Build 104 (18/09/2026) — CORREÇÃO da mesma regra: a versão anterior só
+   virava "Pago" quando `situacaoDaFatura(...).quitada` (fatura 100% quitada,
+   olhando a cadeia de resíduo entre meses). O Rafael reafirmou o pedido
+   original de forma mais literal: "independente do valor pago se 100% ou
+   qualquer valor da fatura maior que 0, deve dar baixa nos lançamentos como
+   pago daquela fatura" — ou seja, qualquer pagamento (mesmo parcial) já
+   basta pra virar "Pago", não só a quitação completa. Por isso agora o teste
+   é `situacao.pago > 0` (existe pagamento lançado para ESTA fatura/mês),
+   não mais `quitada`. MESMA função `situacaoDaFatura`, nunca uma segunda
+   regra de "pagou ou não" escrita aqui — só sem o filtro de vencimento já
+   passado que `faturaVencidaENaoPaga` tem (aqui importa só se recebeu
+   algum pagamento, não se já venceu nem se quitou tudo). */
+export function faturaTevePagamento(contaId: number, mesFatura: string): boolean {
   const conta = contasCache.find((c) => c.id === contaId)
   if (!conta || conta.tipo !== 'cartao') return false
   const categoriaPorId = new Map(categoriasCache.map((c) => [c.id!, c]))
   const situacao = situacaoDaFatura(lancamentosCache as Lancamento[], categoriaPorId, conta, mesFatura)
-  return situacao.quitada
+  return situacao.pago > 0
 }
 
 /** O mês de fatura efetivo de um lançamento de cartão, lendo `diaFechamento`

@@ -56,11 +56,26 @@ import ConfirmacaoAcao from '../components/ConfirmacaoAcao'
  *    administrar — então nada de regra oculta: cada linha é "texto do banco →
  *    nome", e ele muda ou apaga quando quiser.
  */
+/* Build 104 (19/09/2026), R1 da revisão de UX/UI — pedido do Rafael,
+ * aprovando "mesmo padrão de abas da tela vizinha": até aqui "Regras",
+ * "Padrão do app", "De/para aprendido" e "Pares confirmados" formavam uma
+ * página só, uma embaixo da outra — o De/para (que ele disse que quer
+ * administrar ativamente) ficava no meio de uma rolagem que só cresce com o
+ * uso. `Notificações Bancárias`, a tela vizinha, já tinha resolvido o mesmo
+ * problema com abas (`.abas-tela`/`.aba-tela-item`) — aqui é o MESMO
+ * componente/classe, não um padrão novo. "Voltar ao padrão do app" mudou de
+ * endereço: entra dentro da própria aba Regras (é ação SOBRE elas), não mais
+ * uma seção própria no meio da página.
+ */
+type AbaRegras = 'regras' | 'depara' | 'pares'
+const ROTULO_ABA_REGRAS: Record<AbaRegras, string> = { regras: 'Regras', depara: 'De/para', pares: 'Pares' }
+
 export default function ParametrosNotificacao({ aoVoltar }: { aoVoltar: () => void }) {
   const { efetivos, proprios, padraoApp } = useParamsNotificacao()
   const aprendizados = useLiveQuery(() => lerDoAmbiente(db.aprendizadosNotificacao.toArray()), []) ?? []
   const [confirmandoRestauro, setConfirmandoRestauro] = useState(false)
   const [aviso, setAviso] = useState<string | null>(null)
+  const [aba, setAba] = useState<AbaRegras>('regras')
 
   const personalizados = temParametrosProprios(proprios)
   const dePara = aprendizados.filter((a) => a.tipo === 'texto')
@@ -73,8 +88,31 @@ export default function ParametrosNotificacao({ aoVoltar }: { aoVoltar: () => vo
       <div className="cabecalho-fixo">
         <button type="button" className="botao-voltar-config" onClick={aoVoltar}>‹ Voltar</button>
         <h1>Regras de Notificação Bancária</h1>
+        <div className="abas-tela" role="tablist" data-testid="regras-abas">
+          {(['regras', 'depara', 'pares'] as AbaRegras[]).map((k) => (
+            <button
+              key={k}
+              type="button"
+              role="tab"
+              aria-selected={aba === k}
+              className={`aba-tela-item${aba === k ? ' ativa' : ''}`}
+              data-testid={`regras-aba-${k}`}
+              onClick={(e) => {
+                setAba(k)
+                e.currentTarget.closest('main')?.scrollTo({ top: 0 })
+              }}
+            >
+              {ROTULO_ABA_REGRAS[k]}{' '}
+              <span className="texto-fraco" style={{ fontWeight: 400 }}>
+                ({k === 'regras' ? PARAMETROS_NIVEL_USUARIO.length : k === 'depara' ? dePara.length : pares.length})
+              </span>
+            </button>
+          ))}
+        </div>
       </div>
 
+      {aba === 'regras' && (
+      <>
       <p className="texto-fraco">
         Como o app lê as notificações do banco: o que ele considera repetição, o que ele trata como propaganda, e
         quanta folga ele aceita pra dizer que a cobrança é aquele gasto que você já tinha previsto.
@@ -182,7 +220,11 @@ export default function ParametrosNotificacao({ aoVoltar }: { aoVoltar: () => vo
         )}
         {aviso && <p className="texto-fraco" style={{ marginBottom: 0 }}>{aviso}</p>}
       </div>
+      </>
+      )}
 
+      {aba === 'depara' && (
+      <>
       <h2>De/para aprendido</h2>
       <div className="cartao" data-testid="notif-depara-lista">
         <p className="texto-fraco" style={{ marginTop: 0 }}>
@@ -196,8 +238,10 @@ export default function ParametrosNotificacao({ aoVoltar }: { aoVoltar: () => vo
         {dePara.length === 0 && <p className="texto-fraco" style={{ margin: 0 }}>Nada aprendido ainda.</p>}
         {dePara.map((a) => <LinhaDePara key={a.id} a={a} />)}
       </div>
+      </>
+      )}
 
-      {pares.length > 0 && (
+      {aba === 'pares' && (
         <>
           <h2>Pares de apps confirmados como transferência</h2>
           <div className="cartao" data-testid="notif-pares-lista">
@@ -209,6 +253,7 @@ export default function ParametrosNotificacao({ aoVoltar }: { aoVoltar: () => vo
               <b>Exemplo:</b> Bradesco e C6 confirmados uma vez. Na próxima saída de um e entrada no outro, com o mesmo
               valor e poucos minutos de diferença, a proposta de transferência já vem montada.
             </p>
+            {pares.length === 0 && <p className="texto-fraco" style={{ margin: 0 }}>Nenhum par confirmado ainda.</p>}
             {pares.map((a) => (
               <div key={a.id} className="linha">
                 <span style={{ minWidth: 0 }}>{a.rotulo} <span className="texto-fraco">· {a.vezes}×</span></span>

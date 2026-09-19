@@ -48,6 +48,7 @@ export default function SeletorMes({
   onMudar,
   periodo,
   rotuloCentro: rotuloForcado,
+  compacto,
 }: {
   mes: string
   onMudar: (mes: string) => void
@@ -64,6 +65,16 @@ export default function SeletorMes({
      exatamente iguais. Revoga o `aoClicarNome`/toggle inline que existia
      antes (o Rafael reclamou que ficava "fixo na tela"). */
   periodo?: SeletorPeriodo
+  /* Build 104 (19/09/2026) — layout "Opção A" da revisão de UX/UI, aprovado
+     pelo Rafael pra Lançamentos: o nome do mês/período vira um SELO
+     compacto entre as duas setas (nunca mais a fileira cheia com "Hoje" e o
+     ícone de reprocessar sempre à mostra) — "Hoje" e "Reprocessar" mudam de
+     endereço pra DENTRO do popup que o selo abre, como duas ações a mais,
+     não menos alcançáveis, só não permanentes na tela. Só tem efeito com
+     `periodo` também presente (sem popup pra abrir, o selo não teria função)
+     — as outras telas não passam isto, e continuam com a fileira cheia de
+     sempre. */
+  compacto?: boolean
 }) {
   const mesAtual = mesAtualISO()
   const limiteFrente = somarMes(mesAtual, MESES_A_FRENTE)
@@ -123,6 +134,11 @@ export default function SeletorMes({
     ? `${formatarDataCurta(periodo.de)} – ${formatarDataCurta(periodo.ate)}`
     : rotuloForcado ?? formatarMesCurto(mes)
 
+  /* Build 104: sem `periodo` o selo não teria popup pra abrir — nesse caso a
+     fileira cheia de sempre continua valendo, mesmo que `compacto` tenha
+     vindo `true` por engano. */
+  const usarCompacto = !!compacto && !!periodo
+
   return (
     <>
       {/* Item 2 (16/09/2026): setas SEMPRE nas bordas absolutas
@@ -135,49 +151,65 @@ export default function SeletorMes({
         <button type="button" onClick={() => onMudar(somarMes(mes, -1))} aria-label="Mês anterior" disabled={!!periodo?.ativo}>
           ‹
         </button>
-        <div className="seletor-mes-centro">
-          {periodo ? (
-            <button
-              type="button"
-              className="seletor-mes-nome-botao"
-              onClick={abrirPopup}
-              data-testid="seletor-mes-nome-clicavel"
-              title="Escolher mês ou período"
-            >
-              {rotuloCentro}
-            </button>
-          ) : (
-            <strong title={foraDoMesAtual ? 'Você não está no mês atual' : undefined}>
-              {rotuloCentro}
-            </strong>
-          )}
-          {/* Volta pro mês corrente em um toque (build 063). Só existe quando há
-              pra onde voltar — no mês atual ele não teria função e só ocuparia
-              espaço na linha. */}
-          {foraDoMesAtual && !periodo?.ativo && (
-            <button
-              type="button"
-              className="seletor-mes-hoje"
-              onClick={() => onMudar(mesAtual)}
-              data-testid="seletor-mes-hoje"
-              title="Voltar para o mês atual"
-            >
-              Hoje
-            </button>
-          )}
-          {!periodo?.ativo && (
-            <button
-              type="button"
-              className="seletor-mes-reprocessar"
-              onClick={() => void reprocessar()}
-              disabled={processando}
-              aria-label="Reprocessar recorrentes e parcelas deste mês"
-              title="Reprocessar recorrentes e parcelas deste mês"
-            >
-              <ArrowPathIcon width={16} height={16} className={processando ? 'girando' : undefined} />
-            </button>
-          )}
-        </div>
+        {usarCompacto ? (
+          /* Build 104 (Opção A, 19/09/2026): um selo só — "Hoje" e
+             reprocessar saíram daqui e moram agora dentro do popup (ver
+             abaixo). As setas continuam fazendo o que sempre fizeram: passo a
+             passo, sem abrir nada. */
+          <button
+            type="button"
+            className={`seletor-mes-chip ${foraDoMesAtual && !periodo?.ativo ? 'seletor-mes-chip-fora' : ''}`}
+            onClick={abrirPopup}
+            data-testid="seletor-mes-nome-clicavel"
+            title="Escolher mês ou período"
+          >
+            {rotuloCentro}
+          </button>
+        ) : (
+          <div className="seletor-mes-centro">
+            {periodo ? (
+              <button
+                type="button"
+                className="seletor-mes-nome-botao"
+                onClick={abrirPopup}
+                data-testid="seletor-mes-nome-clicavel"
+                title="Escolher mês ou período"
+              >
+                {rotuloCentro}
+              </button>
+            ) : (
+              <strong title={foraDoMesAtual ? 'Você não está no mês atual' : undefined}>
+                {rotuloCentro}
+              </strong>
+            )}
+            {/* Volta pro mês corrente em um toque (build 063). Só existe quando há
+                pra onde voltar — no mês atual ele não teria função e só ocuparia
+                espaço na linha. */}
+            {foraDoMesAtual && !periodo?.ativo && (
+              <button
+                type="button"
+                className="seletor-mes-hoje"
+                onClick={() => onMudar(mesAtual)}
+                data-testid="seletor-mes-hoje"
+                title="Voltar para o mês atual"
+              >
+                Hoje
+              </button>
+            )}
+            {!periodo?.ativo && (
+              <button
+                type="button"
+                className="seletor-mes-reprocessar"
+                onClick={() => void reprocessar()}
+                disabled={processando}
+                aria-label="Reprocessar recorrentes e parcelas deste mês"
+                title="Reprocessar recorrentes e parcelas deste mês"
+              >
+                <ArrowPathIcon width={16} height={16} className={processando ? 'girando' : undefined} />
+              </button>
+            )}
+          </div>
+        )}
         <button
           type="button"
           onClick={() => onMudar(somarMes(mes, 1))}
@@ -187,7 +219,7 @@ export default function SeletorMes({
           ›
         </button>
       </div>
-      {aviso && <p className="texto-fraco" style={{ margin: '2px 0 0', fontSize: 11.5, textAlign: 'center' }}>{aviso}</p>}
+      {!usarCompacto && aviso && <p className="texto-fraco" style={{ margin: '2px 0 0', fontSize: 11.5, textAlign: 'center' }}>{aviso}</p>}
 
       {/* Item 2 (16/09/2026): popup de verdade (`.modal-fundo`/`.modal-conteudo`)
           no lugar do toggle inline que ficava "fixo na tela" — escolher um
@@ -197,6 +229,41 @@ export default function SeletorMes({
         <div className="modal-fundo" onClick={() => setPopupAberto(false)}>
           <div className="modal-conteudo" onClick={(e) => e.stopPropagation()}>
             <h2 style={{ marginTop: 0 }}>Ver por período ou por mês</h2>
+
+            {/* Build 104 (Opção A): "Hoje" e "Reprocessar" moraram sempre à
+                mostra na fileira do mês; no layout compacto elas se mudam pra
+                cá — MESMAS duas ações de sempre, só num toque a mais. */}
+            {usarCompacto && !periodo.ativo && (
+              <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+                {foraDoMesAtual && (
+                  <button
+                    type="button"
+                    className="secundario"
+                    style={{ flex: 1, marginTop: 0 }}
+                    onClick={() => { onMudar(mesAtual); setPopupAberto(false) }}
+                    data-testid="popup-mes-hoje"
+                  >
+                    Ir para hoje
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="secundario"
+                  style={{ flex: 1, marginTop: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+                  disabled={processando}
+                  onClick={() => void reprocessar()}
+                  data-testid="popup-mes-reprocessar"
+                >
+                  <ArrowPathIcon width={15} height={15} className={processando ? 'girando' : undefined} />
+                  {processando ? 'Reprocessando…' : 'Reprocessar mês'}
+                </button>
+              </div>
+            )}
+            {usarCompacto && aviso && (
+              <p className="texto-fraco" style={{ fontSize: 11.5, margin: '-8px 0 14px' }} data-testid="popup-mes-aviso">
+                {aviso}
+              </p>
+            )}
 
             <label htmlFor="periodo-popup-de">De</label>
             <input

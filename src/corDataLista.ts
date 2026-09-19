@@ -33,6 +33,28 @@ import type { EscopoPublicacao } from './notificacaoParametros'
 /** `undefined` = sem personalização, segue o tom do tema (claro/escuro). */
 export const COR_DATA_LISTA_PADRAO: string | undefined = undefined
 
+/* Build 104 (19/09/2026) — sentinel só pra fronteira com `PreviaLista`, NUNCA
+ * gravado no banco. Resolve um bug relatado pelo Rafael: "no N1 a prévia está
+ * mudando o 'Como está hoje' e o 'Como vai ficar'".
+ *
+ * A causa: `PreviaLista` recebe a cor por variável CSS, e quando `corData` é
+ * `undefined` ela OMITE a variável de propósito — é o que deixa o quadro de
+ * zoom/ícones (que não fala de cor) herdar a cor em vigor no app. Mas
+ * `CorDataLista.tsx`/`CorDataListaN0.tsx` também usam `undefined` pra dizer
+ * "sem cor escolhida, tom do tema" — e como o N1 grava a escolha DIRETO no
+ * banco a cada clique (sem rascunho), o quadro "Como está hoje" (que quer um
+ * valor FIXO) acabava herdando a variável global, que muda a cada clique no
+ * quadro "Como vai ficar" ao lado. O N0 nunca mostrou o problema por outro
+ * motivo: lá a cor sendo testada é rascunho em `useState`, nunca chega a
+ * tocar a variável global antes de publicar.
+ *
+ * A correção: todo quadro que representa um valor de referência FIXO (não o
+ * "como vai ficar" ao vivo) passa este sentinel em vez de `undefined` cru —
+ * `PreviaLista` então fixa `var(--texto-fraco)` explicitamente no próprio
+ * quadro, em vez de deixar a variável ausente (e herdável). Ver o cabeçalho
+ * de `PreviaLista.tsx`. */
+export const COR_DATA_LISTA_TEMA = 'tema' as const
+
 /** O que o N0 publica. Mesma forma de `ZoomListasN0`. */
 export interface CorDataListaN0 {
   versao: number

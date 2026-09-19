@@ -30,11 +30,11 @@ import {
   janelaPadrao,
   janelaAmpliada,
   ROTULO_GRUPO_CANDIDATO,
-  ROTULO_STATUS,
   CLASSE_STATUS,
   type CandidatoVinculo,
   type JanelaBusca,
 } from '../vinculoNotificacao'
+import { rotuloDoStatus } from '../statusPagamento'
 import { acharParesDeTransferencia, criarTransferenciaDoPar, type ParTransferencia } from '../transferenciaNotificacao'
 import { useContasCartao } from '../contasCartao'
 
@@ -418,6 +418,15 @@ export default function NotificacoesBancarias({
                     {' · '}
                     {vo.vinculadoAExistente ? 'vinculado a um lançamento que já existia' : 'criado direto da notificação'}
                     {vo.app ? ` · ${vo.app}` : ''}
+                    {/* Build 104: vínculo feito sozinho pelo app (ver
+                        `avaliarAutoVinculo()`) — ninguém olhou antes de
+                        acontecer, por isso aparece marcado aqui também, não só
+                        no rótulo de status do lançamento. */}
+                    {vo.automatico && (
+                      <span className="valor-neg" data-testid="notif-vinculo-auto">
+                        {' · vinculado automaticamente'}
+                      </span>
+                    )}
                   </p>
                   {vo.textoCru && (
                     <>
@@ -748,7 +757,7 @@ function CartaoNotificacao({
                     )}
                   </span>
                   <span className={`status-pill ${CLASSE_STATUS[c.status]}`} style={{ fontSize: 10 }} data-testid="notif-candidato-status">
-                    {ROTULO_STATUS[c.status]}
+                    {rotuloDoStatus(c.status, c.lancamento)}
                   </span>
                   <button type="button" className="botao-mini-secundario" data-testid="notif-vincular" onClick={() => vincular(c)}>
                     {ROTULO_ACAO.eEste}

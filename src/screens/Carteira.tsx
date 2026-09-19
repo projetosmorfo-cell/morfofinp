@@ -9,7 +9,7 @@ import SeloInstituicao from '../components/SeloInstituicao'
 import {
   useSelecao, BarraSelecao, TotaisEntradaSaida, MarcadorLinha, blocosPorCorte, RodapeTotais,
 } from '../components/SelecaoETotais'
-import { CampoBusca, FolhaFiltros, FILTROS_VAZIOS, aplicarFiltros, contarFiltrosAtivos, type FiltrosAvancados } from '../components/BuscaEFiltros'
+import { CampoBusca, FolhaFiltros, FILTROS_VAZIOS, aplicarFiltros, contarFiltrosAtivos, ChipsFiltrosAtivos, type FiltrosAvancados } from '../components/BuscaEFiltros'
 import { janelaFatura, lancamentosDoCiclo, situacaoDaFatura, DIA_FECHAMENTO_PADRAO, type SituacaoFatura } from '../faturaCiclo'
 import { totalDoLugar, lancamentosDoCofrinhoVirtual, ancorarNoInformado, type TotalDoLugar } from '../totaisCarteira'
 import { formatarCabecalhoData } from '../formatoData'
@@ -746,6 +746,9 @@ function DetalheConta({
             <strong className="valor-neg" style={{ fontSize: 18 }} data-testid="topo-fatura-real">{fmtBRL(fatura.realizado)}</strong>
           </div>
         )}
+        {/* Build 104 (F2, 19/09/2026): mesmos chips de filtro ativo de
+            Lançamentos — ver o comentário em `Lancamentos.tsx`. */}
+        <ChipsFiltrosAtivos filtros={filtros} categoriaPorId={categoriaPorId} contaPorId={contaPorId} onFiltrosChange={setFiltros} />
         {(buscaAberta || busca !== '') && (
           <CampoBusca busca={busca} onBuscaChange={setBusca} onFechar={() => setBuscaAberta(false)} />
         )}

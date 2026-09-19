@@ -42,13 +42,22 @@ export function avaliarPassos(
   const base = categoriasDaBaseMeta(categorias as Categoria[])
   const receitaOk = base.length > 0 && base.some((c) => (c.esperadoMensal ?? 0) > 0)
 
-  // 2) os grupos de saída somam 100%?
+  // 2) os grupos de saída somam 100% — E os de entrada (Receita) também,
+  //    cada conjunto por si (build 104, pedido do Rafael 18/09/2026: "os
+  //    grupos do tipo Receita devem formar um conjunto igual os de consumo
+  //    que devem fechar em 100% pra estar ok, senão vai acusar falta de
+  //    calibragem tudo igual o que temos hoje pra consumo"). Sem nenhum
+  //    grupo de entrada cadastrado não há o que calibrar desse lado — conta
+  //    como ok pra não travar quem ainda não tem "Receita" (instalação bem
+  //    antiga, antes do tipo de grupo existir).
   const gruposSaida = grupos.filter((g) => g.tipo === 'saida')
-  const soma = gruposSaida.reduce(
-    (s, g) => s + (metas.find((m) => m.grupo === g.nome)?.percentual ?? 0),
-    0,
-  )
-  const percentuaisOk = gruposSaida.length > 0 && Math.abs(soma - 100) < 0.5
+  const gruposEntrada = grupos.filter((g) => g.tipo === 'entrada')
+  const fechaEm100 = (lista: readonly GrupoRegistro[]) => {
+    if (lista.length === 0) return true
+    const soma = lista.reduce((s, g) => s + (metas.find((m) => m.grupo === g.nome)?.percentual ?? 0), 0)
+    return Math.abs(soma - 100) < 0.5
+  }
+  const percentuaisOk = gruposSaida.length > 0 && fechaEm100(gruposSaida) && fechaEm100(gruposEntrada)
 
   // 3) toda categoria de gasto tem meta? (opcional)
   const deGasto = categorias.filter((c) => c.natureza === 'Consumo')

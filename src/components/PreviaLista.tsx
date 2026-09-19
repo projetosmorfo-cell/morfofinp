@@ -37,6 +37,7 @@ import { fatorDoZoom, normalizarEspaco } from '../zoomListas'
 import { fmtNum } from '../formatoMoeda'
 import { COR_PADRAO_CATEGORIAS, COR_PADRAO_GRUPOS } from '../pacotesIcones'
 import { CLASSE_STATUS, ROTULO_STATUS } from '../statusPagamento'
+import { COR_DATA_LISTA_TEMA } from '../corDataLista'
 
 /* As cores vêm das constantes da plataforma (`pacotesIcones.ts`), nunca de um
    hex escrito aqui: se o padrão da Morfo mudar, o exemplo muda junto.
@@ -195,11 +196,14 @@ export default function PreviaLista({
   /* Ausente = o quadro herda o espaço em vigor (é o caso da prévia dos
      ícones, que não fala de espaçamento). */
   espacoPx?: number
-  /* Build 101: cor da linha de data pra ESTE quadro — `undefined` mostra o
-     tom padrão do tema (`--texto-fraco`), igual ao que `.sessao-data`/
-     `.sessao-data-simples` já fazem quando a variável não está definida.
-     Ausente (parâmetro nem passado) = o quadro herda a cor em vigor no app
-     (é o caso das prévias de zoom/ícones, que não falam de cor). */
+  /* Build 101: cor da linha de data pra ESTE quadro. Ausente (parâmetro nem
+     passado) = o quadro herda a cor em vigor no app (é o caso das prévias de
+     zoom/ícones, que não falam de cor).
+     Build 104: pra um quadro de valor FIXO que precisa mostrar "sem cor,
+     tom do tema" SEM herdar a cor em vigor (ex.: "Como está hoje" ao lado de
+     um "Como vai ficar" que muda a cada clique), passe o sentinel
+     `COR_DATA_LISTA_TEMA` em vez de `undefined` — ver o cabeçalho de
+     `corDataLista.ts`. */
   corData?: string
   casos?: ('lancamentos' | 'lancamentosSimples' | 'categorias' | 'grupos')[]
   testid?: string
@@ -208,12 +212,17 @@ export default function PreviaLista({
   /* `--zoom-lista`/`--espaco-lancamento`/`--cor-data-lista` não existem no
      tipo de `CSSProperties` (são variáveis CSS, não propriedades conhecidas)
      — o cast é o caminho normal em React pra isso. Cor VAZIA (string vazia)
-     é um valor CSS inválido — nesse caso a variável é OMITIDA, deixando o
-     `var(--cor-data-lista, var(--texto-fraco))` do CSS cair no padrão. */
+     ou ausente é um valor CSS inválido/não passado — nesse caso a variável é
+     OMITIDA, deixando este quadro HERDAR a cor em vigor no app (o caso das
+     prévias de zoom/ícones). O sentinel `COR_DATA_LISTA_TEMA` (build 104) é
+     resolvido pra `var(--texto-fraco)` FIXO no próprio quadro — bloqueia
+     essa herança pros quadros de valor fixo (ver o comentário da prop
+     acima). */
+  const corDataResolvida = corData === COR_DATA_LISTA_TEMA ? 'var(--texto-fraco)' : corData
   const estilo = {
     '--zoom-lista': fatorDoZoom(zoomPct),
     ...(espacoPx === undefined ? {} : { '--espaco-lancamento': `${normalizarEspaco(espacoPx)}px` }),
-    ...(corData ? { '--cor-data-lista': corData } : {}),
+    ...(corDataResolvida ? { '--cor-data-lista': corDataResolvida } : {}),
   } as CSSProperties
 
   return (

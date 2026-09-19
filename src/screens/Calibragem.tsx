@@ -26,7 +26,8 @@
  */
 import { useEffect, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { db, type Categoria, type GrupoRegistro } from '../db'
+import { db, type Categoria, type GrupoRegistro, type TipoGrupo } from '../db'
+import { ROTULO_TIPO_GRUPO } from '../gruposUtil'
 import { lerDoAmbiente, marcaDoAmbiente } from '../ambiente'
 import { baseMetaDoMes, metaEmReais } from '../baseMeta'
 import { categoriaConsomeMeta } from '../orcamento'
@@ -75,7 +76,11 @@ export default function Calibragem({ mes, aoVoltar, aoAbrirLancamento }: Calibra
      ANTES de gravar. Gravar um por um faria o total passar por estados
      inválidos a cada tecla — e é o total que esta tela existe pra mostrar. */
   const [rascunho, setRascunho] = useState<Record<string, string> | null>(null)
-  const [salvo, setSalvo] = useState(false)
+  /* Build 104 — "Entrada" ganhou seção própria (pedido do Rafael: "os grupos
+     do tipo Receita devem formar um conjunto igual os de consumo, que
+     também precisa fechar 100%"). Salvar é por seção (Saída ou Entrada),
+     então o feedback "Salvo" também é por tipo, não um booleano só. */
+  const [salvoTipo, setSalvoTipo] = useState<TipoGrupo | null>(null)
   const [editandoGrupo, setEditandoGrupo] = useState<GrupoRegistro | null>(null)
   const [editandoCat, setEditandoCat] = useState<Categoria | null>(null)
   const [baseAberta, setBaseAberta] = useState(false)
@@ -89,25 +94,27 @@ export default function Calibragem({ mes, aoVoltar, aoAbrirLancamento }: Calibra
   const [baseRef, setBaseRef] = useState<BaseReferencia>('ultimo')
 
   const gruposSaida = (grupos ?? []).filter((g) => g.tipo === 'saida' && g.ativo !== false)
+  // Build 104: conjunto irmão do de Saída — mesma regra (fechar 100%), só que
+  // do lado da receita. Antes do tipo de grupo existir, tudo ficava numa
+  // conta só; depois do tipo, esta metade ficou sem tela nenhuma — "perdeu a
+  // funcionalidade que antes tinha", no relato do Rafael.
+  const gruposEntrada = (grupos ?? []).filter((g) => g.tipo === 'entrada' && g.ativo !== false)
 
   // Semeia o rascunho quando os dados chegam (e só então).
   useEffect(() => {
-    if (rascunho || !metas || gruposSaida.length === 0) return
+    if (rascunho || !metas || (gruposSaida.length === 0 && gruposEntrada.length === 0)) return
     const inicial: Record<string, string> = {}
-    for (const g of gruposSaida) {
+    for (const g of [...gruposSaida, ...gruposEntrada]) {
       inicial[g.nome] = String(metas.find((m) => m.grupo === g.nome)?.percentual ?? 0)
     }
     setRascunho(inicial)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [metas, gruposSaida.length])
+  }, [metas, gruposSaida.length, gruposEntrada.length])
 
   if (!categorias || !grupos || !metas || !lancamentos || !contas || !rascunho) return null
 
   const base = baseMetaDoMes(lancamentos, categorias, mes)
   const pctDe = (nome: string) => Number((rascunho[nome] ?? '0').replace(',', '.')) || 0
-  const totalPct = gruposSaida.reduce((s, g) => s + pctDe(g.nome), 0)
-  const difPct = totalPct - 100
-  const fechou = Math.abs(difPct) < TOLERANCIA_PCT
 
   const somaCategoriasDo = (nome: string) =>
     categorias
@@ -145,8 +152,8 @@ export default function Calibragem({ mes, aoVoltar, aoAbrirLancamento }: Calibra
       <Icone id={g.icone} estilo={g.iconeEstilo} cor={g.iconeCor} tamanho={pctIcone} />
     ) : null
 
-  async function salvarPercentuais() {
-    for (const g of gruposSaida) {
+  async function salvarPercentuais(gruposDoTipo: GrupoRegistro[], tipo: TipoGrupo) {
+    for (const g of gruposDoTipo) {
       const pct = pctDe(g.nome)
       const existente = metas!.find((m) => m.grupo === g.nome)
       if (existente) await db.metas.update(existente.id!, { percentual: pct })
@@ -160,13 +167,13 @@ export default function Calibragem({ mes, aoVoltar, aoAbrirLancamento }: Calibra
         })
     }
     await marcarCategoriasEditadas()
-    setSalvo(true)
-    window.setTimeout(() => setSalvo(false), 2500)
+    setSalvoTipo(tipo)
+    window.setTimeout(() => setSalvoTipo(null), 2500)
   }
 
-  const mudou = gruposSaida.some(
-    (g) => pctDe(g.nome) !== (metas.find((m) => m.grupo === g.nome)?.percentual ?? 0),
-  )
+  const mudouTipo = (gruposDoTipo: GrupoRegistro[]) =>
+    gruposDoTipo.some((g) => pctDe(g.nome) !== (metas.find((m) => m.grupo === g.nome)?.percentual ?? 0))
+  const totalPctDoTipo = (gruposDoTipo: GrupoRegistro[]) => gruposDoTipo.reduce((s, g) => s + pctDe(g.nome), 0)
 
   return (
     <>
@@ -179,8 +186,10 @@ export default function Calibragem({ mes, aoVoltar, aoAbrirLancamento }: Calibra
               <p>
                 São duas contas, e elas são independentes. <strong>Entre grupos</strong>: os
                 percentuais precisam somar 100% da sua receita fixa — se um sobe, outro tem que
-                descer. <strong>Dentro do grupo</strong>: a soma das metas das categorias dele
-                precisa caber na meta do grupo.
+                descer. Entrada e Saída são conjuntos separados: cada lado fecha o próprio 100%
+                (normalmente Entrada é só o grupo Receita, sozinho em 100%).{' '}
+                <strong>Dentro do grupo</strong>: a soma das metas das categorias dele precisa
+                caber na meta do grupo.
               </p>
               <p>
                 Esta tela mostra as duas ao mesmo tempo porque mexer na de cima muda a de baixo:
@@ -222,60 +231,83 @@ export default function Calibragem({ mes, aoVoltar, aoAbrirLancamento }: Calibra
         )}
       </div>
 
-      <div className="titulo-bloco-ideal">1 · Entre grupos — precisa somar 100%</div>
-      <div className="cartao" data-testid="calibragem-grupos">
-        {gruposSaida.map((g) => (
-          <div className="campo-pct-calibragem" key={g.id}>
-            <button
-              type="button"
-              className="nome-grupo-calibragem"
-              onClick={() => setEditandoGrupo(g)}
-              data-testid={`editar-grupo-calibragem-${g.nome}`}
-            >
-              {iconeDe(g)}
-              <span>{g.nome}</span>
-              {/* O lápis aparece porque "nome sublinhado" não lia como algo
-                  clicável — mesma reclamação do link azul do cofrinho. */}
-              <PencilSquareIcon width={14} height={14} className="icone-editar-inline" />
-            </button>
-            <span className="valor-pct-calibragem">{fmtNum(metaEmReais(base, pctDe(g.nome)))}</span>
-            <input
-              type="number"
-              min={0}
-              max={100}
-              inputMode="decimal"
-              value={rascunho[g.nome] ?? '0'}
-              onChange={(e) => setRascunho((r) => ({ ...(r ?? {}), [g.nome]: e.target.value }))}
-              aria-label={`Percentual do grupo ${g.nome}`}
-              data-testid={`pct-${g.nome}`}
-            />
-          </div>
-        ))}
+      {[
+        { tipo: 'saida' as TipoGrupo, gruposDoTipo: gruposSaida, sufixo: '' },
+        { tipo: 'entrada' as TipoGrupo, gruposDoTipo: gruposEntrada, sufixo: '-entrada' },
+      ]
+        .filter(({ gruposDoTipo }) => gruposDoTipo.length > 0)
+        .map(({ tipo, gruposDoTipo, sufixo }) => {
+          const totalDoTipo = totalPctDoTipo(gruposDoTipo)
+          const difDoTipo = totalDoTipo - 100
+          const fechouTipo = Math.abs(difDoTipo) < TOLERANCIA_PCT
+          const mudouEsteTipo = mudouTipo(gruposDoTipo)
+          return (
+            <div key={tipo}>
+              <div className="titulo-bloco-ideal">
+                1{sufixo ? 'b' : ''} · Entre grupos de {ROTULO_TIPO_GRUPO[tipo]} — precisa somar 100%
+              </div>
+              <div className="cartao" data-testid={`calibragem-grupos${sufixo}`}>
+                {gruposDoTipo.map((g) => (
+                  <div className="campo-pct-calibragem" key={g.id}>
+                    <button
+                      type="button"
+                      className="nome-grupo-calibragem"
+                      onClick={() => setEditandoGrupo(g)}
+                      data-testid={`editar-grupo-calibragem-${g.nome}`}
+                    >
+                      {iconeDe(g)}
+                      <span>{g.nome}</span>
+                      {/* O lápis aparece porque "nome sublinhado" não lia como algo
+                          clicável — mesma reclamação do link azul do cofrinho. */}
+                      <PencilSquareIcon width={14} height={14} className="icone-editar-inline" />
+                    </button>
+                    <span className="valor-pct-calibragem">{fmtNum(metaEmReais(base, pctDe(g.nome)))}</span>
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      inputMode="decimal"
+                      value={rascunho[g.nome] ?? '0'}
+                      onChange={(e) => setRascunho((r) => ({ ...(r ?? {}), [g.nome]: e.target.value }))}
+                      aria-label={`Percentual do grupo ${g.nome}`}
+                      data-testid={`pct-${g.nome}`}
+                    />
+                  </div>
+                ))}
 
-        <div className={`total-calibragem ${fechou ? 'ok' : 'erro'}`} data-testid="total-percentuais">
-          <span style={{ flex: 1 }}>Total</span>
-          <span className="valor-pct-calibragem">{fmtBRL(metaEmReais(base, totalPct))}</span>
-          <strong data-testid="total-pct-numero">{Number(totalPct.toFixed(2))}%</strong>
-        </div>
-        <p className={`ideal-t4 texto-quebra ${fechou ? 'valor-pos' : 'valor-neg'}`} style={{ margin: '6px 0 0' }}>
-          {fechou
-            ? 'Fecha em 100%. Está calibrado.'
-            : difPct > 0
-              ? `Excede ${Number(difPct.toFixed(2))}%. Tire esse tanto de um ou mais grupos.`
-              : `Faltam ${Number((-difPct).toFixed(2))}% para fechar 100%.`}
-        </p>
+                <div
+                  className={`total-calibragem ${fechouTipo ? 'ok' : 'erro'}`}
+                  data-testid={`total-percentuais${sufixo}`}
+                >
+                  <span style={{ flex: 1 }}>Total</span>
+                  <span className="valor-pct-calibragem">{fmtBRL(metaEmReais(base, totalDoTipo))}</span>
+                  <strong data-testid={`total-pct-numero${sufixo}`}>{Number(totalDoTipo.toFixed(2))}%</strong>
+                </div>
+                <p
+                  className={`ideal-t4 texto-quebra ${fechouTipo ? 'valor-pos' : 'valor-neg'}`}
+                  style={{ margin: '6px 0 0' }}
+                >
+                  {fechouTipo
+                    ? 'Fecha em 100%. Está calibrado.'
+                    : difDoTipo > 0
+                      ? `Excede ${Number(difDoTipo.toFixed(2))}%. Tire esse tanto de um ou mais grupos.`
+                      : `Faltam ${Number((-difDoTipo).toFixed(2))}% para fechar 100%.`}
+                </p>
 
-        <button
-          type="button"
-          className="primario"
-          disabled={!mudou}
-          onClick={salvarPercentuais}
-          data-testid="salvar-percentuais"
-          style={{ width: '100%' }}
-        >
-          {salvo ? 'Salvo' : mudou ? 'Salvar percentuais' : 'Nada alterado'}
-        </button>
-      </div>
+                <button
+                  type="button"
+                  className="primario"
+                  disabled={!mudouEsteTipo}
+                  onClick={() => salvarPercentuais(gruposDoTipo, tipo)}
+                  data-testid={`salvar-percentuais${sufixo}`}
+                  style={{ width: '100%' }}
+                >
+                  {salvoTipo === tipo ? 'Salvo' : mudouEsteTipo ? 'Salvar percentuais' : 'Nada alterado'}
+                </button>
+              </div>
+            </div>
+          )
+        })}
 
       <div className="titulo-bloco-ideal">2 · Dentro de cada grupo</div>
       {todosCalibrados && (

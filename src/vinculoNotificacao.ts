@@ -112,6 +112,7 @@ import { analisarNotificacao, type NotificacaoAnalisada } from './parseNotificac
 import { paramsNotificacaoAtuais, type ParametrosNotificacao } from './notificacaoParametros'
 import { statusDoLancamento, jaAconteceu, ROTULO_STATUS, CLASSE_STATUS, type StatusPagamento } from './statusPagamento'
 import { doAmbiente, marcaDoAmbiente, ambienteDoBanco } from './ambiente'
+import { ehContaDeCartao } from './contasCartao'
 
 // --- Tolerância -------------------------------------------------------------
 
@@ -349,12 +350,17 @@ export interface ResultadoVinculo {
 /**
  * Liga a notificação a um lançamento que já existe. Nunca cria lançamento
  * nenhum — é justamente o ponto.
+ *
+ * `contasCartao` ausente (build 104, chamada automática — ver
+ * `tentarAutoVincular`) usa o cache síncrono de `contasCartao.ts` direto, a
+ * MESMA fonte que a versão com prop só evita carregar de novo na tela.
  */
 export async function vincularNotificacaoALancamento(
   n: NotificacaoPendente,
   lancamentoId: number,
-  contasCartao: ReadonlySet<number>,
+  contasCartao?: ReadonlySet<number>,
   p: ParametrosNotificacao = paramsNotificacaoAtuais(),
+  extra?: { automatico?: boolean },
 ): Promise<ResultadoVinculo> {
   const a = analisarNotificacao(n, p)
   const l = await db.lancamentos.get(lancamentoId)
@@ -365,7 +371,7 @@ export async function vincularNotificacaoALancamento(
   /* Build 064: em cartão quem liquida é a FATURA, não a compra. Marcar `pago`
      aqui tiraria a compra da fatura em aberto — o status "No cartão" já sai da
      conta + data. */
-  const ehCartao = contasCartao.has(l.contaId)
+  const ehCartao = contasCartao ? contasCartao.has(l.contaId) : ehContaDeCartao(l.contaId)
   const marcouComoPago = !ehCartao
 
   /* BUILD 081 — as DUAS datas recebem a data da notificação, sempre iguais.
@@ -394,12 +400,126 @@ export async function vincularNotificacaoALancamento(
          ritmo (`recorrencia.ts`), pra o mês de origem não ficar sem a conta
          nem ganhar uma duplicada quando o lançamento muda de mês. */
       dataCompetenciaAnterior: dataAnterior,
+      ...(extra?.automatico ? { automatico: true } : {}),
     },
   })
   if (n.id != null) {
     await db.notificacoesPendentes.update(n.id, { status: 'confirmada', lancamentoId })
   }
   return { lancamentoId, valorAnterior: l.valor, valorNovo, marcouComoPago, dataAnterior, dataNova, mudouDeMes }
+}
+
+// --- Vínculo AUTOMÁTICO (build 104, 19/09/2026) -----------------------------
+//
+// Pedido do Rafael, literal: "quando cair nova notificação e for identificado
+// mesmo nome, mesmo valor de uma outra já vinculada, mês anterior já tem uma
+// igual vinculada a um lançamento, neste mês tem um lançamento igual e vem
+// pagamento, então dar baixa como 'Pago Auto'... mas se já tiver lançamento
+// pago nesse mês então manter como pendente... quero automatizar quando for
+// seguro."
+//
+// TRÊS CONDIÇÕES, TODAS OBRIGATÓRIAS — cada uma fecha uma forma de vínculo
+// errado acontecer sem ninguém olhar. As três precisam passar; a primeira que
+// falhar já decide "fica pendente, do jeito de sempre":
+//
+//   1. HISTÓRICO — este MESMO nome+valor (normalizado, mesma tolerância de
+//      sempre) já foi vinculado de verdade em pelo menos um mês ANTERIOR. Sem
+//      isso, a primeira vez que um nome aparece nunca é automática — é
+//      exatamente o caso que precisa do olho do Rafael (categoria certa,
+//      conta certa, nome que ainda não bateu com nada).
+//   2. SEM CONFLITO NESTE MÊS — nenhum lançamento do mesmo nome+valor, no
+//      MESMO MÊS da notificação, já está marcado como acontecido (pago,
+//      recebido ou no cartão). Se já tem, o mês já foi resolvido por outro
+//      caminho — vincular de novo seria duplicar. Fica pendente.
+//   3. CANDIDATO ÚNICO E FORTE — dentro da janela normal de busca, existe
+//      EXATAMENTE UM lançamento em aberto (ainda não aconteceu) que casa
+//      pelas regras duras de sempre (data + valor + conta) E pelo nome IGUAL
+//      normalizado (não a versão "parecido" — essa é fuzzy demais pra andar
+//      sozinha). Zero ou dois ou mais candidatos é ambiguidade — fica
+//      pendente pro Rafael escolher, do jeito de sempre.
+//
+// Quando as três passam, o vínculo é gravado com `automatico: true` — o
+// rótulo na tela vira "Pago Auto"/"Recebido Auto"/"No Cartão Auto" (ver
+// `rotuloDoStatus()` em `statusPagamento.ts`) e a aba "Vínculos" (Notificações
+// Bancárias) avisa que foi automático, com o mesmo "Desvincular" de sempre —
+// nunca um caminho de correção diferente pra vínculo automático.
+
+export interface AvaliacaoAutoVinculo {
+  pode: boolean
+  lancamentoId?: number
+  /** Sempre preenchido — serve de log/depuração mesmo quando `pode` é falso. */
+  motivo: string
+}
+
+/** Decide, sem gravar nada, se esta notificação PODE ser vinculada sozinha. */
+export async function avaliarAutoVinculo(
+  n: NotificacaoPendente,
+  p: ParametrosNotificacao = paramsNotificacaoAtuais(),
+): Promise<AvaliacaoAutoVinculo> {
+  const a = analisarNotificacao(n, p)
+  if (!a.transacional || a.valor == null) return { pode: false, motivo: 'não parece movimentação de dinheiro' }
+  const nome = normalizarNome(a.contraparte ?? '')
+  if (nome.length < 3) return { pode: false, motivo: 'sem nome reconhecido no texto' }
+
+  const amb = await ambienteDoBanco()
+  const todos = doAmbiente(await db.lancamentos.toArray(), amb)
+  const mesNotificacao = soData(n.recebidoEm).slice(0, 7)
+  const sinalEsperado = a.tipo === 'entrada' ? 1 : -1
+
+  const casaComNome = (l: Lancamento) =>
+    normalizarNome(l.descricao ?? '') === nome || normalizarNome(l.descricaoOriginal ?? '') === nome
+  const casaComValor = (l: Lancamento) => Math.sign(l.valor) === sinalEsperado && dentroDaTolerancia(l.valor, a.valor!, p)
+
+  // Condição 2 primeiro — é a de segurança, e a mais barata de decidir.
+  const conflitoNoMes = todos.some(
+    (l) => l.dataCompetencia.slice(0, 7) === mesNotificacao && casaComNome(l) && casaComValor(l) && jaAconteceu(l),
+  )
+  if (conflitoNoMes) return { pode: false, motivo: 'já existe lançamento igual pago neste mês' }
+
+  // Condição 1 — histórico em algum mês ANTERIOR, com vínculo de verdade.
+  const temHistorico = todos.some(
+    (l) => l.dataCompetencia.slice(0, 7) < mesNotificacao && l.vinculoOrigem != null && casaComNome(l) && casaComValor(l),
+  )
+  if (!temHistorico) return { pode: false, motivo: 'primeira vez com este nome — precisa de confirmação' }
+
+  // Condição 3 — candidato único e forte no mês corrente.
+  const candidatos = await buscarCandidatosNoBanco(n, undefined, p)
+  const fortes = candidatos.filter((c) => c.grupo === 0 && c.pontosTexto === 2)
+  if (fortes.length !== 1) {
+    return {
+      pode: false,
+      motivo: fortes.length === 0 ? 'nenhum lançamento em aberto casando pelo nome' : 'mais de um candidato — ambíguo',
+    }
+  }
+
+  return {
+    pode: true,
+    lancamentoId: fortes[0].lancamento.id,
+    motivo: 'nome já confirmado antes, candidato único em aberto, sem conflito no mês',
+  }
+}
+
+/**
+ * Tenta vincular sozinha, sem o Rafael abrir a tela — chamada assim que a
+ * notificação entra (`registrarNotificacao`, `notificacaoBancaria.ts`). Só
+ * faz alguma coisa quando `avaliarAutoVinculo` aprova as três condições; fora
+ * isso a notificação simplesmente fica 'pendente', do jeito de sempre. Nunca
+ * lança — falhar aqui não pode impedir a notificação de aparecer na tela pro
+ * Rafael tratar na mão.
+ */
+export async function tentarAutoVincular(
+  n: NotificacaoPendente,
+  p: ParametrosNotificacao = paramsNotificacaoAtuais(),
+): Promise<ResultadoVinculo | undefined> {
+  if (n.id == null) return undefined
+  try {
+    const avaliacao = await avaliarAutoVinculo(n, p)
+    if (!avaliacao.pode || avaliacao.lancamentoId == null) return undefined
+    return await vincularNotificacaoALancamento(n, avaliacao.lancamentoId, undefined, p, { automatico: true })
+  } catch (erro) {
+    console.error('tentarAutoVincular: falha avaliando/vinculando', erro)
+    return undefined
+  }
 }
 
 // --- Desvincular (build 081, item 5) ---------------------------------------

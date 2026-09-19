@@ -60,16 +60,29 @@ export function NavBadge({ abs }: { abs?: boolean }) {
 export interface ItemMenuTopo { icon: ComponentType<{ size?: number; color?: string }>; label: ReactNode; onClick: () => void; danger?: boolean; hasUnread?: boolean }
 
 /* ---- Projeto Modelo (TopIconMenu): o "⋮". `panelDir` existe porque, fora do topo, o painel precisa
-   abrir pra cima e/ou pro lado oposto, senão nasce fora da tela. ---- */
-export function TopIconMenu({ items, dark, hasUnread, panelDir, big }: {
+   abrir pra cima e/ou pro lado oposto, senão nasce fora da tela.
+
+   `titulo`/`dataTour` (build 104, 19/09/2026): este componente nasceu como
+   o "⋮" ÚNICO do app-chrome (montado uma vez por `App.tsx`/`DevApp.tsx`,
+   com o passo de tour "n1-mais-opcoes" apontando pra ele). Ao reusar o
+   MESMO componente em `Lancamentos.tsx` pra um "⋮" diferente (Selecionar/
+   Exportar, por tela), os dois botões nasceram com o mesmo rótulo "Mais
+   opções" e o MESMO `data-tour="n1-mais-opcoes"` na mesma tela — dois
+   elementos indistinguíveis (achado rodando o QA em Playwright: a busca
+   por esse seletor voltava dois botões). Os parâmetros aqui têm o valor de
+   sempre como padrão — quem já chama sem passar nada continua idêntico —
+   e quem monta um segundo "⋮" na mesma tela passa um rótulo e um
+   `data-tour` próprios. */
+export function TopIconMenu({ items, dark, hasUnread, panelDir, big, titulo = 'Mais opções', dataTour = 'n1-mais-opcoes' }: {
   items: ItemMenuTopo[]; dark?: boolean; hasUnread?: boolean
   panelDir?: { vertical?: 'up' | 'down'; horizontal?: 'left' | 'right' }; big?: boolean
+  titulo?: string; dataTour?: string
 }) {
   const [open, setOpen] = useState(false)
   if (!items || !items.length) return null
   const vert = panelDir?.vertical || 'down'; const horiz = panelDir?.horizontal || 'right'
   return <div style={{ position: 'relative', flexShrink: 0 }}>
-    <button onClick={() => setOpen(v => !v)} title="Mais opções" data-tour="n1-mais-opcoes" className={hasUnread ? 'mloc-shake' : ''} style={{ ...(dark ? { ...iconBtnStyle, background: 'rgba(255,255,255,0.08)' } : iconBtnStyle), ...(big ? { width: 50, height: 50, borderRadius: 999, boxShadow: '0 4px 14px rgba(0,0,0,0.28)' } : {}), position: 'relative' }}>
+    <button onClick={() => setOpen(v => !v)} title={titulo} data-tour={dataTour} className={hasUnread ? 'mloc-shake' : ''} style={{ ...(dark ? { ...iconBtnStyle, background: 'rgba(255,255,255,0.08)' } : iconBtnStyle), ...(big ? { width: 50, height: 50, borderRadius: 999, boxShadow: '0 4px 14px rgba(0,0,0,0.28)' } : {}), position: 'relative' }}>
       <MoreVertical size={big ? 22 : 18} color={dark ? '#fff' : INK} />
       {hasUnread && <span className="mloc-badge-pulse" style={{ position: 'absolute', top: -3, right: -3, minWidth: 16, height: 16, borderRadius: 999, background: RED, border: `2px solid ${dark ? DEV_BG : '#fff'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9.5, fontWeight: 900, color: '#fff', padding: '0 3px' }}>!</span>}
     </button>

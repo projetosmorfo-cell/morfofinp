@@ -8,17 +8,18 @@ import GrupoReordenavel from '../components/GrupoReordenavel'
 import { compararDentroDoDia } from '../lancamentosUtil'
 import { hojeEfetivoISO } from '../hojeSimulado'
 import { usePeriodoLista } from '../components/periodoLista'
-import { CampoBusca, FolhaFiltros, FILTROS_VAZIOS, aplicarFiltros, contarFiltrosAtivos, type FiltrosAvancados } from '../components/BuscaEFiltros'
+import { CampoBusca, FolhaFiltros, FILTROS_VAZIOS, aplicarFiltros, contarFiltrosAtivos, ChipsFiltrosAtivos, type FiltrosAvancados } from '../components/BuscaEFiltros'
 import { formatarCabecalhoData } from '../formatoData'
 import { fmtBRL } from '../formatoMoeda'
 import { statusDoLancamento, fundoDaLinhaDeData } from '../statusPagamento'
 import { useHojeSimuladoISO } from '../hojeSimulado'
-import TituloTelaN1 from '../kit/CabecalhoN1'
 import { ExportSheet, type ExportRow } from '../kit/ExportSheet'
 import { lerDoAmbiente } from '../ambiente'
 import {
   useSelecao, BarraSelecao, TotaisEntradaSaida, blocosPorCorte, RodapeTotais,
 } from '../components/SelecaoETotais'
+import { IconesDeTela, TopIconMenu, type ItemMenuTopo } from '../kit/TopoIcones'
+import { CheckSquare, Download } from 'lucide-react'
 
 // Tela "Lançamentos" (antes "Lançar") — 30/08/2026: lista-primeiro, agrupada
 // por data (sessão), em vez de formulário-primeiro. Obedece as mesmas setas
@@ -172,30 +173,54 @@ export default function Lancamentos({ mes, aoMudarMes, aoAbrirLancamento }: Tela
   return (
     <>
       <div className="cabecalho-fixo">
-        {/* 10/09/2026, pedido do Rafael: Selecionar · Buscar · Filtro viraram
-            ÍCONES nesta mesma fileira, à esquerda do Exportar; a ordenação foi
-            pra dentro da folha de filtros; e a contagem de registros só
-            aparece com a seleção ativa. O campo de busca e a linha de
-            contagem/ordem que ficavam aqui deixaram de existir como barra
-            fixa — nada sumiu de função, só de lugar. */}
-        <TituloTelaN1
-          titulo="Lançamentos"
-          onExportar={() => setExportOpen(true)}
-          acoesLista={{
-            onSelecionar: () => (selecao.ativa ? selecao.sair() : selecao.ativar()),
-            selecaoAtiva: selecao.ativa,
-            onBuscar: () => setBuscaAberta((v) => !v),
-            buscaAtiva: busca !== '',
-            onFiltrar: () => setFiltrosAbertos(true),
-            filtrosAtivos: contarFiltrosAtivos(filtros),
-          }}
-        />
-        {/* Item 2 (16/09/2026): o toggle inline (que ficava "fixo na tela",
-            reclamação do Rafael) virou um POPUP dentro do próprio
-            `SeletorMes` — clicar no nome do mês (ou no rótulo "De – Até",
-            quando já em modo período) abre o popup; aplicar De/Até ou
-            escolher um mês fecha o popup sozinho e já troca o cabeçalho. */}
-        <SeletorMes mes={mes} onMudar={aoMudarMes} periodo={propsSeletor} />
+        {/* Build 104 (19/09/2026) — Opção A da revisão de UX/UI, aprovada pelo
+           Rafael com um ajuste ("retira os textos de título e subtítulo"): as
+           duas fileiras fixas (título+ícones, depois a faixa do mês) viram
+           uma só. O texto "Lançamentos" e qualquer subtítulo somem — a aba do
+           rodapé já diz em que tela a pessoa está — e o mês entra como selo
+           compacto (`SeletorMes` com `compacto`) na mesma linha dos ícones.
+           Selecionar e Exportar, que eram ícones próprios nesta fileira,
+           entraram num "⋮" — reusando o COMPONENTE que o resto do app já usa
+           (`TopIconMenu`), não um mecanismo novo, mas com `titulo`/`dataTour`
+           PRÓPRIOS: o "⋮" desta tela é diferente do "⋮" global do app-chrome
+           (Configuração/Suporte/Sair), e os dois apareciam juntos na mesma
+           tela com rótulo e `data-tour` idênticos até essa correção — achado
+           rodando QA em Playwright, ver comentário em `TopoIcones.tsx`. */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+          {/* Item 2 (16/09/2026): o toggle inline (que ficava "fixo na tela",
+              reclamação do Rafael) virou um POPUP dentro do próprio
+              `SeletorMes` — clicar no selo do mês (ou no rótulo "De – Até",
+              quando já em modo período) abre o popup; "Hoje" e "Reprocessar"
+              moram dentro dele agora (ver `SeletorMes.tsx`). */}
+          <SeletorMes mes={mes} onMudar={aoMudarMes} periodo={propsSeletor} compacto />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+            <IconesDeTela
+              onBuscar={() => setBuscaAberta((v) => !v)}
+              buscaAtiva={busca !== ''}
+              onFiltrar={() => setFiltrosAbertos(true)}
+              filtrosAtivos={contarFiltrosAtivos(filtros)}
+            />
+            <TopIconMenu
+              titulo="Mais ações desta tela"
+              dataTour="lancamentos-mais-acoes"
+              items={
+                [
+                  {
+                    icon: CheckSquare,
+                    label: selecao.ativa ? 'Sair da seleção' : 'Selecionar',
+                    onClick: () => (selecao.ativa ? selecao.sair() : selecao.ativar()),
+                  },
+                  { icon: Download, label: 'Exportar', onClick: () => setExportOpen(true) },
+                ] satisfies ItemMenuTopo[]
+              }
+            />
+          </div>
+        </div>
+        {/* Build 104 (F2, 19/09/2026), pedido do Rafael aprovando a revisão
+            de UX/UI: "hoje só dá pra saber 'tem filtro' pelo número no ícone
+            — pra ver QUAL, precisa abrir a folha". Um chip por filtro ativo,
+            cada um com "×" pra desligar só aquele. */}
+        <ChipsFiltrosAtivos filtros={filtros} categoriaPorId={categoriaPorId} contaPorId={contaPorId} onFiltrosChange={setFiltros} />
         {(buscaAberta || busca !== '') && (
           <CampoBusca busca={busca} onBuscaChange={setBusca} onFechar={() => setBuscaAberta(false)} />
         )}

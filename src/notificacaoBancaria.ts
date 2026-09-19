@@ -25,6 +25,7 @@ import { db, type NotificacaoPendente } from './db'
 import { marcaDoAmbiente } from './ambiente'
 import { analisarNotificacao, extrairValorTexto, ehProvavelRepeticao } from './parseNotificacao'
 import { paramsNotificacaoAtuais, type ParametrosNotificacao } from './notificacaoParametros'
+import { tentarAutoVincular } from './vinculoNotificacao'
 
 interface ItemNativo {
   id: string
@@ -142,7 +143,15 @@ function paraPendente(item: ItemNativo): NotificacaoPendente {
 export async function registrarNotificacao(item: ItemNativo): Promise<boolean> {
   const jaExiste = await db.notificacoesPendentes.where('idNativo').equals(item.id).count()
   if (jaExiste > 0) return false
-  await db.notificacoesPendentes.add({ ...paraPendente(item), ...marcaDoAmbiente() })
+  const pendente = { ...paraPendente(item), ...marcaDoAmbiente() }
+  const id = await db.notificacoesPendentes.add(pendente)
+  /* Build 104 (19/09/2026), pedido do Rafael: tenta vincular sozinha assim que
+     entra — só acontece de verdade quando `avaliarAutoVinculo` (ver
+     `vinculoNotificacao.ts`) aprova as três condições de segurança; fora isso
+     a notificação segue 'pendente', do jeito de sempre. Nunca bloqueia o
+     registro: se der qualquer problema, a notificação já está gravada e
+     aparece pro Rafael tratar na tela. */
+  void tentarAutoVincular({ ...pendente, id })
   return true
 }
 

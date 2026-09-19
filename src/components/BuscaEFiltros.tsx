@@ -102,6 +102,91 @@ function alternarNoArray<T>(arr: T[], valor: T): T[] {
   return arr.includes(valor) ? arr.filter((v) => v !== valor) : [...arr, valor]
 }
 
+// --- F2 (build 104, 19/09/2026) — chips do que já está filtrado ------------
+//
+// Pedido do Rafael, aprovando a revisão de UX/UI: "hoje só dá pra saber 'tem
+// filtro' pelo número no ícone — pra ver QUAL, precisa abrir a folha". Estes
+// chips aparecem embaixo do cabeçalho da tela (fora da folha), um por
+// DIMENSÃO de filtro ativa (não um por valor — 3 categorias marcadas viram um
+// chip só, resumido), cada um com "×" pra desligar só aquela dimensão.
+
+/** Uma dimensão de filtro (nunca `valorMin`/`valorMax`/`dataDe`/`dataAte`
+ *  soltos — os dois pares viram uma dimensão só, "valor"/"data"). */
+export type DimensaoFiltro = 'tipos' | 'status' | 'recorrencias' | 'grupos' | 'categoriaIds' | 'contaIds' | 'valor' | 'data'
+
+export interface FiltroAtivoResumo {
+  dimensao: DimensaoFiltro
+  rotulo: string
+}
+
+function resumirNomes(nomes: string[]): string {
+  return nomes.length <= 2 ? nomes.join(', ') : `${nomes.slice(0, 2).join(', ')} +${nomes.length - 2}`
+}
+
+/** O que mostrar nos chips — pura, sem estado, reaproveitável em qualquer tela. */
+export function resumirFiltrosAtivos(
+  f: FiltrosAvancados,
+  categoriaPorId: Map<number, Categoria>,
+  contaPorId: Map<number, Conta>,
+): FiltroAtivoResumo[] {
+  const out: FiltroAtivoResumo[] = []
+  if (f.tipos.length) out.push({ dimensao: 'tipos', rotulo: f.tipos.map((t) => ROTULO_TIPO[t]).join(', ') })
+  if (f.status.length) out.push({ dimensao: 'status', rotulo: f.status.map((s) => ROTULO_STATUS[s]).join(', ') })
+  if (f.recorrencias.length) out.push({ dimensao: 'recorrencias', rotulo: f.recorrencias.map((r) => ROTULO_RECORRENCIA[r]).join(', ') })
+  if (f.grupos.length) out.push({ dimensao: 'grupos', rotulo: `Grupo: ${resumirNomes(f.grupos)}` })
+  if (f.categoriaIds.length) {
+    out.push({ dimensao: 'categoriaIds', rotulo: `Categoria: ${resumirNomes(f.categoriaIds.map((id) => categoriaPorId.get(id)?.nome ?? '?'))}` })
+  }
+  if (f.contaIds.length) {
+    out.push({ dimensao: 'contaIds', rotulo: `Conta: ${resumirNomes(f.contaIds.map((id) => contaPorId.get(id)?.nome ?? '?'))}` })
+  }
+  if (f.valorMin || f.valorMax) out.push({ dimensao: 'valor', rotulo: `Valor: ${f.valorMin || '0'} – ${f.valorMax || '∞'}` })
+  if (f.dataDe || f.dataAte) out.push({ dimensao: 'data', rotulo: `Data: ${f.dataDe || '…'} – ${f.dataAte || '…'}` })
+  return out
+}
+
+/** Desliga só UMA dimensão, mantendo as demais como estão. */
+export function desligarDimensaoFiltro(f: FiltrosAvancados, dimensao: DimensaoFiltro): FiltrosAvancados {
+  switch (dimensao) {
+    case 'tipos': return { ...f, tipos: [] }
+    case 'status': return { ...f, status: [] }
+    case 'recorrencias': return { ...f, recorrencias: [] }
+    case 'grupos': return { ...f, grupos: [] }
+    case 'categoriaIds': return { ...f, categoriaIds: [] }
+    case 'contaIds': return { ...f, contaIds: [] }
+    case 'valor': return { ...f, valorMin: '', valorMax: '' }
+    case 'data': return { ...f, dataDe: '', dataAte: '' }
+  }
+}
+
+/** A fileira de chips em si — some sozinha quando não há filtro nenhum ativo. */
+export function ChipsFiltrosAtivos({ filtros, categoriaPorId, contaPorId, onFiltrosChange }: {
+  filtros: FiltrosAvancados
+  categoriaPorId: Map<number, Categoria>
+  contaPorId: Map<number, Conta>
+  onFiltrosChange: (f: FiltrosAvancados) => void
+}) {
+  const ativos = resumirFiltrosAtivos(filtros, categoriaPorId, contaPorId)
+  if (ativos.length === 0) return null
+  return (
+    <div className="chips-filtro-ativo" data-testid="chips-filtro-ativo">
+      {ativos.map((a) => (
+        <button
+          key={a.dimensao}
+          type="button"
+          className="chip-filtro-ativo"
+          onClick={() => onFiltrosChange(desligarDimensaoFiltro(filtros, a.dimensao))}
+          data-testid={`chip-filtro-${a.dimensao}`}
+          title={`Remover filtro: ${a.rotulo}`}
+        >
+          {a.rotulo}
+          <span aria-hidden="true">×</span>
+        </button>
+      ))}
+    </div>
+  )
+}
+
 const ROTULO_TIPO: Record<TipoFiltro, string> = {
   saida: 'Saída',
   entrada: 'Entrada',
@@ -226,62 +311,53 @@ export function FolhaFiltros({
           ))}
         </div>
 
-        <label>Grupo (múltipla seleção)</label>
-        <select
-          multiple
-          value={rascunho.grupos}
-          onChange={(e) =>
-            setRascunho((r) => ({
-              ...r,
-              grupos: Array.from(e.target.selectedOptions).map((o) => o.value),
-            }))
-          }
-          style={{ height: 72 }}
-        >
+        {/* Build 104 (F1, 19/09/2026) — Grupo e Conta viram chips, mesmo
+            padrão de Tipo/Status/Recorrência acima: eram caixas
+            `<select multiple>` nativas, pouco visíveis e difíceis de tocar
+            com precisão no celular — pedido do Rafael, aprovando a revisão
+            de UX/UI. */}
+        <label>Grupo</label>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           {grupos.map((g) => (
-            <option key={g.id} value={g.nome}>
-              {g.nome}
-            </option>
+            <ChipMulti
+              key={g.id}
+              valor={g.nome}
+              ativo={rascunho.grupos.includes(g.nome)}
+              onClick={() => setRascunho((r) => ({ ...r, grupos: alternarNoArray(r.grupos, g.nome) }))}
+            />
           ))}
-        </select>
+        </div>
 
-        <label>Categoria (múltipla seleção)</label>
-        <select
-          multiple
-          value={rascunho.categoriaIds.map(String)}
-          onChange={(e) =>
-            setRascunho((r) => ({
-              ...r,
-              categoriaIds: Array.from(e.target.selectedOptions).map((o) => Number(o.value)),
-            }))
-          }
-          style={{ height: 96 }}
-        >
-          {categorias.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.nome}
-            </option>
-          ))}
-        </select>
-
-        <label>Conta (múltipla seleção)</label>
-        <select
-          multiple
-          value={rascunho.contaIds.map(String)}
-          onChange={(e) =>
-            setRascunho((r) => ({
-              ...r,
-              contaIds: Array.from(e.target.selectedOptions).map((o) => Number(o.value)),
-            }))
-          }
-          style={{ height: 72 }}
-        >
+        <label>Conta</label>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           {contas.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.nome}
-            </option>
+            <ChipMulti
+              key={c.id}
+              valor={c.nome}
+              ativo={rascunho.contaIds.includes(c.id!)}
+              onClick={() => setRascunho((r) => ({ ...r, contaIds: alternarNoArray(r.contaIds, c.id!) }))}
+            />
           ))}
-        </select>
+        </div>
+
+        {/* Categoria fica de FORA do padrão de chips acima (pedido do
+            Rafael: "com o campo com muitas opções como Categorias, com
+            outra solução mais prática e bonita") — uma grade de chips com
+            20-30 categorias cadastradas ficaria mais alta que a caixa de
+            lista que ela substituiria, o problema que o próprio F1 tenta
+            resolver. Em vez disso, uma lista com busca: digita pra achar
+            (nome contém, sem acento/maiúscula importando) e toca a linha
+            pra marcar — a categoria já marcada aparece mesmo fora do
+            filtro de texto, pra nunca "sumir" da vista de quem já a
+            escolheu. */}
+        <label>Categoria</label>
+        <ListaBuscavelMultipla
+          itens={categorias.map((c) => ({ id: c.id!, nome: c.nome }))}
+          selecionados={rascunho.categoriaIds}
+          onAlternar={(id) => setRascunho((r) => ({ ...r, categoriaIds: alternarNoArray(r.categoriaIds, id) }))}
+          placeholder="Buscar categoria…"
+          testid="filtro-categoria"
+        />
 
         <div style={{ display: 'flex', gap: 8 }}>
           <div style={{ flex: 1 }}>
@@ -323,7 +399,14 @@ export function FolhaFiltros({
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
+        {/* Build 104 (F2, 19/09/2026) — barra FIXA no rodapé da folha, em vez
+            de nascer no fim de uma rolagem longa: pedido do Rafael,
+            aprovando a revisão de UX/UI ("Aplicar sempre à mão, sem rolar
+            até o fim depois de configurar vários filtros"). `.modal-conteudo`
+            já é o contêiner que rola (`overflow-y: auto`) — `position:
+            sticky; bottom: 0` gruda esta barra nele, com fundo sólido pra
+            nunca deixar o conteúdo que passa por baixo manchar o botão. */}
+        <div className="barra-aplicar-filtros-fixa">
           <button type="button" className="primario" style={{ marginTop: 0 }} onClick={() => onAplicar(rascunho, ordemRascunho)}>
             Aplicar
           </button>
@@ -343,6 +426,57 @@ export function FolhaFiltros({
           </button>
         </div>
       </div>
+    </div>
+  )
+}
+
+/* Build 104 (F1, 19/09/2026) — lista com busca pra multi-seleção com MUITAS
+   opções (hoje só Categoria). Reaproveitável: não fala de `Categoria` em
+   lugar nenhum do componente, só recebe `{id, nome}`. */
+function ListaBuscavelMultipla({ itens, selecionados, onAlternar, placeholder, testid }: {
+  itens: { id: number; nome: string }[]
+  selecionados: number[]
+  onAlternar: (id: number) => void
+  placeholder?: string
+  testid?: string
+}) {
+  const [busca, setBusca] = useState('')
+  const buscaNorm = busca.trim().toLowerCase()
+  /* A já marcada nunca some da lista, mesmo filtrando por outro texto — senão
+     quem já escolheu uma categoria e digita pra achar outra perde de vista a
+     primeira, sem forma de saber se ainda está marcada. */
+  const visiveis = itens.filter((it) => !buscaNorm || it.nome.toLowerCase().includes(buscaNorm) || selecionados.includes(it.id))
+  return (
+    <div className="lista-buscavel-multipla" data-testid={testid}>
+      <input
+        type="text"
+        value={busca}
+        onChange={(e) => setBusca(e.target.value)}
+        placeholder={placeholder}
+        data-testid={testid ? `${testid}-busca` : undefined}
+      />
+      <div className="lista-buscavel-multipla-itens">
+        {visiveis.length === 0 && <p className="texto-fraco" style={{ margin: '8px 0', fontSize: 12.5 }}>Nada encontrado.</p>}
+        {visiveis.map((it) => {
+          const marcado = selecionados.includes(it.id)
+          return (
+            <button
+              key={it.id}
+              type="button"
+              className={`lista-buscavel-multipla-item ${marcado ? 'marcado' : ''}`}
+              onClick={() => onAlternar(it.id)}
+              aria-pressed={marcado}
+              data-testid={testid ? `${testid}-item-${it.id}` : undefined}
+            >
+              <span className="lista-buscavel-multipla-check" aria-hidden="true">{marcado ? '✓' : ''}</span>
+              {it.nome}
+            </button>
+          )
+        })}
+      </div>
+      {selecionados.length > 0 && (
+        <p className="texto-fraco" style={{ margin: '6px 0 0', fontSize: 11.5 }}>{selecionados.length} selecionada(s)</p>
+      )}
     </div>
   )
 }

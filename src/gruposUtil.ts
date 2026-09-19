@@ -261,7 +261,7 @@ export async function migrarTipoDosGrupos(): Promise<{ tipados: number; movidas:
      derruba tudo com NotFoundError (o Dexie só libera as tabelas declaradas
      no `transaction`). Bug real achado no teste da build 050. */
   const amb = await ambienteDoBanco()
-  await db.transaction('rw', db.grupos, db.categorias, async () => {
+  await db.transaction('rw', db.grupos, db.categorias, db.metas, async () => {
     const grupos = doAmbiente(await db.grupos.toArray(), amb)
     const categorias = doAmbiente(await db.categorias.toArray(), amb)
 
@@ -291,6 +291,18 @@ export async function migrarTipoDosGrupos(): Promise<{ tipados: number; movidas:
         })
         destino = { id: id as number, nome: GRUPO_RECEITA, ativo: true, tipo: 'entrada' }
         resultado.criouGrupo = true
+        // Build 104: Entrada é conjunto à parte que também fecha 100% (ver
+        // Calibragem.tsx) — sendo o único grupo de entrada nascendo agora,
+        // ele é os 100% inteiros, não 0% (senão a tela acusaria "faltam
+        // 100%" pra quem nunca mexeu em nada).
+        const d = new Date()
+        await db.metas.add({
+          ...marcaDoAmbiente(amb),
+          grupo: GRUPO_RECEITA,
+          percentual: 100,
+          base: 'receita_real',
+          mesVigencia: `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}`,
+        })
       }
       for (const c of receitasSoltas) {
         await db.categorias.update(c.id!, { grupo: destino.nome })

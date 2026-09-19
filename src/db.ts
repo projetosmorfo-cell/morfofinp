@@ -293,8 +293,12 @@ export interface Lancamento {
   ficticio?: boolean
   // Id do lançamento de "Pagamento de fatura" que quitou este lançamento de
   // cartão (30/08/2026, rodada seguinte — campo existia no schema desde o
-  // início, sem uso até agora). Setado em massa por `pagarFatura` (Carteira.tsx)
-  // em todo lançamento do ciclo ao quitar a fatura — junto com `pago: true`.
+  // início, sem uso até agora). Setado em massa por `reavaliarQuitacao`
+  // (`src/faturaPagamento.ts`, chamada de `DetalheLancamento.tsx` ao
+  // gravar/editar/excluir um pagamento) em todo lançamento do ciclo — junto
+  // com `pago: true`. Build 104: o gatilho não é mais só "fatura 100%
+  // quitada" — qualquer pagamento maior que zero já dá baixa (ver o
+  // comentário de `reavaliarQuitacao`).
   faturaId?: number
   // Do lado do PAGAMENTO (build 090, 17/09/2026): qual cartão e qual fatura
   // ("yyyy-mm", o mês em que ela fecha) este lançamento de "Pagamento de
@@ -401,6 +405,15 @@ export interface Lancamento {
        como ritmo, para o mês de origem não ficar sem a ocorrência nem ganhar
        uma duplicada. Ausente = o vínculo não moveu a data. */
     dataCompetenciaAnterior?: string
+    /* Build 104 (19/09/2026), pedido do Rafael: vincular sozinho quando for
+       seguro, sem ele abrir a tela — ver `avaliarAutoVinculo()` em
+       `vinculoNotificacao.ts`. `true` = ninguém olhou este vínculo antes de
+       ele acontecer; é o que faz o rótulo de status virar "Pago Auto"/
+       "Recebido Auto"/"No Cartão Auto" (`statusPagamento.ts`) e a aba
+       "Vínculos" avisar que foi automático — nunca aparece diferente de
+       verdade em nenhum outro cálculo (meta, saldo, filtro): é só um aviso
+       de proveniência. Ausente/`false` = vínculo feito pelo Rafael na tela. */
+    automatico?: boolean
   }
 }
 

@@ -243,10 +243,19 @@ export default function Categorias(
     contagemCategoriasPorGrupo.set(c.grupo, (contagemCategoriasPorGrupo.get(c.grupo) ?? 0) + 1)
   }
 
-  // --- Metas por grupo: totalizador buscando 100% ---
-  const totalPercentual = gruposAtivos.reduce((s, g) => s + (percentuais[g.nome] || 0), 0)
-  const statusTotal =
-    Math.abs(totalPercentual - 100) < 0.01 ? 'ok' : totalPercentual > 100 ? 'excede' : 'falta'
+  // --- Metas por grupo: DOIS totalizadores, cada um buscando 100% (build
+  // 104, pedido do Rafael: "os grupos do tipo Receita devem formar um
+  // conjunto igual os de consumo que devem fechar em 100%... no passo a
+  // passo o grupo Receita deve vir com 100% separado pra fechar
+  // visualmente Saida 100% e Entrada 100%"). Antes havia UM total somando
+  // Saída e Entrada juntos — nunca fechava (100% + 100% = 200%), reprodução
+  // exata do "Total 200% — Excede em 100%" relatado. Mesma separação já
+  // usada em `Calibragem.tsx`.
+  const gruposAtivosSaida = gruposAtivos.filter((g) => tipoDoGrupo(g) === 'saida')
+  const gruposAtivosEntrada = gruposAtivos.filter((g) => tipoDoGrupo(g) === 'entrada')
+  const totalPctDoTipo = (lista: GrupoRegistro[]) => lista.reduce((s, g) => s + (percentuais[g.nome] || 0), 0)
+  const statusDoTotal = (total: number): 'ok' | 'excede' | 'falta' =>
+    Math.abs(total - 100) < 0.01 ? 'ok' : total > 100 ? 'excede' : 'falta'
 
   // --- Último mês fechado (mês anterior ao atual) ---
   const mesAnterior = mesAnteriorISO()
@@ -858,125 +867,148 @@ export default function Categorias(
       <h2>Metas de Grupo</h2>
       {/* Item 13 da lista de 12/09/2026: a tela precisa DIZER de onde sai o
           100%. Antes o percentual aparecia sem nenhuma referência, e a base
-          era o salário do mês anterior — regra que nem estava escrita aqui. */}
+          era o salário do mês anterior — regra que nem estava escrita aqui.
+          Build 104: Saída e Entrada são dois conjuntos SEPARADOS, cada um
+          fechando o próprio 100% — mesma explicação já usada em
+          Calibragem.tsx (pedido do Rafael, ver comentário de
+          `gruposAtivosSaida`/`gruposAtivosEntrada` acima). */}
       <p className="texto-fraco" style={{ marginTop: 0 }}>
-        {EXPLICACAO_BASE_META} Cada grupo recebe uma fatia desse total, e a soma
-        dos percentuais fecha em 100%.
+        {EXPLICACAO_BASE_META} Cada grupo recebe uma fatia desse total. Saída e Entrada são conjuntos
+        separados — cada um fecha o próprio 100% (normalmente Entrada é só o grupo Receita, sozinho
+        em 100%).
         {categoriasBaseMeta.length > 0
           ? ` Hoje entram na base: ${categoriasBaseMeta.map((c) => c.nome).join(', ')}.`
           : ' Nenhuma categoria está marcada como receita fixa ainda — marque em Categorias e Metas, senão as metas ficam zeradas.'}
       </p>
-      <div className="cartao">
-        {gruposAtivos.map((g) => {
-          const somaAceitavel = somaAceitavelPorGrupo.get(g.nome) ?? 0
-          const metaGrupo = metaDoGrupoEmReais(g.nome)
-          const diferencaAceitavel = metaGrupo - somaAceitavel
-          // Enxugamento do bloco de contexto (31/08/2026, ponto 11): duas
-          // linhas limpas em vez de uma frase corrida — a primeira sempre
-          // mostra a soma aceitável, a segunda tem o texto dinâmico de
-          // status (sobra/bate certinho/excede).
+
+      {[
+        { tipo: 'saida' as const, lista: gruposAtivosSaida, sufixo: '' },
+        { tipo: 'entrada' as const, lista: gruposAtivosEntrada, sufixo: '-entrada' },
+      ]
+        .filter(({ lista }) => lista.length > 0)
+        .map(({ tipo, lista, sufixo }) => {
+          const totalDoTipo = totalPctDoTipo(lista)
+          const statusDoTipo = statusDoTotal(totalDoTipo)
           return (
-            <div key={g.id} style={{ padding: '10px 0', borderBottom: '1px solid var(--borda)' }}>
-              <div className="linha linha-cabecalho-grupo" style={{ border: 'none', padding: 0 }}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  {g.icone !== 'nenhum' && (
-                    <Icone id={g.icone} estilo={g.iconeEstilo} cor={g.iconeCor} tamanho={tamanhoIconePx('grupo', configIcones.pctGrupo)} />
-                  )}
-                  {g.nome}
-                </span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  {temExemplo && <span className="texto-fraco">{fmtNum(metaGrupo)}</span>}
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    style={{ width: 64, textAlign: 'right' }}
-                    value={percentuais[g.nome] ?? 0}
-                    onChange={(e) => salvarPercentual(g.nome, Number(e.target.value))}
-                  />
-                  <span className="texto-fraco">%</span>
+            <Fragment key={tipo}>
+              <h3 className="ideal-t3" style={{ margin: sufixo ? '18px 0 6px' : '0 0 6px' }}>
+                {ROTULO_TIPO_GRUPO[tipo]} — precisa fechar 100%
+              </h3>
+              <div className="cartao" data-testid={`metas-grupo${sufixo}`}>
+                {lista.map((g) => {
+                  const somaAceitavel = somaAceitavelPorGrupo.get(g.nome) ?? 0
+                  const metaGrupo = metaDoGrupoEmReais(g.nome)
+                  const diferencaAceitavel = metaGrupo - somaAceitavel
+                  // Enxugamento do bloco de contexto (31/08/2026, ponto 11): duas
+                  // linhas limpas em vez de uma frase corrida — a primeira sempre
+                  // mostra a soma aceitável, a segunda tem o texto dinâmico de
+                  // status (sobra/bate certinho/excede).
+                  return (
+                    <div key={g.id} style={{ padding: '10px 0', borderBottom: '1px solid var(--borda)' }}>
+                      <div className="linha linha-cabecalho-grupo" style={{ border: 'none', padding: 0 }}>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          {g.icone !== 'nenhum' && (
+                            <Icone id={g.icone} estilo={g.iconeEstilo} cor={g.iconeCor} tamanho={tamanhoIconePx('grupo', configIcones.pctGrupo)} />
+                          )}
+                          {g.nome}
+                        </span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          {temExemplo && <span className="texto-fraco">{fmtNum(metaGrupo)}</span>}
+                          <input
+                            type="number"
+                            inputMode="decimal"
+                            style={{ width: 64, textAlign: 'right' }}
+                            value={percentuais[g.nome] ?? 0}
+                            onChange={(e) => salvarPercentual(g.nome, Number(e.target.value))}
+                          />
+                          <span className="texto-fraco">%</span>
+                        </div>
+                      </div>
+                      {temExemplo && (
+                        <>
+                          <p className="texto-fraco" style={{ margin: '4px 0 0' }}>
+                            Soma das metas das categorias: {fmtBRL(somaAceitavel)}
+                          </p>
+                          <p className="texto-fraco" style={{ margin: '2px 0 0' }}>
+                            {Math.abs(diferencaAceitavel) < 1 ? (
+                              <span className="valor-pos texto-quebra">Bate certinho com a meta.</span>
+                            ) : diferencaAceitavel > 0 ? (
+                              /* Item 4 da lista de 12/09/2026: o excedente já era
+                                 vermelho; a sobra estava em cinza. Agora é verde,
+                                 pra os dois lados terem o mesmo peso visual. */
+                              <span className="valor-pos texto-quebra">Sobram {fmtBRL(diferencaAceitavel)} de meta pra distribuir entre as categorias.</span>
+                            ) : (
+                              <span className="valor-neg texto-quebra">As metas das categorias excedem a meta do grupo em {fmtBRL(-diferencaAceitavel)}.</span>
+                            )}
+                          </p>
+                        </>
+                      )}
+                    </div>
+                  )
+                })}
+                <div
+                  className="linha"
+                  style={{ borderBottom: 'none', paddingTop: 12, marginTop: 4, borderTop: '1px solid var(--borda)' }}
+                >
+                  <span>Total</span>
+                  <strong
+                    className={statusDoTipo === 'ok' ? 'valor-pos' : statusDoTipo === 'excede' ? 'valor-neg' : 'texto-fraco'}
+                    data-testid={`total-pct-numero${sufixo}`}
+                  >
+                    {totalDoTipo.toFixed(0)}%
+                  </strong>
                 </div>
+                {temExemplo && (
+                  <p className="texto-fraco" style={{ marginTop: 0, textAlign: 'right' }}>
+                    {fmtBRL((receitaMesAnterior * totalDoTipo) / 100)}
+                  </p>
+                )}
+                {statusDoTipo === 'falta' && (
+                  <p className="texto-fraco" style={{ marginTop: 0 }}>
+                    Faltam {(100 - totalDoTipo).toFixed(0)}% pra fechar 100%.
+                  </p>
+                )}
+                {statusDoTipo === 'excede' && (
+                  <p className="valor-neg" style={{ marginTop: 0, fontSize: 13 }}>
+                    Excede em {(totalDoTipo - 100).toFixed(0)}% — ajuste os percentuais.
+                  </p>
+                )}
+                {statusDoTipo === 'ok' && (
+                  <p className="texto-fraco" style={{ marginTop: 0 }}>
+                    Fecha certinho em 100%.
+                  </p>
+                )}
               </div>
-              {temExemplo && (
-                <>
-                  <p className="texto-fraco" style={{ margin: '4px 0 0' }}>
-                    Soma das metas das categorias: {fmtBRL(somaAceitavel)}
-                  </p>
-                  <p className="texto-fraco" style={{ margin: '2px 0 0' }}>
-                    {Math.abs(diferencaAceitavel) < 1 ? (
-                      <span className="valor-pos texto-quebra">Bate certinho com a meta.</span>
-                    ) : diferencaAceitavel > 0 ? (
-                      /* Item 4 da lista de 12/09/2026: o excedente já era
-                         vermelho; a sobra estava em cinza. Agora é verde,
-                         pra os dois lados terem o mesmo peso visual. */
-                      <span className="valor-pos texto-quebra">Sobram {fmtBRL(diferencaAceitavel)} de meta pra distribuir entre as categorias.</span>
-                    ) : (
-                      <span className="valor-neg texto-quebra">As metas das categorias excedem a meta do grupo em {fmtBRL(-diferencaAceitavel)}.</span>
-                    )}
-                  </p>
-                </>
-              )}
-            </div>
+            </Fragment>
           )
         })}
-        <div
-          className="linha"
-          style={{ borderBottom: 'none', paddingTop: 12, marginTop: 4, borderTop: '1px solid var(--borda)' }}
-        >
-          <span>Total</span>
-          <strong
-            className={statusTotal === 'ok' ? 'valor-pos' : statusTotal === 'excede' ? 'valor-neg' : 'texto-fraco'}
-          >
-            {totalPercentual.toFixed(0)}%
-          </strong>
-        </div>
-        {temExemplo && (
-          <p className="texto-fraco" style={{ marginTop: 0, textAlign: 'right' }}>
-            {fmtBRL((receitaMesAnterior * totalPercentual) / 100)}
-          </p>
-        )}
-        {statusTotal === 'falta' && (
-          <p className="texto-fraco" style={{ marginTop: 0 }}>
-            Faltam {(100 - totalPercentual).toFixed(0)}% pra fechar 100%.
-          </p>
-        )}
-        {statusTotal === 'excede' && (
-          <p className="valor-neg" style={{ marginTop: 0, fontSize: 13 }}>
-            Excede em {(totalPercentual - 100).toFixed(0)}% — ajuste os percentuais.
-          </p>
-        )}
-        {statusTotal === 'ok' && (
-          <p className="texto-fraco" style={{ marginTop: 0 }}>
-            Fecha certinho em 100%.
-          </p>
-        )}
 
-        <p className="texto-fraco" style={{ marginTop: 16, borderTop: '1px solid var(--borda)', paddingTop: 12 }}>
-          {temExemplo
-            ? `Exemplo com o último mês fechado (${mesAnterior.split('-').reverse().join('/')}) — receita de ${fmtBRL(receitaMesAnterior)}:`
-            : `Ainda não há lançamentos no mês anterior (${mesAnterior.split('-').reverse().join('/')}) pra mostrar um exemplo — assim que fechar um mês, aparece aqui meta × realizado.`}
-        </p>
-        {temExemplo && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: '4px 12px' }}>
-            <span className="texto-fraco" style={{ fontSize: 11, textTransform: 'uppercase' }}>Grupo</span>
-            <span className="texto-fraco" style={{ fontSize: 11, textTransform: 'uppercase', textAlign: 'right' }}>Meta</span>
-            <span className="texto-fraco" style={{ fontSize: 11, textTransform: 'uppercase', textAlign: 'right' }}>Realizado</span>
-            {realizadoPorGrupoExemplo.map(({ grupo, realizado, meta, percentualMeta }) => {
-              const pctRealizado = meta > 0 ? (realizado / meta) * 100 : realizado > 0 ? 999 : 0
-              return (
-                <Fragment key={grupo}>
-                  <span className="texto-fraco">{grupo}</span>
-                  <span className="texto-fraco" style={{ textAlign: 'right' }}>
-                    {fmtNum(meta)} ({percentualMeta.toFixed(0)}%)
-                  </span>
-                  <strong className={realizado > meta ? 'valor-neg' : 'valor-pos'} style={{ textAlign: 'right' }}>
-                    {fmtNum(realizado)} ({pctRealizado.toFixed(0)}%)
-                  </strong>
-                </Fragment>
-              )
-            })}
-          </div>
-        )}
-      </div>
+      <p className="texto-fraco" style={{ marginTop: 16 }}>
+        {temExemplo
+          ? `Exemplo com o último mês fechado (${mesAnterior.split('-').reverse().join('/')}) — receita de ${fmtBRL(receitaMesAnterior)}:`
+          : `Ainda não há lançamentos no mês anterior (${mesAnterior.split('-').reverse().join('/')}) pra mostrar um exemplo — assim que fechar um mês, aparece aqui meta × realizado.`}
+      </p>
+      {temExemplo && (
+        <div className="cartao" style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: '4px 12px' }}>
+          <span className="texto-fraco" style={{ fontSize: 11, textTransform: 'uppercase' }}>Grupo</span>
+          <span className="texto-fraco" style={{ fontSize: 11, textTransform: 'uppercase', textAlign: 'right' }}>Meta</span>
+          <span className="texto-fraco" style={{ fontSize: 11, textTransform: 'uppercase', textAlign: 'right' }}>Realizado</span>
+          {realizadoPorGrupoExemplo.map(({ grupo, realizado, meta, percentualMeta }) => {
+            const pctRealizado = meta > 0 ? (realizado / meta) * 100 : realizado > 0 ? 999 : 0
+            return (
+              <Fragment key={grupo}>
+                <span className="texto-fraco">{grupo}</span>
+                <span className="texto-fraco" style={{ textAlign: 'right' }}>
+                  {fmtNum(meta)} ({percentualMeta.toFixed(0)}%)
+                </span>
+                <strong className={realizado > meta ? 'valor-neg' : 'valor-pos'} style={{ textAlign: 'right' }}>
+                  {fmtNum(realizado)} ({pctRealizado.toFixed(0)}%)
+                </strong>
+              </Fragment>
+            )
+          })}
+        </div>
+      )}
       </>
       )}
 

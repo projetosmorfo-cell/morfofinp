@@ -18,10 +18,27 @@ import { db, type Lancamento } from './db'
 import { DIA_FECHAMENTO_PADRAO, mesFaturaDoLancamento, situacaoDaFatura } from './faturaCiclo'
 
 /** Reavalia a fatura `cartaoId`+`mesISO` depois de gravar/editar/excluir um
- *  pagamento. Quitada (nada mais a pagar e pelo menos um pagamento) → todo
+ *  pagamento. Algum real pago (mesmo que não quite o ciclo inteiro) → todo
  *  item do ciclo vira `pago: true` com `faturaId` apontando pro ÚLTIMO
- *  pagamento. Ainda faltando → não mexe em item nenhum (pagar uma parte não
- *  quita nada; marcar `pago` à mão continua sendo escolha da pessoa). */
+ *  pagamento. Nenhum pagamento ainda → não mexe em item nenhum (marcar
+ *  `pago` à mão continua sendo escolha da pessoa nesse caso).
+ *
+ *  Build 104 (19/09/2026), pedido do Rafael: "independente do valor pago se
+ *  100% ou qualquer valor da fatura maior que 0 deve dar baixa nos
+ *  lançamentos como pago daquela fatura" — o gatilho de "dar baixa" deixa de
+ *  esperar `s.quitada` (100% do ciclo) e passa a valer a partir do PRIMEIRO
+ *  real pago (`s.pago > 0`), reversão deliberada da build 090/Decisão 121
+ *  ("pagar uma parte não quita nada"). Isso muda só a ETIQUETA visual de cada
+ *  compra do ciclo (Pago/A pagar em `statusPagamento.ts`) — a MATEMÁTICA da
+ *  fatura (`total`/`pago`/`restante`/`residuoAnterior` em
+ *  `situacaoDaFatura`) nunca olhou pra esse flag e continua exata, somando
+ *  os valores reais. Consequência aceita e deliberada: como não existe hoje
+ *  um passo que DESFAZ essa baixa em massa (nenhum caminho do app reverte
+ *  `pago`/`faturaId` dos itens se o pagamento for depois excluído ou
+ *  reduzido — mesma lacuna que já existia pro caso de 100%, só que agora
+ *  disparada mais cedo), editar pra menos ou apagar um pagamento parcial não
+ *  desmarca as compras já baixadas; corrigir isso, se um dia for preciso, é
+ *  decisão nova, separada desta. */
 export async function reavaliarQuitacao(cartaoId: number, mesISO: string): Promise<{ quitada: boolean; restante: number }> {
   const [cartao, categorias, todos] = await Promise.all([
     db.contas.get(cartaoId),
@@ -31,7 +48,7 @@ export async function reavaliarQuitacao(cartaoId: number, mesISO: string): Promi
   if (!cartao) return { quitada: false, restante: 0 }
   const porId = new Map(categorias.map((c) => [c.id!, c]))
   const s = situacaoDaFatura(todos, porId, cartao, mesISO)
-  if (s.quitada) {
+  if (s.pago > 0) {
     const ultimo = s.pagamentos[s.pagamentos.length - 1]
     const pendentes = s.itens.filter((l) => l.pago !== true || l.faturaId !== ultimo.id)
     /* Build 101 (Decisão 121) — bug real reportado pelo Rafael: pagar a
