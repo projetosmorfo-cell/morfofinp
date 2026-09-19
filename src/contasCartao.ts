@@ -104,6 +104,26 @@ export function faturaVencidaENaoPaga(contaId: number, mesFatura: string): boole
   return !situacao.quitada
 }
 
+/* Build 101 (Decisão 121), pedido do Rafael: "lançamentos de meses
+   anteriores mesmo com fatura paga aparecem como 'No cartão' e deveriam
+   aparecer como 'Pago', somente quando não pago que devem ser 'No Cartão'".
+   Antes, `statusDoLancamento` nunca devolvia "Pago" pra cartão (ver o
+   comentário na própria função) — regra que continua valendo enquanto a
+   fatura NÃO está 100% quitada (quem paga é ela inteira, não a compra
+   avulsa). Mas quando `situacaoDaFatura(...).quitada` já é `true`, a compra
+   deixou de ser "ainda por resolver": o dinheiro já saiu, de verdade, então
+   "Pago" volta a ser a leitura certa. MESMA função `situacaoDaFatura`, nunca
+   uma segunda regra de "pagou ou não" escrita aqui — só sem o filtro de
+   vencimento já passado que `faturaVencidaENaoPaga` tem (aqui importa só se
+   quitou, não se já venceu). */
+export function faturaQuitada(contaId: number, mesFatura: string): boolean {
+  const conta = contasCache.find((c) => c.id === contaId)
+  if (!conta || conta.tipo !== 'cartao') return false
+  const categoriaPorId = new Map(categoriasCache.map((c) => [c.id!, c]))
+  const situacao = situacaoDaFatura(lancamentosCache as Lancamento[], categoriaPorId, conta, mesFatura)
+  return situacao.quitada
+}
+
 /** O mês de fatura efetivo de um lançamento de cartão, lendo `diaFechamento`
     do cache — pra quem só tem o lançamento (ex.: `statusDoLancamento`) e não
     quer carregar a conta inteira por prop. */

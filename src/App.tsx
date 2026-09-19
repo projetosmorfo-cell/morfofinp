@@ -53,6 +53,7 @@ import { db, type Conta, type NotificacaoPendente } from './db'
 import { sincronizarPendentesNativas, ouvirNotificacoesAoVivo, marcarConfirmada, separarPendentes, limparHistoricoPorIdade } from './notificacaoBancaria'
 import { aplicarParametrosN0, paramsNotificacaoAtuais } from './notificacaoParametros'
 import { aplicarZoomN0, useAplicarZoomListas } from './zoomListas'
+import { aplicarCorDataListaN0, useAplicarCorDataLista } from './corDataLista'
 import { acharDePara, ensinarDePara } from './vinculoNotificacao'
 import { analisarNotificacao, casarContaDaNotificacao } from './parseNotificacao'
 import { lerDoAmbiente } from './ambiente'
@@ -288,6 +289,12 @@ function sugestaoDaNotificacao(
     contaId,
     contaEmBranco: contaId == null,
     descricaoOriginal: [n.titulo, n.texto].filter(Boolean).join(' — '),
+    // Build 101: pra `vinculoOrigem` poder ser gravado também na CRIAÇÃO
+    // (ver comentário do prop `sugestao` em `DetalheLancamento.tsx`).
+    notificacaoId: n.id,
+    app: n.app,
+    pacote: n.pacote,
+    recebidoEm: n.recebidoEm,
   }
 }
 
@@ -308,6 +315,8 @@ interface AlvoLancamento {
   // Build 090: "Pagar esta fatura" (Carteira) abre o formulário já como
   // pagamento daquela fatura — ver `PagamentoFaturaAbertura` em `mes.ts`.
   pagamentoFatura?: PagamentoFaturaAbertura
+  // Build 101 (Decisão 121): ver o mesmo campo em `mes.ts` (`TelaProps`).
+  viaContaDoCartao?: boolean
 }
 
 // Engrenagem fixa no topo (30/08/2026) — abre um popover com as duas telas
@@ -702,6 +711,8 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: ModoConsultaN
      só, aqui — a variável CSS cascateia e nenhuma lista precisa saber que
      existe zoom. Ver `src/zoomListas.ts`. */
   useAplicarZoomListas()
+  /* Build 101: cor do texto da linha de data — mesmo desenho da linha acima. */
+  useAplicarCorDataLista()
 
   // No carregamento, avança toda série de lançamento "fixo" que já deveria
   // ter gerado uma nova ocorrência até hoje — é a "geração dinâmica por
@@ -785,6 +796,8 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: ModoConsultaN
          Mesma mecânica e o mesmo escopo dos parâmetros logo acima — ver
          `src/zoomListas.ts`. */
       await aplicarZoomN0()
+      /* Cor da linha de data publicada pelo N0 (build 101) — mesma mecânica. */
+      await aplicarCorDataListaN0()
     })()
     /* Base das metas: marca a receita fixa numa base que veio de antes da
        build 051 e nunca recebeu a flag (bug real de 12/09/2026 — ver
@@ -973,14 +986,63 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: ModoConsultaN
      existem aqui só pra saber QUANDO o plano ficou pronto: é o fim do passo 2
      que dispara o convite do tour, e o passo 2 é concluído em outra tela. */
   const onboarding = useEstadoOnboarding()
-  const catsOnboarding = useLiveQuery(() => lerDoAmbiente(db.categorias.toArray()), [])
-  const gruposOnboarding = useLiveQuery(() => lerDoAmbiente(db.grupos.toArray()), [])
-  const metasOnboarding = useLiveQuery(() => lerDoAmbiente(db.metas.toArray()), [])
+  /* Build 103 — bug real do Rafael: "toda vez que fecho o app ele cai na tela
+     de resumo de primeiro acesso... e rapidamente se atualiza e some". Até
+     aqui categorias/grupos/metas eram 3 `useLiveQuery` INDEPENDENTES — cada
+     uma resolve na sua própria promessa, sem garantia de resolverem juntas.
+     A migração de cadastro que roda em toda abertura do app (useEffect logo
+     acima) grava em categorias, grupos e metas em momentos ligeiramente
+     diferentes; entre uma gravação e outra existe uma janela real em que
+     este trio de consultas devolve uma COMBINAÇÃO que nunca existiu no banco
+     — por exemplo grupos já corrigidos com metas ainda do jeito antigo.
+     `avaliarPassos` calculado em cima dessa mistura pode devolver `false`
+     por um instante, e é esse instante que o "sem porta" do primeiro acesso
+     tranca (ver `deveEntrarNoPrimeiroAcesso` abaixo e o cabeçalho de
+     `PrimeiroAcesso.tsx`).
+     A correção: uma ÚNICA consulta, dentro de uma transação de LEITURA do
+     Dexie. Uma transação de leitura do IndexedDB vê uma fotografia
+     consistente do banco — nunca uma mistura do meio de outra gravação — e,
+     por ser uma consulta só, o `useLiveQuery` também para de emitir 3
+     atualizações separadas: emite uma vez, com os três sempre coerentes
+     entre si (ainda que, ao longo de reaberturas seguintes do app, o valor
+     mude mais de uma vez — cada mudança chega com o trio inteiro combinando). */
+  const dadosOnboarding = useLiveQuery(
+    () =>
+      db.transaction('r', [db.categorias, db.grupos, db.metas, db.configuracoes], async () => {
+        const [categorias, grupos, metas] = await Promise.all([
+          lerDoAmbiente(db.categorias.toArray()),
+          lerDoAmbiente(db.grupos.toArray()),
+          lerDoAmbiente(db.metas.toArray()),
+        ])
+        return { categorias, grupos, metas }
+      }),
+    [],
+  )
+  const catsOnboarding = dadosOnboarding?.categorias
+  const gruposOnboarding = dadosOnboarding?.grupos
+  const metasOnboarding = dadosOnboarding?.metas
   /* "Plano pronto" = o momento em que a tela Hoje troca o cartão de 3 passos
      pelos dois números. Ver `usePlanoPronto` — o passo 3 é opcional de
      propósito, esperar por ele adiaria o convite pra sempre em quem nunca
      preenche meta por categoria. */
   const planoPronto = usePlanoPronto(catsOnboarding, gruposOnboarding, metasOnboarding)
+  /* Build 101 (Decisão 121) — bug real reportado pelo Rafael: "toda vez que
+     fecho o app ele cai na tela de resumo de primeiro acesso... e rapidamente
+     se atualiza e some pq identifica que tenho movimento lançado". Causa:
+     `primeiroAcessoConcluido` (build 092) nunca foi gravado retroativamente
+     pra quem já usava o app antes dela existir — sem a marca no banco, toda
+     abertura RE-CALCULA "isto já tem plano, não é primeiro acesso" do zero
+     (via `planoPronto`) em vez de LEMBRAR da resposta, e entre o primeiro
+     quadro (`onboarding.pronto` ainda carregando, tudo `false`) e o instante
+     em que `planoPronto` termina de calcular, a tela de boas-vindas cabia
+     nessa janela — aparecia e sumia sozinha. Assim que se confirma (uma vez)
+     que o plano já existe, grava a marca: a próxima abertura nem entra nessa
+     conta de novo, pra ninguém mais essa tela nem chega a desenhar. */
+  useEffect(() => {
+    if (onboarding.pronto && onboarding.boasVindasVistas && !onboarding.primeiroAcessoConcluido && planoPronto === true) {
+      void salvarConfiguracaoIcones({ primeiroAcessoConcluido: true })
+    }
+  }, [onboarding.pronto, onboarding.boasVindasVistas, onboarding.primeiroAcessoConcluido, planoPronto])
   /* NUNCA em modo consulta: quem está ali é o administrador Morfo dentro do
      ambiente de um cliente, não o dono do ambiente. Dar as boas-vindas a ele
      (a) rouba do cliente a primeira tela, marcando-a como lida por ele, e
@@ -1394,6 +1456,7 @@ export default function App({ modoConsultaN0 }: { modoConsultaN0?: ModoConsultaN
           contaIdSugerida={sugestaoNotificacao?.contaId ?? lancamentoAberto.contaIdSugerida}
           abrirClonando={lancamentoAberto.abrirClonando}
           pagamentoFatura={lancamentoAberto.pagamentoFatura}
+          viaContaDoCartao={lancamentoAberto.viaContaDoCartao}
           aoMudarMes={setMes}
           sugestao={sugestaoNotificacao}
           aoSalvarComSucesso={

@@ -1,6 +1,6 @@
 import type { Lancamento } from './db'
 import { hojeEfetivoISO } from './hojeSimulado'
-import { ehContaDeCartao, faturaVencidaENaoPaga, mesFaturaDoLancamentoPeloCache } from './contasCartao'
+import { ehContaDeCartao, faturaQuitada, faturaVencidaENaoPaga, mesFaturaDoLancamentoPeloCache } from './contasCartao'
 
 // Situação de pagamento de um lançamento — derivada, nunca guardada como
 // rótulo (só o boolean `pago` é persistido; "atrasado" é calculado comparando
@@ -39,14 +39,20 @@ export function statusDoLancamento(
   const cartao = ehContaDeCartao(l.contaId)
 
   if (cartao) {
-    /* Cartão nunca é "Pago"/"Recebido" no sentido de UM lançamento avulso —
-       quem se paga é a FATURA inteira, de uma vez (o botão "Pagar esta
-       fatura"). `pago === true` aqui não significa "dinheiro saiu": significa
-       "Rafael confirmou manualmente que isso já é real" — e pra cartão isso
-       é exatamente o que "No cartão" quer dizer, então uma marcação manual
-       (mesmo com data futura) entra direto em "No cartão", nunca em "Pago". */
+    /* Cartão nunca é "Pago" enquanto a FATURA não fechou de verdade — quem
+       paga é ela inteira, de uma vez (o botão "Pagar esta fatura"). `pago
+       === true` aqui não significa "dinheiro saiu": significa "Rafael
+       confirmou manualmente que isso já é real" — e pra cartão isso é
+       exatamente o que "No cartão" quer dizer, então uma marcação manual
+       (mesmo com data futura) entra direto em "No cartão", nunca em "Pago"
+       por si só.
+       Build 101 (Decisão 121), pedido do Rafael: quando a fatura à qual esta
+       compra pertence JÁ ESTÁ QUITADA (100% paga), a leitura muda — o
+       dinheiro já saiu de verdade, então a compra mostra "Pago", igual a
+       qualquer outro lançamento liquidado. Ver `faturaQuitada`. */
     if (pago || l.dataCompetencia <= hoje) {
       const mesFatura = mesFaturaDoLancamentoPeloCache(l)
+      if (mesFatura && faturaQuitada(l.contaId, mesFatura)) return 'pago'
       if (mesFatura && faturaVencidaENaoPaga(l.contaId, mesFatura)) return 'vencido_cartao'
       return 'no_cartao'
     }

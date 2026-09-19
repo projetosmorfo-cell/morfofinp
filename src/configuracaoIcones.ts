@@ -148,6 +148,11 @@ export function useConfiguracaoIcones(): Required<
     | 'zoomListasPorAmbiente'
     | 'zoomVersaoPorAmbiente'
     | 'espacoListasPorAmbiente'
+    /* Build 101: cor da linha de data compõe as próprias 3 camadas em
+       `src/corDataLista.ts` — fora do escopo deste hook, mesma razão do
+       zoom acima. */
+    | 'corDataListaPorAmbiente'
+    | 'corDataListaVersaoPorAmbiente'
     /* 16/09/2026 (build 086): marca da criação da conta cofrinho padrão — ver
        `garantirContaCofrinho()` em `src/contasCofrinho.ts`. É marca de
        migração, não configuração de ícone/visão. */

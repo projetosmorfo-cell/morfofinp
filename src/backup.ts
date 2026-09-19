@@ -24,6 +24,8 @@
    qualquer coisa. */
 import { vincularPagamentosAntigos } from './faturaPagamento'
 import { db } from './db'
+import { categoriasDaBaseMeta } from './baseMeta'
+import { avaliarPassos } from './components/PrimeirosPassos'
 
 export const VERSAO_ARQUIVO_BACKUP = 1
 const MARCA_ARQUIVO = 'morfofinp-backup'
@@ -212,6 +214,12 @@ export async function restaurarBackup(arquivo: ArquivoBackup): Promise<Record<st
       if (linhas.length) await db.table(nome).bulkPut(linhas)
       aplicados[nome] = linhas.length
     }
+    /* Build 102 — precisa estar DENTRO desta mesma transação, não depois
+       (ver o comentário completo abaixo de `corrigirPrimeiroAcessoConcluido`):
+       só assim a correção chega junto com o resto no MESMO commit, e quem
+       observa o banco (as telas) nunca vê o instante em que o plano já está
+       completo mas a marca ainda diz que não está. */
+    await corrigirPrimeiroAcessoConcluidoAposRestauro()
   })
   /* Build 090: um backup de antes da 090 traz pagamentos de fatura sem
      `faturaCartaoId`/`faturaMes` — a mesma dedução que roda na abertura do
@@ -219,6 +227,57 @@ export async function restaurarBackup(arquivo: ArquivoBackup): Promise<Record<st
      de fechar e abrir o app. */
   await vincularPagamentosAntigos()
   return aplicados
+}
+
+/* Build 102 — BUG REAL encontrado na varredura de QA (Playwright, com backup
+ * real do Rafael): restaurar um arquivo de ANTES da build 101 — a que passou
+ * a gravar `primeiroAcessoConcluido` retroativamente — jogava a pessoa direto
+ * no passo a passo obrigatório "Primeiro acesso" (SEM SAÍDA), mesmo com o
+ * plano inteiro (grupos, categorias, metas, 899 lançamentos) recém-restaurado
+ * e correto por baixo. Reproduzido de ponta a ponta: restaurar → cai no Passo
+ * 1 de 4 → um simples F5 escapa e mostra tudo certo — ou seja, o dado nunca
+ * esteve errado, só a TELA.
+ *
+ * CAUSA: `App.tsx` decide "precisa do passo a passo?" combinando 4 sinais
+ * (`boasVindasVistas`, `primeiroAcessoConcluido`, e o `planoPronto` calculado
+ * a partir de 3 `useLiveQuery` INDEPENDENTES — categorias, grupos, metas).
+ * Restaurar troca as 4 tabelas de uma vez, mas cada `useLiveQuery` notifica
+ * a tela em seu próprio instante; existe uma janela de um requadro em que já
+ * chegou a categoria nova mas ainda não chegou o grupo (ou vice-versa) — nessa
+ * janela o app LÊ "plano incompleto" e entra no passo a passo. A entrada é
+ * travada de propósito (não pode sair sozinha no meio do passo 1, senão o
+ * passo 2 sumiria antes de ser visto) — bom para quem está preenchendo de
+ * verdade, ruim para quem só teve azar no timing de uma restauração.
+ *
+ * CORREÇÃO (aqui, não lá): em vez de mexer no timing das 3 consultas — frágil
+ * e sem como testar de verdade neste ambiente —, fecha a porta que a
+ * restauração pode ter deixado aberta: se os dados recém-restaurados JÁ
+ * formam um plano completo (mesmo cálculo de `usePlanoPronto`), grava
+ * `primeiroAcessoConcluido: true` como parte da própria restauração. A tela
+ * nunca mais tem motivo pra entrar no passo a passo depois deste backup —
+ * não importa a ordem em que as consultas cheguem, porque a condição que
+ * checa `primeiroAcessoConcluido` já para de valer antes de olhar pra
+ * `planoPronto`. Backup de quem NUNCA teve plano (instalação nova) continua
+ * caindo no passo a passo normalmente — a marca só é gravada quando o plano
+ * já está pronto de verdade. */
+async function corrigirPrimeiroAcessoConcluidoAposRestauro(): Promise<void> {
+  const [categorias, grupos, metas] = await Promise.all([
+    db.categorias.toArray(),
+    db.grupos.toArray(),
+    db.metas.toArray(),
+  ])
+  const idsBase = categoriasDaBaseMeta(categorias)
+    .map((c) => c.id)
+    .filter((id): id is number => id != null)
+  const receitaLancada = idsBase.length
+    ? await db.lancamentos.where('categoriaId').anyOf(idsBase).count()
+    : 0
+  const p = avaliarPassos(categorias, grupos, metas)
+  const planoPronto = p.percentuaisOk && (p.receitaOk || receitaLancada > 0)
+  if (!planoPronto) return
+  const atual = await db.configuracoes.get(1)
+  if (atual?.primeiroAcessoConcluido) return
+  await db.configuracoes.update(1, { primeiroAcessoConcluido: true })
 }
 
 /* Apaga TUDO — as 11 tabelas, incluindo cadastros, configurações e a sessão.

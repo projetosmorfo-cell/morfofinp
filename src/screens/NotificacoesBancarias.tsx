@@ -26,6 +26,7 @@ import {
   buscarCandidatos,
   acharDePara,
   vincularNotificacaoALancamento,
+  desvincularLancamento,
   janelaPadrao,
   janelaAmpliada,
   ROTULO_GRUPO_CANDIDATO,
@@ -200,6 +201,14 @@ export default function NotificacoesBancarias({
 
   const ignoradasTodas = [...recusadasPeloFiltro, ...(descartadas ?? [])]
 
+  /* Aba "Vínculos" (build 101) — ver o comentário do tipo `Aba` abaixo. */
+  const contaPorId = new Map(contas.map((c) => [c.id, c]))
+  const lancamentosVinculados = lancamentos
+    .filter((l) => l.vinculoOrigem != null)
+    .sort((a, b) => (b.vinculoOrigem?.vinculadoEm ?? '').localeCompare(a.vinculoOrigem?.vinculadoEm ?? ''))
+  const [desvinculando, setDesvinculando] = useState<number | null>(null)
+  const [avisoVinculo, setAvisoVinculo] = useState<string | null>(null)
+
   const dataCurta = (iso: string) => {
     const d = new Date(iso)
     return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`
@@ -217,7 +226,7 @@ export default function NotificacoesBancarias({
         </button>
         <h1>Notificações Bancárias</h1>
         <div className="abas-tela" role="tablist" data-testid="notif-abas">
-          {(['pendentes', 'ignoradas', 'historico'] as Aba[]).map((k) => (
+          {(['pendentes', 'ignoradas', 'historico', 'vinculos'] as Aba[]).map((k) => (
             <button
               key={k}
               type="button"
@@ -236,7 +245,13 @@ export default function NotificacoesBancarias({
             >
               {ROTULO_ABA[k]}{' '}
               <span className="texto-fraco" style={{ fontWeight: 400 }}>
-                ({k === 'pendentes' ? soltas.length + pares.length : k === 'ignoradas' ? ignoradasTodas.length : (confirmadas?.length ?? 0)})
+                ({k === 'pendentes'
+                  ? soltas.length + pares.length
+                  : k === 'ignoradas'
+                    ? ignoradasTodas.length
+                    : k === 'historico'
+                      ? (confirmadas?.length ?? 0)
+                      : lancamentosVinculados.length})
               </span>
             </button>
           ))}
@@ -259,6 +274,9 @@ export default function NotificacoesBancarias({
               contas={contas}
               categorias={categorias}
               dataHora={dataHora}
+              nativo={nativo}
+              ignorados={ignorados}
+              aoIgnorarPacote={async (pacote) => { await ignorarPacote(pacote); setIgnorados(await obterPacotesIgnorados()) }}
             />
           ))}
 
@@ -373,6 +391,72 @@ export default function NotificacoesBancarias({
         </>
       )}
 
+      {aba === 'vinculos' && (
+        <>
+          <p className="texto-fraco" style={{ fontSize: 13 }}>
+            Todo lançamento vinculado a uma notificação do banco — criado direto dela ou vinculado
+            depois a um que já existia — com o texto original ao lado. Serve pra conferir antes de uma
+            conciliação futura: se algum vínculo pegou o lançamento errado, desfaça aqui (o lançamento
+            não é apagado nem alterado além do vínculo em si — ele volta a poder ser vinculado de novo).
+          </p>
+          <div data-testid="notif-vinculos">
+            {lancamentosVinculados.length === 0 && (
+              <div className="cartao"><p className="texto-fraco" style={{ margin: 0 }}>Nenhum lançamento vinculado ainda.</p></div>
+            )}
+            {avisoVinculo && <p className="texto-fraco" style={{ fontSize: 13 }} data-testid="notif-vinculo-aviso">{avisoVinculo}</p>}
+            {lancamentosVinculados.map((l) => {
+              const vo = l.vinculoOrigem!
+              return (
+                <div key={l.id} className="cartao notif-card" data-testid="notif-vinculo-item">
+                  <div className="notif-cabecalho">
+                    <span className="notif-nome">{l.descricao}</span>
+                    <span className="notif-quando">{dataCurta(l.dataCompetencia)}</span>
+                  </div>
+                  <div className={`notif-valor ${l.valor >= 0 ? 'valor-pos' : 'valor-neg'}`}>{fmtNum(l.valor)}</div>
+                  <p className="texto-fraco" style={{ fontSize: 12, margin: '2px 0 8px' }}>
+                    {contaPorId.get(l.contaId)?.nome ?? '—'}
+                    {' · '}
+                    {vo.vinculadoAExistente ? 'vinculado a um lançamento que já existia' : 'criado direto da notificação'}
+                    {vo.app ? ` · ${vo.app}` : ''}
+                  </p>
+                  {vo.textoCru && (
+                    <>
+                      <div className="notif-secao-rotulo">Texto original da notificação</div>
+                      <p className="notif-texto-original">{vo.textoCru}</p>
+                    </>
+                  )}
+                  <div className="notif-acoes">
+                    {aoAbrirLancamento && (
+                      <button type="button" className="primario" data-testid="notif-vinculo-abrir" onClick={() => aoAbrirLancamento(l.id!)}>
+                        {ROTULO_ACAO.abrirLancamento}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="secundario"
+                      data-testid="notif-vinculo-desvincular"
+                      disabled={desvinculando === l.id}
+                      onClick={async () => {
+                        setDesvinculando(l.id!)
+                        const r = await desvincularLancamento(l.id!)
+                        setDesvinculando(null)
+                        setAvisoVinculo(
+                          r.voltouParaPendentes
+                            ? `Vínculo desfeito — a notificação de "${l.descricao}" voltou pra Pendentes.`
+                            : `Vínculo desfeito. Valor, data e status do lançamento continuam como estavam.`,
+                        )
+                      }}
+                    >
+                      {desvinculando === l.id ? 'Desfazendo…' : 'Desvincular'}
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </>
+      )}
+
       {/* Build 099 — LIMPEZA DO HISTÓRICO, nas duas abas que são histórico
           (Ignoradas e Histórico). Automática pela idade (parâmetro em
           Configurações → Regras de Notificação Bancária) e manual aqui. Só
@@ -452,8 +536,27 @@ export default function NotificacoesBancarias({
   )
 }
 
-export type Aba = 'pendentes' | 'ignoradas' | 'historico'
-const ROTULO_ABA: Record<Aba, string> = { pendentes: 'Pendentes', ignoradas: 'Ignoradas', historico: 'Histórico' }
+/* Build 101 (item 3 do Rafael, 18/09/2026): "existe o risco de ter
+   reconhecido a notificação errada e eu ter editado pra lançar, então a
+   futura conciliação vai ter problema — por isso acho que devemos criar já
+   uma tela prévia preparatória pra conciliação... somente para rever os
+   vínculos". A aba "Vínculos" é essa revisão: TODO lançamento com
+   `vinculoOrigem` gravado (criado a partir de notificação OU vinculado a um
+   já existente — as duas formas gravam o mesmo campo, ver
+   `vinculoNotificacao.ts`), num lugar só, com o texto cru do banco ao lado
+   do lançamento de hoje. Diferente da aba "Histórico" (que lista
+   NOTIFICAÇÕES confirmadas): esta lista lê do LANÇAMENTO, então sobrevive à
+   limpeza de histórico de notificação (`limparHistoricoPorIdade`) — é
+   exatamente aí que a conciliação futura ia precisar do dado e não ia mais
+   achar de onde ele veio.
+   "Editar os dados secundários" (a segunda metade do pedido) fica de fora
+   por ora: os campos de origem são READ-ONLY de propósito desde a build
+   081 (são o registro NÃO EDITADO do banco — é isso que os torna âncora de
+   conciliação) e o Rafael ainda não disse quais campos, especificamente,
+   quer poder mudar. O que ESTA aba já resolve é o "vinculei errado": um
+   toque em "Desvincular" aqui mesmo, sem abrir o formulário inteiro. */
+export type Aba = 'pendentes' | 'ignoradas' | 'historico' | 'vinculos'
+const ROTULO_ABA: Record<Aba, string> = { pendentes: 'Pendentes', ignoradas: 'Ignoradas', historico: 'Histórico', vinculos: 'Vínculos' }
 
 /* Uma notificação pendente. Mostra o que a leitura ENTENDEU (nome, movimento,
    agendado × concluído, conta casada) e o texto cru, que continua sendo a
@@ -748,12 +851,15 @@ function CartaoIgnorada({
    ficam à vista justamente porque o falso positivo é real (pagar R$ 500 e
    receber R$ 500 no mesmo minuto bate em todos os critérios). */
 function PropostaTransferencia({
-  par, contas, categorias, dataHora,
+  par, contas, categorias, dataHora, nativo, ignorados, aoIgnorarPacote,
 }: {
   par: ParTransferencia
   contas: Conta[]
   categorias: import('../db').Categoria[]
   dataHora: (iso: string) => string
+  nativo: boolean
+  ignorados: string[]
+  aoIgnorarPacote: (pacote: string) => void
 }) {
   const [descricao, setDescricao] = useState(par.descricaoSugerida)
   const [origemId, setOrigemId] = useState<number | ''>(par.contaOrigemId ?? '')
@@ -779,6 +885,16 @@ function PropostaTransferencia({
   }
 
   if (pronto) return null
+
+  /* Build 101 (Decisão 121), pedido do Rafael: o par tem DUAS notificações,
+     às vezes de apps diferentes — o link de silenciar precisa valer pra cada
+     app envolvido, não só "aquele app" no singular. Mesma lógica de
+     `podeIgnorarApp`/`aoIgnorarApp` do card avulso (`CartaoNotificacao`),
+     só que aplicada aos dois lados do par (sem repetir quando é o mesmo
+     app dos dois lados). */
+  const appsDoPar = [par.saida, par.entrada]
+    .filter((n, i, arr) => arr.findIndex((o) => o.pacote === n.pacote) === i)
+    .filter((n) => !ignorados.includes(n.pacote))
 
   return (
     <div className="cartao" data-testid="notif-par-transferencia">
@@ -823,28 +939,45 @@ function PropostaTransferencia({
         <button type="button" className="secundario" data-testid="notif-recusar-transferencia" onClick={() => setPronto(true)}>
           {ROTULO_ACAO.naoTransferencia}
         </button>
+        {/* Build 100 (18/09/2026), pedido do Rafael: faltava o botão de
+            ignorar — igual a todo outro card de notificação — pra este par
+            específico. Sem ele a única saída era confirmar como transferência
+            ou "Não, são separadas" (que só esconde o card nesta sessão; volta
+            a propor o MESMO par depois, porque nada muda no banco). Ignorar
+            descarta as DUAS notificações de uma vez — somem de Pendentes e
+            vão pra Ignoradas, com volta (`descartarNotificacao`, a mesma
+            função de qualquer notificação avulsa).
+            Build 101 (Decisão 121): virou o 3º BOTÃO desta linha — o Rafael
+            achou o link de antes "muito sutil" pra uma ação real (a mesma
+            reclamação de sempre: ação de card é botão, nunca texto solto). */}
+        <button
+          type="button"
+          className="secundario"
+          data-testid="notif-ignorar-par-transferencia"
+          onClick={async () => {
+            if (par.saida.id != null) await descartarNotificacao(par.saida.id)
+            if (par.entrada.id != null) await descartarNotificacao(par.entrada.id)
+            setPronto(true)
+          }}
+        >
+          {ROTULO_ACAO.ignorar} (as duas)
+        </button>
       </div>
-      {/* Build 100 (18/09/2026), pedido do Rafael: faltava o botão de
-          ignorar — igual a todo outro card de notificação — pra este par
-          específico. Sem ele a única saída era confirmar como transferência
-          ou "Não, são separadas" (que só esconde o card nesta sessão; volta
-          a propor o MESMO par depois, porque nada muda no banco). Ignorar
-          descarta as DUAS notificações de uma vez — somem de Pendentes e vão
-          pra Ignoradas, com volta (`descartarNotificacao`, a mesma função de
-          qualquer notificação avulsa). */}
-      <button
-        type="button"
-        className="notif-link"
-        style={{ marginTop: 8 }}
-        data-testid="notif-ignorar-par-transferencia"
-        onClick={async () => {
-          if (par.saida.id != null) await descartarNotificacao(par.saida.id)
-          if (par.entrada.id != null) await descartarNotificacao(par.entrada.id)
-          setPronto(true)
-        }}
-      >
-        {ROTULO_ACAO.ignorar} (as duas)
-      </button>
+      {/* Build 101 (Decisão 121), pedido do Rafael: faltava aqui o link
+          padrão que todo outro card de notificação já tem — "não ler mais
+          notificações deste app". Um link por app distinto envolvido no par
+          (normalmente dois: quem manda e quem recebe). */}
+      {nativo && appsDoPar.map((n) => (
+        <button
+          key={n.pacote}
+          type="button"
+          className="notif-link"
+          data-testid="notif-ignorar-app-par-transferencia"
+          onClick={() => aoIgnorarPacote(n.pacote)}
+        >
+          {ROTULO_ACAO.naoLerMais(n.app)}
+        </button>
+      ))}
     </div>
   )
 }

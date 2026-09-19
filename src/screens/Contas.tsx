@@ -139,6 +139,17 @@ export default function Contas({
     setRasc: React.Dispatch<React.SetStateAction<RascunhoConta>>,
     travado = false,
   ) {
+    /* Build 101 (Decisão 121), pedido do Rafael: mesmo o cofrinho PADRÃO
+       (todo o resto travado, ver `MOTIVO_COFRINHO_PADRAO_TRAVADO`) precisa de
+       um jeito de receber um Saldo Inicial de verdade — sem isso, uma conta
+       criada zerada pela migração (`garantirContaCofrinho`) nunca teria como
+       ganhar um saldo de abertura por AQUI (só pelo "informar o saldo real"
+       da Carteira, que é outra ideia: um retrato de agora, não o que já
+       havia antes de começar a lançar). `rasc.saldoInicial === ''` é o mesmo
+       sinal que `iniciarEdicao` já usa pra "esta conta está zerada" — o
+       campo destrava só enquanto for esse o caso; assim que ganha um valor,
+       volta a seguir a regra geral do cofrinho padrão. */
+    const saldoTravado = travado && rasc.saldoInicial !== ''
     return (
       <>
         <label htmlFor="conta-nome">Nome</label>
@@ -162,17 +173,8 @@ export default function Contas({
             {MOTIVO_COFRINHO_PADRAO_TRAVADO}
           </p>
         )}
-        <fieldset className="campos-travaveis" disabled={travado}>
-        <label htmlFor="conta-tipo">Tipo</label>
-        <SeletorComExplicacao<TipoConta>
-          id="conta-tipo"
-          titulo="Tipo da carteira"
-          valor={rasc.tipo}
-          opcoes={(Object.keys(ROTULO_TIPO) as TipoConta[]).map((t): OpcaoExplicada<TipoConta> => ({ valor: t, rotulo: ROTULO_TIPO[t], explicacao: EXPLICACAO_TIPO[t] }))}
-          onEscolher={(tipo) => setRasc((r) => ({ ...r, tipo }))}
-        />
         {rasc.tipo !== 'cartao' && (
-          <>
+          <fieldset className="campos-travaveis" disabled={saldoTravado} style={{ border: 0, margin: 0, padding: 0 }}>
             <label htmlFor="conta-saldo-inicial">Saldo Inicial</label>
             <input
               id="conta-saldo-inicial"
@@ -194,8 +196,17 @@ export default function Contas({
               É a partir dele que a Carteira monta o total acumulado. Sem nada guardado ainda,
               deixe zerado.
             </p>
-          </>
+          </fieldset>
         )}
+        <fieldset className="campos-travaveis" disabled={travado}>
+        <label htmlFor="conta-tipo">Tipo</label>
+        <SeletorComExplicacao<TipoConta>
+          id="conta-tipo"
+          titulo="Tipo da carteira"
+          valor={rasc.tipo}
+          opcoes={(Object.keys(ROTULO_TIPO) as TipoConta[]).map((t): OpcaoExplicada<TipoConta> => ({ valor: t, rotulo: ROTULO_TIPO[t], explicacao: EXPLICACAO_TIPO[t] }))}
+          onEscolher={(tipo) => setRasc((r) => ({ ...r, tipo }))}
+        />
         {rasc.tipo === 'cartao' && (
           <>
             <label htmlFor="conta-fechamento">Dia de Fechamento da Fatura</label>
@@ -382,6 +393,13 @@ export default function Contas({
         {contas.length === 0 && <p className="texto-fraco">Nenhuma conta cadastrada ainda.</p>}
         {contas.map((c) => {
           const temLancamentos = (contagemPorConta.get(c.id!) ?? 0) > 0
+          /* Build 101 (Decisão 121), pedido do Rafael: "se só tem 1 conta
+             tipo Cofrinho, nem deve ter opção de excluir nem inativar" — as
+             DUAS ações já eram bloqueadas ao tocar (`AVISO_COFRINHO_PADRAO_FIXO`/
+             `AVISO_ULTIMO_COFRINHO`, `excluir`/`alternarAtiva` acima); a
+             mudança aqui é só de exibição — nem mostrar o "⋮" pra uma ação
+             que já ia ser recusada, em vez de deixar tocar e recusar depois. */
+          const cofrinhoProtegido = c.tipo === 'cofre' && (ehCofrinhoPadrao(c) || ehUltimoCofrinho(c, contas))
 
           return (
             <div key={c.id} style={{ padding: '5px 0', borderBottom: '1px solid var(--borda)' }}>
@@ -432,21 +450,26 @@ export default function Contas({
                     >
                       <PencilSquareIcon width={16} height={16} />
                     </button>
-                    <MenuLinha
-                      aberto={menuContaAberta === c.id}
-                      onAbrirFechar={() => setMenuContaAberta((atual) => (atual === c.id ? null : c.id!))}
-                      onFechar={() => setMenuContaAberta(null)}
-                    >
-                      {temLancamentos ? (
-                        <button type="button" onClick={() => { alternarAtiva(c); setMenuContaAberta(null) }}>
-                          {c.ativa ? 'Inativar' : 'Reativar'}
-                        </button>
-                      ) : (
-                        <button type="button" onClick={() => { setConfirmandoExclusaoId(c.id!); setMenuContaAberta(null) }}>
-                          Excluir
-                        </button>
-                      )}
-                    </MenuLinha>
+                    {/* Reativar continua disponível mesmo numa conta
+                        "protegida" — a proteção é contra ficar SEM cofrinho
+                        ativo, nunca contra ganhar um de volta. */}
+                    {(!cofrinhoProtegido || !c.ativa) && (
+                      <MenuLinha
+                        aberto={menuContaAberta === c.id}
+                        onAbrirFechar={() => setMenuContaAberta((atual) => (atual === c.id ? null : c.id!))}
+                        onFechar={() => setMenuContaAberta(null)}
+                      >
+                        {temLancamentos ? (
+                          <button type="button" onClick={() => { alternarAtiva(c); setMenuContaAberta(null) }}>
+                            {c.ativa ? 'Inativar' : 'Reativar'}
+                          </button>
+                        ) : (
+                          <button type="button" onClick={() => { setConfirmandoExclusaoId(c.id!); setMenuContaAberta(null) }}>
+                            Excluir
+                          </button>
+                        )}
+                      </MenuLinha>
+                    )}
                   </>
                 )}
               </div>

@@ -65,16 +65,37 @@ export interface InformeSaldo {
   velho: boolean
 }
 
+/* Build 101 (Decisão 121) — BUG real reportado pelo Rafael: atualizou o
+   saldo do cofrinho de 6.110,44 para 7.000,00 (um AUMENTO) e o app mostrou
+   como se tivesse DIMINUÍDO. Causa: `dataReferencia` é o dia inteiro
+   (`AAAAMMDD`), então dois informes no MESMO DIA empatam nesse critério —
+   e `Array.prototype.sort` do JS é ESTÁVEL, preserva a ordem original
+   (`toArray()` do Dexie vem em ordem de inserção, do mais ANTIGO pro mais
+   novo) quando os dois lados do compare dão empate. Resultado: o informe
+   MAIS VELHO do dia ficava em `daConta[0]` ("o mais recente"), invertendo
+   qual é o atual e qual é o anterior. Precisa de um SEGUNDO critério de
+   desempate: o `id` (autoincremento do Dexie), decrescente — o mesmo padrão
+   já usado em `compararDentroDoDia` (`lancamentosUtil.ts`) pra este exato
+   tipo de empate. */
+function porInformeMaisRecentePrimeiro(
+  a: { id?: number; dataReferencia: string },
+  b: { id?: number; dataReferencia: string },
+): number {
+  const porData = b.dataReferencia.localeCompare(a.dataReferencia)
+  if (porData !== 0) return porData
+  return (b.id ?? 0) - (a.id ?? 0)
+}
+
 /** Monta o último informe de uma conta a partir da tabela inteira já lida
     (nunca busca no banco de novo — ver `useUltimosInformesPorConta`). */
 function construirUltimoInforme(
-  registros: { contaId: number; dataReferencia: string; saldoInformado: number }[] | undefined,
+  registros: { id?: number; contaId: number; dataReferencia: string; saldoInformado: number }[] | undefined,
   contaId: number,
 ): InformeSaldo | null {
   if (!registros) return null
   const daConta = registros
     .filter((r) => r.contaId === contaId)
-    .sort((a, b) => b.dataReferencia.localeCompare(a.dataReferencia))
+    .sort(porInformeMaisRecentePrimeiro)
   const ultimo = daConta[0]
   if (!ultimo) return null
   const data = dataDoInforme(ultimo.dataReferencia)
@@ -146,7 +167,7 @@ function useVariacaoDesdeUltimoInforme(contaId: number): VariacaoCofrinho | null
   if (!registros) return null
   const daConta = registros
     .filter((r) => r.contaId === contaId)
-    .sort((a, b) => b.dataReferencia.localeCompare(a.dataReferencia))
+    .sort(porInformeMaisRecentePrimeiro)
   if (daConta.length < 2) return null
   const [atual, anterior] = daConta
   const valor = atual.saldoInformado - anterior.saldoInformado
@@ -363,7 +384,8 @@ export default function SaldoDoCofrinho({
       </div>
 
       <div className="card-dois-totais">
-        <span className="texto-fraco">Total real (já executado)</span>
+        {/* Decisão 121 (build 101): mesma remoção do card de conta comum —
+            ver `Carteira.tsx` (`DoisTotais`). */}
         {comprometido != null && (
           <span className="linha-total-card">
             <span className="linha-total-rotulo texto-fraco">

@@ -1486,7 +1486,10 @@ nav.rodape {
      linha continua com a altura padrão da fonte e a redução não aparece. */
   font-size: 10px;
   line-height: 1.1;
-  color: var(--texto-fraco);
+  /* Build 101: `--cor-data-lista` (ver `src/corDataLista.ts`) é o parâmetro
+     N0/N1 — sem personalização a variável nem existe, e o fallback devolve
+     exatamente o `--texto-fraco` de sempre (acompanha o tema). */
+  color: var(--cor-data-lista, var(--texto-fraco));
   letter-spacing: 0.02em;
   /* Build 090: o fundo vem da classe `status-fundo-*` do PRIMEIRO lançamento
      da sessão (`fundoDaLinhaDeData`), não daqui — ver `.sessao-data`. */
@@ -1576,7 +1579,9 @@ nav.rodape {
      10/09/2026 (build 026). `.sessao-data-simples` (lista Simples) não muda. */
   font-size: calc(12px * var(--zoom-lista));
   line-height: 1.15;
-  color: var(--texto-fraco);
+  /* Build 101: mesmo parâmetro N0/N1 de `.sessao-data-simples` acima — ver
+     `src/corDataLista.ts`. */
+  color: var(--cor-data-lista, var(--texto-fraco));
   letter-spacing: 0.02em;
   /* Item 3 (16/09/2026): sem fundo próprio, esta linha ficava sobre o fundo
      do `.cartao` (`--bg-elevado`), que é mais ESCURO que o fundo das linhas

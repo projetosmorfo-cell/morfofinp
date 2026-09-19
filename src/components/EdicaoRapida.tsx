@@ -43,20 +43,41 @@ import {
 /* Situação da META DO GRUPO a que a categoria/grupo pertence — o mesmo bloco
    que a tela de cadastro (Categorias › Metas) mostra. Pedido do Rafael em
    12/09/2026, para os DOIS popups: "estas informações devem ser exibidas
-   também no popup de edição de categoria". Lê do banco, nunca de um número
-   recalculado à mão aqui. */
-function SituacaoMetaDoGrupo({ grupo, baseEmReais }: { grupo: string; baseEmReais: number }) {
+   também no popup de edição de categoria".
+   Build 101 (Decisão 121) — pedido do Rafael, revisto: "ao preencher limites
+   já deve calcular vs grupo vs receita se está estourando ou não". Antes a
+   soma vinha 100% do banco (nunca "um número recalculado à mão aqui"), então
+   editar o valor da categoria só mudava esta conta DEPOIS de salvar e
+   reabrir o popup — a pessoa descobria o estouro tarde demais. Agora, quando
+   quem chama informa a categoria em edição (`categoriaEmEdicao`), o valor
+   GRAVADO dela é trocado pelo do RASCUNHO (ainda não salvo) antes de somar —
+   o resto do grupo continua lido do banco, só esta categoria fica "ao
+   vivo". Sem o parâmetro (`PopupMetaGrupo`, que não edita categoria nenhuma)
+   o comportamento é exatamente o de antes. */
+function SituacaoMetaDoGrupo({
+  grupo,
+  baseEmReais,
+  categoriaEmEdicao,
+}: {
+  grupo: string
+  baseEmReais: number
+  categoriaEmEdicao?: { id?: number; aceitavelMensal: number; consomeMeta: boolean }
+}) {
   const dados = useLiveQuery(async () => {
     const [categorias, metas] = await Promise.all([
       lerDoAmbiente(db.categorias.toArray()),
       lerDoAmbiente(db.metas.toArray()),
     ])
-    const soma = categorias
-      .filter((c) => c.ativa && c.grupo === grupo && categoriaConsomeMeta(c.natureza))
+    const outrasDoGrupo = categorias.filter(
+      (c) => c.ativa && c.grupo === grupo && c.id !== categoriaEmEdicao?.id,
+    )
+    const somaOutras = outrasDoGrupo
+      .filter((c) => categoriaConsomeMeta(c.natureza))
       .reduce((t, c) => t + (c.aceitavelMensal || 0), 0)
+    const soma = somaOutras + (categoriaEmEdicao?.consomeMeta ? categoriaEmEdicao.aceitavelMensal : 0)
     const pct = metas.find((m) => m.grupo === grupo)?.percentual ?? 0
-    return { soma, pct, qtd: categorias.filter((c) => c.ativa && c.grupo === grupo).length }
-  }, [grupo])
+    return { soma, pct, qtd: outrasDoGrupo.length + (categoriaEmEdicao ? 1 : 0) }
+  }, [grupo, categoriaEmEdicao?.id, categoriaEmEdicao?.aceitavelMensal, categoriaEmEdicao?.consomeMeta])
   if (!dados) return null
   const meta = (baseEmReais * dados.pct) / 100
   const dif = meta - dados.soma
@@ -127,7 +148,15 @@ export function PopupAceitavelCategoria({
         contasVinculaveis={contasVinculaveis}
         valorPrimeiro
       />
-      <SituacaoMetaDoGrupo grupo={rasc.grupo} baseEmReais={baseEmReais} />
+      <SituacaoMetaDoGrupo
+        grupo={rasc.grupo}
+        baseEmReais={baseEmReais}
+        categoriaEmEdicao={{
+          id: categoria.id,
+          aceitavelMensal: paraNumero(rasc.aceitavelMensal),
+          consomeMeta: categoriaConsomeMeta(rasc.natureza),
+        }}
+      />
     </ModalCadastro>
   )
 }

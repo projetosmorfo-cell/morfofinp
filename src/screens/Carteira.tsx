@@ -457,7 +457,10 @@ function DoisTotais({
   }
   return (
     <div className="card-dois-totais">
-      <span className="texto-fraco">Total real (já executado)</span>
+      {/* Decisão 121 (build 101), pedido do Rafael: retirar esta legenda do
+          card da tela principal (antes de clicar pra entrar nos detalhes) —
+          ficava sem valor ao lado e não ajudava. O número "real" continua no
+          cabeçalho do card; só a legenda solta some. */}
       <span className="linha-total-card">
         <span className="linha-total-rotulo texto-fraco">
           Total aplicando o comprometido
@@ -661,7 +664,13 @@ function DetalheConta({
           lancamento={l}
           categoria={categoriaPorId.get(l.categoriaId)}
           origemLabel={conta && l.contaId === conta.id ? undefined : `via ${contaPorId.get(l.contaId)?.nome ?? '—'}`}
-          onAbrir={() => (selecao.ativa ? selecao.alternar(l.id!) : aoAbrirLancamento({ id: l.id }))}
+          /* Build 101 (Decisão 121): `viaContaDoCartao` só é `true` aqui
+             DENTRO da conta do próprio cartão (`isCartao`) — é o único lugar
+             onde a Carteira deixa editar um pagamento de fatura de verdade
+             (ver `DetalheLancamento.tsx`). Passar sempre não tem efeito
+             nenhum em lançamento comum (a tela só olha isto quando é um
+             pagamento de fatura). */
+          onAbrir={() => (selecao.ativa ? selecao.alternar(l.id!) : aoAbrirLancamento({ id: l.id, viaContaDoCartao: isCartao }))}
           onDuplicar={() => aoAbrirLancamento({ id: l.id, abrirClonando: true })}
         />
       </div>
@@ -847,7 +856,15 @@ function DetalheConta({
           </div>
           <div className="linha" style={{ border: 'none', padding: '2px 0 0' }}>
             <span>Faltante</span>
-            <strong className={fatura.restante > 0.005 ? 'valor-neg' : 'valor-pos'} style={{ fontSize: 16 }} data-testid="fatura-restante">
+            {/* Build 101 (Decisão 121), pedido do Rafael: "Faltante" = 0 não é
+                nem pendência (vermelho) nem crédito (verde) — é neutro. Só
+                vira verde quando existe crédito de verdade (pagou a mais,
+                `restante < 0`). */}
+            <strong
+              className={fatura.restante > 0.005 ? 'valor-neg' : fatura.restante < -0.005 ? 'valor-pos' : 'texto-fraco'}
+              style={{ fontSize: 16 }}
+              data-testid="fatura-restante"
+            >
               {fatura.restante < -0.005 ? `−${fmtBRL(Math.abs(fatura.restante))} (crédito)` : fmtBRL(Math.max(fatura.restante, 0))}
             </strong>
           </div>
@@ -855,10 +872,16 @@ function DetalheConta({
             <div style={{ marginTop: 6 }} data-testid="fatura-pagamentos">
               {/* Build 092: cada pagamento leva a DATA em que foi feito — a
                   linha Completa não mostra data (ela vive numa sessão por
-                  dia), e aqui o dia do pagamento é a informação. */}
+                  dia), e aqui o dia do pagamento é a informação.
+                  Build 101 (Decisão 121), pedido do Rafael: aqui a data NÃO
+                  é cabeçalho de uma lista inteira (onde fica colada de
+                  propósito, ver `.sessao-data-simples`) — é o rótulo de UM
+                  card avulso, e ficava grudada nele. `marginBottom` só
+                  nesta instância (não na classe, que outras telas usam sem
+                  espaço de propósito). */}
               {fatura.pagamentos.map((l) => (
                 <div key={l.id}>
-                  <div className="sessao-data-simples" data-testid="fatura-pagamento-data">{formatarCabecalhoData(l.dataCompetencia)}</div>
+                  <div className="sessao-data-simples" style={{ marginBottom: 4 }} data-testid="fatura-pagamento-data">{formatarCabecalhoData(l.dataCompetencia)}</div>
                   {linhaDe(l)}
                 </div>
               ))}

@@ -62,6 +62,7 @@ export default function DetalheLancamento({
   aoSalvarComSucesso,
   abrirClonando,
   pagamentoFatura,
+  viaContaDoCartao,
   onFechar,
 }: {
   alvoId?: number
@@ -73,6 +74,14 @@ export default function DetalheLancamento({
      `original.faturaCartaoId`/`faturaMes` — inclusão e edição são a mesma
      tela. */
   pagamentoFatura?: PagamentoFaturaAbertura
+  /* Build 101 (Decisão 121), pedido do Rafael: um pagamento de fatura já
+     GRAVADO só pode ser editado por dentro da Carteira, na conta do
+     próprio cartão — aberto de qualquer outro lugar (a tela de Lançamentos,
+     ou a conta que pagou), os campos aparecem mas ficam todos bloqueados
+     (ver `pagamentoBloqueado` abaixo), com uma mensagem dizendo onde editar.
+     Só importa na EDIÇÃO (nunca ao criar um pagamento novo pelo botão
+     "Pagar esta fatura", que sempre vem da própria Carteira mesmo). */
+  viaContaDoCartao?: boolean
   categoriaIdSugerida?: number
   contaIdSugerida?: number
   // Item 11 (15/09/2026): abre já em modo "clonando" — mesmo efeito de abrir
@@ -126,6 +135,16 @@ export default function DetalheLancamento({
        formulário é `contaIdSugerida`; fica aqui junto só pra sugestão ser um
        objeto só. */
     contaId?: number
+    /* Build 101 (Rafael): "guardar dados bancários pra conciliação nos dois
+       casos" — vincular a um lançamento existente já grava `vinculoOrigem`
+       inteiro (`vinculoNotificacao.ts`), mas CRIAR um lançamento novo a
+       partir da notificação só gravava `descricaoOriginal`, sem o resto (app,
+       pacote, id da notificação, texto cru). Estes quatro campos existem só
+       pra fechar essa lacuna — ver o monte de `vinculoOrigem` em `salvar()`. */
+    notificacaoId?: number
+    app?: string
+    pacote?: string
+    recebidoEm?: string
   }
   // Chamado uma vez, só quando o lançamento foi gravado com sucesso (nunca
   // ao cancelar/fechar/excluir) — usado pela tela de Notificações bancárias
@@ -173,6 +192,14 @@ export default function DetalheLancamento({
   const [confirmandoDesvinculo, setConfirmandoDesvinculo] = useState(false)
   const [desvincularAviso, setDesvincularAviso] = useState<string | null>(null)
   const editando = alvoId != null && !clonando
+  /* Build 101 (Decisão 121) — ver o prop `viaContaDoCartao` acima: um
+     pagamento de fatura JÁ GRAVADO (`original.faturaCartaoId`/`faturaMes`,
+     não a criação vinda de `pagamentoFatura`) só é editável quando a
+     abertura veio marcada como tal — a conta do próprio cartão, dentro da
+     Carteira. De qualquer outro lugar, os campos aparecem mas ficam
+     bloqueados. */
+  const pagamentoBloqueado =
+    editando && original?.faturaCartaoId != null && !!original?.faturaMes && !viaContaDoCartao
   const ehTransferenciaExistente = !!original?.transferenciaId
   const [carregado, setCarregado] = useState(false)
 
@@ -186,6 +213,22 @@ export default function DetalheLancamento({
   // Fica fixo desde a abertura do formulário: editar `descricao` depois
   // NUNCA muda isso (é o mesmo princípio de imutabilidade da Decisão 24).
   const descricaoOriginalFixa = sugestao?.descricaoOriginal
+  /* Build 101: mesma lacuna do comentário do prop `sugestao` acima — só entra
+     quando a criação veio de notificação (tem `notificacaoId`), e só na
+     CRIAÇÃO (nunca mexe num lançamento existente sendo editado). */
+  const vinculoOrigemDaCriacao =
+    sugestao?.notificacaoId != null
+      ? {
+          origem: 'notificacao' as const,
+          notificacaoId: sugestao.notificacaoId,
+          app: sugestao.app,
+          pacote: sugestao.pacote,
+          textoCru: sugestao.descricaoOriginal,
+          recebidoEm: sugestao.recebidoEm,
+          vinculadoEm: new Date().toISOString(),
+          vinculadoAExistente: false,
+        }
+      : undefined
   /* Só vale na CRIAÇÃO vinda de notificação sem conta casada (ver
      `sugestao.contaEmBranco`). Na edição de lançamento existente, nunca. */
   const contaEmBranco = !!sugestao?.contaEmBranco && alvoId == null
@@ -217,12 +260,14 @@ export default function DetalheLancamento({
   const [periodicidade, setPeriodicidade] = useState<Periodicidade>('mensal')
   const [tipoRegra, setTipoRegra] = useState<TipoRegraUI>('diaFixo')
   // Item 7 (16/09/2026): o dia do mês de uma recorrência fixa nova (dia
-  // fixo) sugeria sempre "5" — agora sugere o dia do mês de HOJE (usando
-  // `hojeEfetivoISO()`, a mesma data simulada que o app já respeita em
-  // recorrência/status), então uma pessoa cadastrando um fixo hoje já vê o
-  // dia mais provável pré-selecionado, em vez de precisar trocar manualmente
-  // toda vez.
-  const [diaFixo, setDiaFixo] = useState(() => String(Number(hojeEfetivoISO().slice(8, 10))))
+  // fixo) sugeria sempre "5" — passou a sugerir o dia do mês de HOJE. Build
+  // 101 (Rafael): errado mesmo assim quando a Data do Lançamento desta
+  // MESMA tela não é hoje (lançamento retroativo, ou vindo de notificação
+  // com data própria) — a sugestão deve seguir o dia já preenchido em
+  // `data` acima, não o relógio. Continua ao vivo em `mudarData()`, e some
+  // assim que a pessoa mexe manualmente no campo (`diaFixoTocadoManualmente`).
+  const [diaFixo, setDiaFixo] = useState(() => String(Number(data.slice(8, 10))))
+  const [diaFixoTocadoManualmente, setDiaFixoTocadoManualmente] = useState(false)
   const [diaUtil, setDiaUtil] = useState('1')
   const [diaSemana, setDiaSemana] = useState('1')
   const [parcelaN, setParcelaN] = useState('2')
@@ -452,7 +497,7 @@ export default function DetalheLancamento({
 
   async function salvar(e: FormEvent) {
     e.preventDefault()
-    if (salvando) return
+    if (salvando || pagamentoBloqueado) return
     setErro(null)
     setCampoComErro(null)
     setSalvando(true)
@@ -808,6 +853,7 @@ export default function DetalheLancamento({
           parcelaI: p.parcelaI,
           parcelaN: n,
           pago: p.parcelaI === 1 ? pago : false,
+          ...(p.parcelaI === 1 ? { vinculoOrigem: vinculoOrigemDaCriacao } : {}),
           ...patchFaturaOverride,
         })),
       )
@@ -838,6 +884,7 @@ export default function DetalheLancamento({
         periodicidade,
         regraRecorrencia: regra,
         pago,
+        vinculoOrigem: vinculoOrigemDaCriacao,
         ...patchFaturaOverride,
       })
       fecharAposSalvar()
@@ -856,6 +903,7 @@ export default function DetalheLancamento({
       categoriaId: categoriaFinal,
       status: 'manual',
       pago,
+      vinculoOrigem: vinculoOrigemDaCriacao,
       ...patchFaturaOverride,
       ...patchPagamentoFatura,
     })
@@ -869,7 +917,7 @@ export default function DetalheLancamento({
   }
 
   async function excluir() {
-    if (alvoId == null) return
+    if (alvoId == null || pagamentoBloqueado) return
     if (original?.transferenciaId) {
       // Nunca deixa a transferência "manca" — excluir um lado leva o outro junto.
       await db.lancamentos.where('transferenciaId').equals(original.transferenciaId).delete()
@@ -950,6 +998,13 @@ export default function DetalheLancamento({
     // Item 13: recalcula o padrão de "já pago" só na criação e só se a
     // pessoa ainda não mexeu manualmente no chip.
     if (!editando && !pagoTocadoManualmente) setPago(nova <= hojeEfetivoISO())
+    // Build 101 (Rafael): o dia sugerido do Fixo/Mensal acompanha a Data do
+    // Lançamento enquanto a pessoa não mexer nele à mão — só na criação,
+    // pelo mesmo motivo do "pago" acima (editar um fixo já existente não
+    // pode reescrever o dia da série sozinho).
+    if (!editando && tipoRegra === 'diaFixo' && !diaFixoTocadoManualmente) {
+      setDiaFixo(String(Number(nova.slice(8, 10))))
+    }
   }
   const rotuloRepetir = recorrencia === 'fixo'
     ? `Repete: ${ROTULOS_PERIODICIDADE[periodicidade].toLowerCase()}${usaDiaDoMes ? (tipoRegra === 'diaFixo' ? `, dia ${diaFixo || '?'}` : `, ${diaUtil || '?'}º dia útil`) : `, ${NOMES_DIA_SEMANA[Number(diaSemana)] ?? ''}`}`
@@ -983,9 +1038,13 @@ export default function DetalheLancamento({
               {!ehTransferenciaExistente && !modoPagamentoFatura && (
                 <button type="button" data-testid="menu-clonar" onClick={abrirClonagem}>Clonar este lançamento</button>
               )}
-              <button type="button" className="dl-menu-perigo" data-testid="menu-excluir" onClick={() => { setMenuAberto(false); setEscopoExclusao('este'); setConfirmandoExclusao(true) }}>
-                Excluir lançamento
-              </button>
+              {/* Build 101 (Decisão 121): excluir é edição também — some do
+                  menu quando o pagamento só pode ser mexido pela Carteira. */}
+              {!pagamentoBloqueado && (
+                <button type="button" className="dl-menu-perigo" data-testid="menu-excluir" onClick={() => { setMenuAberto(false); setEscopoExclusao('este'); setConfirmandoExclusao(true) }}>
+                  Excluir lançamento
+                </button>
+              )}
             </MenuLinha>
           )}
           <button type="button" onClick={onFechar} aria-label="Fechar" className="dl-fechar">✕</button>
@@ -1035,6 +1094,18 @@ export default function DetalheLancamento({
           </div>
         )}
 
+        {/* Build 101 (Decisão 121), pedido do Rafael: um pagamento de fatura
+            aberto de fora da conta do cartão (a tela de Lançamentos, ou a
+            conta que pagou) mostra os campos pra conferência, mas TODOS
+            bloqueados (ver o `<fieldset disabled>` abaixo) — evita editar
+            por engano um registro que a fatura já reconciliou. */}
+        {pagamentoBloqueado && (
+          <div className="dl-aviso-clone" data-testid="aviso-pagamento-bloqueado">
+            Este pagamento só pode ser editado pela Carteira, na conta do cartão. Aqui dá pra conferir os
+            dados, mas não pra mudar nada.
+          </div>
+        )}
+
         {/* Abas de tipo — V-01: trilho com contraste real; V-02: 44px. */}
         {!modoPagamentoFatura && (
           <div role="tablist" className="dl-abas">
@@ -1056,6 +1127,13 @@ export default function DetalheLancamento({
         )}
 
         <form onSubmit={salvar} noValidate>
+          {/* Build 101 (Decisão 121): `disabled` num `<fieldset>` bloqueia TODO
+              campo/botão de dentro numa linha só — nunca precisa lembrar de
+              marcar cada input à mão (e nunca esquecer um novo campo que
+              vier depois). `display: contents` tira o fieldset do layout
+              (sem borda/padding de navegador, sem afetar o fluxo flex/grid
+              de dentro) — só o comportamento de bloquear continua. */}
+          <fieldset disabled={pagamentoBloqueado} style={{ border: 0, margin: 0, padding: 0, display: 'contents' }}>
           {/* V-04: o Valor em destaque, com o "R$" desenhado dentro do campo. */}
           <label htmlFor="dl-valor" className="dl-rotulo">Quanto</label>
           <div className="dl-valor-wrap">
@@ -1274,7 +1352,7 @@ export default function DetalheLancamento({
                           opcoes={[{ valor: 'diaFixo' as TipoRegraUI, rotulo: 'Dia fixo do mês' }, { valor: 'diaUtil' as TipoRegraUI, rotulo: 'Dia útil do mês' }]} />
                       )}
                       {tipoRegra === 'diaFixo' ? (
-                        <input id="dl-dia-fixo" aria-label="Dia fixo do mês" type="number" min={1} max={31} value={diaFixo} onChange={(e) => setDiaFixo(e.target.value)} placeholder="ex.: 5" />
+                        <input id="dl-dia-fixo" aria-label="Dia fixo do mês" type="number" min={1} max={31} value={diaFixo} onChange={(e) => { setDiaFixo(e.target.value); setDiaFixoTocadoManualmente(true) }} placeholder="ex.: 5" />
                       ) : (
                         <input id="dl-dia-util" aria-label="Dia útil do mês" type="number" min={1} max={23} value={diaUtil} onChange={(e) => setDiaUtil(e.target.value)} placeholder="ex.: 1 (primeiro dia útil)" />
                       )}
@@ -1319,13 +1397,22 @@ export default function DetalheLancamento({
 
           {/* Erro que não é de campo nenhum (ex.: falha do banco). */}
           {erro && !campoComErro && <p className="dl-erro valor-neg" role="alert">{erro}</p>}
+          </fieldset>
 
           {/* V-05: rodapé simétrico — Cancelar à esquerda, Salvar à direita, a
               ordem que `ConfirmacaoAcao` fixou pro app inteiro (build 093).
-              Salvar tem estado ocupado. */}
+              Salvar tem estado ocupado.
+              Build 101 (Decisão 121): bloqueado não tem o que salvar — só
+              "Fechar", nunca um "Salvar" que não faz nada ao tocar. */}
           <div className="acoes-modal">
-            <button type="button" className="secundario" onClick={onFechar} disabled={salvando} data-testid="dl-cancelar">Cancelar</button>
-            <button type="submit" className="primario" ref={salvarRef} disabled={salvando} data-testid="dl-salvar">{salvando ? 'Salvando…' : 'Salvar'}</button>
+            {pagamentoBloqueado ? (
+              <button type="button" className="primario" onClick={onFechar} data-testid="dl-fechar-bloqueado">Fechar</button>
+            ) : (
+              <>
+                <button type="button" className="secundario" onClick={onFechar} disabled={salvando} data-testid="dl-cancelar">Cancelar</button>
+                <button type="submit" className="primario" ref={salvarRef} disabled={salvando} data-testid="dl-salvar">{salvando ? 'Salvando…' : 'Salvar'}</button>
+              </>
+            )}
           </div>
 
           {/* O rodapé "↻ Repetir…" — maior e mais visível (ajuste do Rafael:

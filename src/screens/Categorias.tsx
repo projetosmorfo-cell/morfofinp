@@ -147,11 +147,12 @@ export default function Categorias(
   const [percentuais, setPercentuais] = useState<Record<string, number>>({})
   const percentuaisInicializados = useRef(false)
   /* No primeiro acesso a tela abre na aba do PASSO (`somenteAba`, build 100)
-     ou, sem essa restrição, em GRUPOS (o passo começa por eles); no uso
-     comum continua abrindo em Categorias — a aba mexida toda vez que algo
-     muda (F-06). */
+     ou, sem essa restrição, em GRUPOS (o passo começa por eles). No uso
+     comum (build 101, pedido do Rafael) também abre em Grupos — é a
+     primeira aba mostrada, e abrir setado na do meio (Categorias) estava
+     descombinando com a ordem visual das abas. */
   const [abaAtiva, setAbaAtiva] = useState<AbaCategorias>(
-    primeiroAcesso?.somenteAba ?? (primeiroAcesso ? 'gruposMetas' : 'categorias'),
+    primeiroAcesso?.somenteAba ?? 'gruposMetas',
   )
   // F-08: "Restaurar ícone padrão" saiu de botão sempre visível e virou item
   // dentro de um menu "⋮" por linha (grupo ou categoria) — só um popover
@@ -999,6 +1000,19 @@ export default function Categorias(
           </button>
         ))}
       </div>
+      {/* Build 101, Passo 4: sem exemplo (mês anterior sem lançamento — é
+          sempre o caso no primeiro acesso), o selo "sobra/excede" de cada
+          categoria (mais abaixo) simplesmente não aparece, e a tela fica
+          muda bem no momento em que calibrar as metas importa mais. Mesmo
+          aviso que já existia na aba "Metas de Grupo" (linha ~955) — só
+          faltava aqui. */}
+      {!temExemplo && (
+        <p className="texto-fraco texto-quebra" style={{ marginTop: 0 }}>
+          Ainda não há lançamentos no mês anterior ({mesAnterior.split('-').reverse().join('/')}) pra
+          calcular se a meta de cada grupo está estourando — assim que fechar um mês, os avisos de
+          "sobra"/"excede" aparecem aqui, ao lado do valor de cada categoria.
+        </p>
+      )}
       {grupos.map((g) => {
         const doGrupo = categorias
           .filter((c) => c.grupo === g.nome)

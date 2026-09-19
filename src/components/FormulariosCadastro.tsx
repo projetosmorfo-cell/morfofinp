@@ -207,6 +207,8 @@ export function CamposCategoria({
   gruposAtivos,
   contasVinculaveis,
   valorPrimeiro = false,
+  ocultarGrupo = false,
+  ocultarFlagReceitaFixa = false,
 }: {
   rasc: RascunhoCategoria
   setRasc: React.Dispatch<React.SetStateAction<RascunhoCategoria>>
@@ -216,6 +218,16 @@ export function CamposCategoria({
      cadastro (nome, natureza, grupo, ícone) fica abaixo. Pelas Configurações a
      ordem é a de sempre: identificação primeiro. */
   valorPrimeiro?: boolean
+  /* Build 101 (Decisão 121), pedido do Rafael pro Passo 1 do primeiro
+     acesso: ali o grupo já vem decidido sozinho (o de Receita — não tem
+     percentual, não tem por que escolher) e a flag "é receita fixa" já vem
+     travada em ligada (é o próprio propósito da tela) — mostrar os dois como
+     se fossem uma escolha confundia. `rasc.grupo`/`rasc.receitaFixa`
+     continuam preenchidos por baixo (`rascunhoDoPasso1`), só o CAMPO some;
+     em todo outro lugar que usa `CamposCategoria` nada muda (os dois campos
+     seguem aparecendo, como sempre). */
+  ocultarGrupo?: boolean
+  ocultarFlagReceitaFixa?: boolean
 }) {
   const gruposValidos = gruposParaNatureza(gruposAtivos, rasc.natureza)
   const camposDeValor = (
@@ -252,24 +264,28 @@ export function CamposCategoria({
           />
           {/* Flag de receita FIXA: é a soma destas categorias, no mês da tela,
               que forma o 100% sobre o qual os percentuais de meta incidem. */}
-          <label
-            htmlFor="cat-receita-fixa"
-            style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}
-          >
-            <input
-              id="cat-receita-fixa"
-              type="checkbox"
-              checked={rasc.receitaFixa}
-              onChange={(e) => setRasc((r) => ({ ...r, receitaFixa: e.target.checked }))}
-              style={{ width: 18, height: 18, flex: 'none' }}
-              data-testid="campo-receita-fixa"
-            />
-            <span>É receita fixa (entra na base das metas)</span>
-          </label>
-          <p className="texto-fraco" style={{ marginTop: -4 }}>
-            Marque a renda que se repete todo mês (salário, pró-labore, aluguel recebido).
-            A soma dessas categorias no mês é o 100% das metas de grupo.
-          </p>
+          {!ocultarFlagReceitaFixa && (
+            <>
+              <label
+                htmlFor="cat-receita-fixa"
+                style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}
+              >
+                <input
+                  id="cat-receita-fixa"
+                  type="checkbox"
+                  checked={rasc.receitaFixa}
+                  onChange={(e) => setRasc((r) => ({ ...r, receitaFixa: e.target.checked }))}
+                  style={{ width: 18, height: 18, flex: 'none' }}
+                  data-testid="campo-receita-fixa"
+                />
+                <span>É receita fixa (entra na base das metas)</span>
+              </label>
+              <p className="texto-fraco" style={{ marginTop: -4 }}>
+                Marque a renda que se repete todo mês (salário, pró-labore, aluguel recebido).
+                A soma dessas categorias no mês é o 100% das metas de grupo.
+              </p>
+            </>
+          )}
         </>
       )}
     </>
@@ -310,22 +326,26 @@ export function CamposCategoria({
           }))
         }}
       />
-      <label htmlFor="cat-grupo">Grupo</label>
-      <select
-        id="cat-grupo"
-        value={grupoEscolhido}
-        onChange={(e) => setRasc((r) => ({ ...r, grupo: e.target.value }))}
-      >
-        {gruposValidos.map((g2) => (
-          <option key={g2.id} value={g2.nome}>
-            {g2.nome}
-          </option>
-        ))}
-      </select>
-      <p className="texto-fraco" style={{ marginTop: 4, marginBottom: 0, fontSize: 12 }}>
-        Só aparecem grupos de {ROTULO_TIPO_GRUPO[rasc.natureza === 'Receita' ? 'entrada' : 'saida']} — é a
-        natureza da categoria que define onde ela pode ser vinculada.
-      </p>
+      {!ocultarGrupo && (
+        <>
+          <label htmlFor="cat-grupo">Grupo</label>
+          <select
+            id="cat-grupo"
+            value={grupoEscolhido}
+            onChange={(e) => setRasc((r) => ({ ...r, grupo: e.target.value }))}
+          >
+            {gruposValidos.map((g2) => (
+              <option key={g2.id} value={g2.nome}>
+                {g2.nome}
+              </option>
+            ))}
+          </select>
+          <p className="texto-fraco" style={{ marginTop: 4, marginBottom: 0, fontSize: 12 }}>
+            Só aparecem grupos de {ROTULO_TIPO_GRUPO[rasc.natureza === 'Receita' ? 'entrada' : 'saida']} — é a
+            natureza da categoria que define onde ela pode ser vinculada.
+          </p>
+        </>
+      )}
       {!valorPrimeiro && camposDeValor}
       {NATUREZAS_VINCULAVEIS.includes(rasc.natureza) && contasVinculaveis.length > 0 && (
         <>

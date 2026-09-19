@@ -181,8 +181,19 @@ export default function GrupoReordenavel({
        `[]`) e leem tudo por ref — `invertido` não pode ficar preso ao
        primeiro render. */
     const inv = invertidoRef.current
-    ordemFinal.forEach((id, i) => {
-      db.lancamentos.update(id, { ordemManual: inv ? n - 1 - i : i })
+    /* Build 101 (Rafael: "hora arrasta, hora não arrasta, travando") — mesma
+       causa já corrigida em `reavaliarQuitacao` (`faturaPagamento.ts`): eram
+       N `db.lancamentos.update()` soltos, um por lançamento do dia, cada um
+       comitando (e notificando todo `liveQuery` do app) sozinho, em cascata,
+       bem no instante de soltar o dedo — pra um dia com muitos lançamentos, é
+       quando a tela mais trava. Uma ÚNICA transação faz o Dexie notificar
+       UMA vez só ao final, não uma vez por linha. Não é `.modify()` porque
+       cada linha recebe um valor DIFERENTE de `ordemManual` (não dá pra
+       aplicar o mesmo patch a todas). */
+    void db.transaction('rw', db.lancamentos, async () => {
+      for (let i = 0; i < ordemFinal.length; i++) {
+        await db.lancamentos.update(ordemFinal[i], { ordemManual: inv ? n - 1 - i : i })
+      }
     })
   }
 

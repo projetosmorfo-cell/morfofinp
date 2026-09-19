@@ -27,6 +27,7 @@ import PadraoCategoriasN0 from './PadraoCategoriasN0'
 import PacotesIconesN0 from './PacotesIconesN0'
 import ParametrosNotificacaoN0 from './ParametrosNotificacaoN0'
 import ZoomListasN0 from './ZoomListasN0'
+import CorDataListaN0 from './CorDataListaN0'
 import { contarLancamentosFicticios, apagarTodosDadosDeTeste, temDadosDeTesteNaPlataforma } from './massaTeste'
 import RodapeAbas from './RodapeAbas'
 import IndicadoresDevScreen from './indicadoresKit'
@@ -3232,7 +3233,7 @@ function SubParametrosPermissoes({ onVoltarSub }: { onVoltarSub: () => void }) {
 
 type SubParametros = 'meusDados' | 'alertas' | 'assinatura' | 'ambiente' | 'chat' | 'testesCliente' | 'limpezasCliente'
   | 'marca' | 'urls' | 'planos' | 'usuarios' | 'permissoes' | 'testesMorfo' | 'limpezasMorfo' | 'layout' | 'site'
-  | 'padraoCategorias' | 'pacotesIcones' | 'notificacoes' | 'zoomListas' | null
+  | 'padraoCategorias' | 'pacotesIcones' | 'notificacoes' | 'zoomListas' | 'corDataLista' | null
 
 // Casca comum das telas novas de Parâmetros (10/09/2026, Decisão 55 — Parte
 // B): cabeçalho com "‹ Voltar" + a faixa de aviso curta, no mesmo padrão que
@@ -3345,6 +3346,10 @@ function AbaParametros({ podeVerFuncN0, subInicial }: { podeVerFuncN0: (k: strin
      um cliente novo começa, com o mesmo alcance de publicação. Ver
      `ZoomListasN0.tsx`. */
   if (sub === 'zoomListas') return <TelaGrupoN0 titulo="Tamanho das fontes das listas" subtitulo="Tamanho padrão e alcance da publicação" onVoltarSub={voltar} render={(n) => <ZoomListasN0 notify={n} />} />
+  /* Build 101 (18/09/2026, item 4 do Rafael): a cor do texto da linha de
+     data com que um cliente novo começa, mesmo alcance de publicação. Ver
+     `CorDataListaN0.tsx`. */
+  if (sub === 'corDataLista') return <TelaGrupoN0 titulo="Cor da linha de data" subtitulo="Cor padrão e alcance da publicação" onVoltarSub={voltar} render={(n) => <CorDataListaN0 notify={n} />} />
 
   // Kit L509-L513 / L1600-L1700: os itens de Parâmetros agrupados pelas MESMAS
   // 3 sessões da árvore de permissão (`FUNCOES_PERFIL_N0`), na ordem do Kit.
@@ -3358,6 +3363,7 @@ function AbaParametros({ podeVerFuncN0, subInicial }: { podeVerFuncN0: (k: strin
     { sessao: 'Ambiente do Cliente', chave: 'pacotesIcones', titulo: 'Pacotes de ícones', hint: 'As três propostas (Apenas borda, Preenchido, 3D colorido), as cores de categorias e grupos, e qual vale para cliente novo' },
     { sessao: 'Ambiente do Cliente', chave: 'notificacoes', titulo: 'Notificações bancárias', hint: 'Regras da leitura de notificação — inclusive as internas — e o alcance de cada publicação' },
     { sessao: 'Ambiente do Cliente', chave: 'zoomListas', titulo: 'Tamanho das fontes das listas', hint: 'Com que tamanho de fonte a lista de lançamentos começa para um cliente novo' },
+    { sessao: 'Ambiente do Cliente', chave: 'corDataLista', titulo: 'Cor da linha de data', hint: 'Cor do texto da linha de data (listagem Completa e Simples) com que um cliente novo começa' },
     { sessao: 'Ambiente do Cliente', chave: 'testesCliente', titulo: 'Gerar Teste no Cliente', hint: 'Massa de dados fictícios dentro do ambiente de um cliente (só ambiente vazio)' },
     { sessao: 'Ambiente do Cliente', chave: 'limpezasCliente', titulo: 'Limpar Dados do Cliente', hint: 'Apaga dados de teste ou reais do ambiente — checagem dupla' },
     { sessao: 'Ambiente MorfoFinP ADM', chave: 'marca', titulo: 'Marca', hint: 'Logos da Morfo e do produto por contexto + canal de suporte (WhatsApp)' },

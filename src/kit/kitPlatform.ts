@@ -6,6 +6,7 @@ import { salvarConfiguracaoIcones } from '../configuracaoIcones'
 import { hojeEfetivoISO } from '../hojeSimulado'
 import type { ParametrosNotificacao, ParametrosNotificacaoN0, EscopoPublicacao } from '../notificacaoParametros'
 import type { ZoomListasN0 } from '../zoomListas'
+import type { CorDataListaN0 } from '../corDataLista'
 import { uid, type Endereco } from './kitBase'
 import { LOGO_PRODUTO_BRANCA, LOGO_PRODUTO_COR } from './logosProduto'
 
@@ -655,6 +656,10 @@ export interface PlatformN0 {
      notificação logo acima — é um parâmetro só, um número em porcentagem. Ver
      `src/zoomListas.ts`. */
   zoomListas?: ZoomListasN0
+  /* Cor do texto da linha de data (18/09/2026, build 101, item 4 do
+     Rafael). Mesma mecânica de publicação do `zoomListas` logo acima. Ver
+     `src/corDataLista.ts`. */
+  corDataLista?: CorDataListaN0
   /* URLs do produto (12/09/2026, build 053 — pedido do Rafael: "nas configs do
      N0, ter novo menu pra URLs, lá devo preencher com a url pra download do
      apk", e mais adiante "coloque tbm a URL do Website... mostrar como
@@ -725,6 +730,8 @@ export const FUNCOES_PERFIL_N0: FuncaoPerfil[] = [
     { k: 'parametros.notificacoes', l: 'Notificações bancárias', sessao: 'Ambiente do Cliente' },
     /* Build 094: o tamanho das fontes da lista de lançamentos. */
     { k: 'parametros.zoomListas', l: 'Tamanho das fontes das listas', sessao: 'Ambiente do Cliente' },
+    /* Build 101: a cor do texto da linha de data (Completa e Simples). */
+    { k: 'parametros.corDataLista', l: 'Cor da linha de data', sessao: 'Ambiente do Cliente' },
     { k: 'parametros.testesCliente', l: 'Gerar Teste no Cliente', sessao: 'Ambiente do Cliente' },
     { k: 'parametros.limpezasCliente', l: 'Limpar Dados do Cliente (teste e reais)', sessao: 'Ambiente do Cliente' },
     { k: 'parametros.marca', l: 'Marca', sessao: 'Ambiente MorfoFinP ADM' },
@@ -1395,6 +1402,19 @@ export async function salvarZoomListasN0(pct: number, espacoPx: number, escopo: 
      da lista, e separá-los faria a marca de versão por ambiente ter de virar
      duas. Ver o cabeçalho de `src/zoomListas.ts`. */
   await salvarPlatformN0({ ...atual, zoomListas: { versao, atualizadoEm: agoraISO(), escopo, pct, espacoPx } })
+  return versao
+}
+
+/**
+ * Publica a cor do texto da linha de data, com o escopo escolhido no
+ * salvamento. `cor` ausente/`undefined` publica "sem cor" (segue o tema) como
+ * padrão de fábrica pra cliente novo. Devolve a versão nova — ver
+ * `aplicarCorDataListaN0()` em `src/corDataLista.ts`.
+ */
+export async function salvarCorDataListaN0(cor: string | undefined, escopo: EscopoPublicacao) {
+  const atual = await lerPlatformN0Persistida()
+  const versao = (atual.corDataLista?.versao ?? 0) + 1
+  await salvarPlatformN0({ ...atual, corDataLista: { versao, atualizadoEm: agoraISO(), escopo, cor } })
   return versao
 }
 

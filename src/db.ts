@@ -541,6 +541,14 @@ export interface ConfiguracaoIcones {
      marca de versão `zoomVersaoPorAmbiente`, porque o N0 publica os dois na
      mesma ação. */
   espacoListasPorAmbiente?: Record<string, number>
+  /* ---- Cor do texto da linha de data (build 101, pedido do Rafael) ----
+     Mesma mecânica de 3 camadas do zoom acima, mas pra UM valor de cor
+     (string hex), aplicado ao MESMO texto nas duas listagens (Completa e
+     Simples) — hoje as duas usam `var(--texto-fraco)`, o mesmo tom. Ausente
+     = nenhuma personalização, continua no tom do tema (claro/escuro); só um
+     hex fixo quando a pessoa escolhe. Ver `src/corDataLista.ts`. */
+  corDataListaPorAmbiente?: Record<string, string>
+  corDataListaVersaoPorAmbiente?: Record<string, number>
   /* `modoVisao` EXISTIU de 04/09 a 16/09/2026 e foi REMOVIDO na build 087
      junto com o conceito de versão (Light/Ideal/Premium/Completa). O app tem
      UM conjunto de abas para todo mundo — ver o cabeçalho de

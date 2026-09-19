@@ -105,6 +105,13 @@ export interface TelaProps {
     contaIdSugerida?: number
     abrirClonando?: boolean
     pagamentoFatura?: PagamentoFaturaAbertura
+    /* Build 101 (Decisão 121), pedido do Rafael: um pagamento de fatura só
+       pode ser EDITADO pela Carteira, na conta do próprio cartão — aberto
+       por qualquer outro caminho (a tela de Lançamentos, ou a conta que
+       pagou a fatura) mostra os campos, mas todos bloqueados, com uma
+       mensagem explicando onde editar. `Carteira.tsx` é quem passa `true`,
+       só na conta tipo cartão — ver `DetalheLancamento.tsx`. */
+    viaContaDoCartao?: boolean
   }) => void
   aoAbrirPlanejamento: () => void
   /** Abre a tela de Calibragem (build 059) — os percentuais vistos juntos. */

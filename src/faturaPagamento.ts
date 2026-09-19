@@ -34,7 +34,23 @@ export async function reavaliarQuitacao(cartaoId: number, mesISO: string): Promi
   if (s.quitada) {
     const ultimo = s.pagamentos[s.pagamentos.length - 1]
     const pendentes = s.itens.filter((l) => l.pago !== true || l.faturaId !== ultimo.id)
-    await Promise.all(pendentes.map((l) => db.lancamentos.update(l.id!, { pago: true, faturaId: ultimo.id })))
+    /* Build 101 (Decisão 121) — bug real reportado pelo Rafael: pagar a
+       DIFERENÇA de uma fatura paga a menor (a 2ª escrita que finalmente
+       quita o ciclo) travava em "Salvando" — o lançamento gravava (confirmado
+       ao reabrir o app), mas a tela ficava presa. Causa mais provável: esta
+       função disparava UM `db.lancamentos.update` por item pendente — pra um
+       ciclo com muitas compras, dezenas de escritas separadas, cada uma
+       notificando sozinha TODO `liveQuery` do app (Carteira, cache de cartão,
+       notificações, filtros…), em cascata. Numa fatura recém-aberta (poucos
+       itens) isso nem aparece; numa quitação de ciclo cheio, sim. Trocado por
+       UMA escrita só (`where(...).modify(...)`, mesmo idioma já usado em
+       `alternarPago`/`lancamentosUtil.ts`): uma transação, uma notificação. */
+    if (pendentes.length > 0) {
+      await db.lancamentos
+        .where('id')
+        .anyOf(pendentes.map((l) => l.id!))
+        .modify({ pago: true, faturaId: ultimo.id })
+    }
   }
   return { quitada: s.quitada, restante: s.restante }
 }

@@ -15,6 +15,7 @@
 import PacoteIconesN1 from '../components/PacoteIconesN1'
 import PreviaLista from '../components/PreviaLista'
 import ZoomFonteListas from '../components/ZoomFonteListas'
+import CorDataLista from '../components/CorDataLista'
 import { useConfiguracaoIcones, salvarConfiguracaoIcones } from '../configuracaoIcones'
 
 export default function Aparencia({ aoVoltar }: { aoVoltar: () => void }) {
@@ -103,6 +104,10 @@ export default function Aparencia({ aoVoltar }: { aoVoltar: () => void }) {
           Fica DEPOIS dos ícones de propósito — é o parâmetro mais novo e
           o menos procurado dos dois. */}
       <ZoomFonteListas />
+
+      {/* Build 101, pedido do Rafael: cor do texto da linha de data, nas
+          duas listagens (Completa e Simples) — mesmo parâmetro pras duas. */}
+      <CorDataLista />
     </>
   )
 }

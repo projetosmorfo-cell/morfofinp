@@ -36,6 +36,7 @@ import { tamanhoIconePx, useConfiguracaoIcones } from '../configuracaoIcones'
 import { fatorDoZoom, normalizarEspaco } from '../zoomListas'
 import { fmtNum } from '../formatoMoeda'
 import { COR_PADRAO_CATEGORIAS, COR_PADRAO_GRUPOS } from '../pacotesIcones'
+import { CLASSE_STATUS, ROTULO_STATUS } from '../statusPagamento'
 
 /* As cores vêm das constantes da plataforma (`pacotesIcones.ts`), nunca de um
    hex escrito aqui: se o padrão da Morfo mudar, o exemplo muda junto.
@@ -99,6 +100,37 @@ function CasoLancamentos() {
   )
 }
 
+/** Caso 1-b (build 101, parâmetro de cor da linha de data): a mesma sessão,
+ *  agora na listagem SIMPLES (`.sessao-data-simples`/`.tabela-lancamentos-
+ *  simples`, drill-in de categoria/fatura na Carteira) — mostrada JUNTO da
+ *  Completa acima pra pessoa ver o efeito da cor escolhida nas duas listas
+ *  de uma vez, sem precisar abrir a Carteira pra conferir a segunda. */
+function CasoLancamentosSimples() {
+  return (
+    <div data-testid="previa-caso-lancamentos-simples">
+      <div className="sessao-data-simples status-fundo-feito">12 de Setembro (Sáb)</div>
+      <table className="tabela-lancamentos-simples">
+        <tbody>
+          {LANCAMENTOS_EXEMPLO.map(({ lanc }) => (
+            <tr key={lanc.id}>
+              <td className="lls-titulo">{lanc.descricao}</td>
+              <td className={`lci-valor ${lanc.valor < 0 ? 'valor-neutro' : 'valor-pos'}`}>
+                {lanc.valor < 0 ? '-' : '+'}
+                {fmtNum(lanc.valor)}
+              </td>
+              <td>
+                <span className={`status-pill ${CLASSE_STATUS[lanc.pago ? 'pago' : 'no_cartao']}`}>
+                  {ROTULO_STATUS[lanc.pago ? 'pago' : 'no_cartao']}
+                </span>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
 /** O caso 2: a linha de categoria cadastrada — mesmas classes da aba "Categorias". */
 function CasoCategorias({ pctCategoria }: { pctCategoria: number }) {
   return (
@@ -154,6 +186,7 @@ export default function PreviaLista({
   titulo,
   zoomPct,
   espacoPx,
+  corData,
   casos = ['lancamentos'],
   testid,
 }: {
@@ -162,16 +195,25 @@ export default function PreviaLista({
   /* Ausente = o quadro herda o espaço em vigor (é o caso da prévia dos
      ícones, que não fala de espaçamento). */
   espacoPx?: number
-  casos?: ('lancamentos' | 'categorias' | 'grupos')[]
+  /* Build 101: cor da linha de data pra ESTE quadro — `undefined` mostra o
+     tom padrão do tema (`--texto-fraco`), igual ao que `.sessao-data`/
+     `.sessao-data-simples` já fazem quando a variável não está definida.
+     Ausente (parâmetro nem passado) = o quadro herda a cor em vigor no app
+     (é o caso das prévias de zoom/ícones, que não falam de cor). */
+  corData?: string
+  casos?: ('lancamentos' | 'lancamentosSimples' | 'categorias' | 'grupos')[]
   testid?: string
 }) {
   const { pctCategoria, pctGrupo } = useConfiguracaoIcones()
-  /* `--zoom-lista` e `--espaco-lancamento` não existem no tipo de
-     `CSSProperties` (são variáveis CSS, não propriedades conhecidas) — o cast
-     é o caminho normal em React pra isso. */
+  /* `--zoom-lista`/`--espaco-lancamento`/`--cor-data-lista` não existem no
+     tipo de `CSSProperties` (são variáveis CSS, não propriedades conhecidas)
+     — o cast é o caminho normal em React pra isso. Cor VAZIA (string vazia)
+     é um valor CSS inválido — nesse caso a variável é OMITIDA, deixando o
+     `var(--cor-data-lista, var(--texto-fraco))` do CSS cair no padrão. */
   const estilo = {
     '--zoom-lista': fatorDoZoom(zoomPct),
     ...(espacoPx === undefined ? {} : { '--espaco-lancamento': `${normalizarEspaco(espacoPx)}px` }),
+    ...(corData ? { '--cor-data-lista': corData } : {}),
   } as CSSProperties
 
   return (
@@ -182,6 +224,7 @@ export default function PreviaLista({
           acionado a partir daqui. */}
       <div className="previa-lista-quadro" style={estilo}>
         {casos.includes('lancamentos') && <CasoLancamentos />}
+        {casos.includes('lancamentosSimples') && <CasoLancamentosSimples />}
         {casos.includes('categorias') && <CasoCategorias pctCategoria={pctCategoria} />}
         {casos.includes('grupos') && <CasoGrupos pctGrupo={pctGrupo} pctCategoria={pctCategoria} />}
       </div>

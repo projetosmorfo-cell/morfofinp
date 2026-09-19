@@ -313,7 +313,18 @@ function FormularioReceitaFixa({
       </div>
 
       <div className="cartao" data-testid="primeiro-acesso-form">
-        <CamposCategoria rasc={rasc} setRasc={setRasc} gruposAtivos={gruposAtivos} contasVinculaveis={contasVinculaveis} />
+        {/* Build 101 (Decisão 121), pedido do Rafael: aqui o grupo e a flag
+            "é receita fixa" já vêm decididos sozinhos (ver `rascunhoDoPasso1`
+            acima) — mostrar os dois como campo dava a entender que era uma
+            escolha, quando não é. */}
+        <CamposCategoria
+          rasc={rasc}
+          setRasc={setRasc}
+          gruposAtivos={gruposAtivos}
+          contasVinculaveis={contasVinculaveis}
+          ocultarGrupo
+          ocultarFlagReceitaFixa
+        />
         {(erro ?? pendencia) && (
           <p className="valor-neg texto-quebra" style={{ margin: '10px 0 0', fontSize: 12.5 }} data-testid="primeiro-acesso-pendencia">
             {erro ?? pendencia}
